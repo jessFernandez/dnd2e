@@ -1,0 +1,22 @@
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Scraper / utility scripts (not needed by end users)
+scraper.py
+fetch_economics.py
+build_economics.py
+cleanup_spells.py
+fix_chapter9.py
+check_chapters.py
+setup_house_rules.py
+verify_hr.py
+
+# Misc
+*.log
+.env

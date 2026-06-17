@@ -1,0 +1,21 @@
+Item,Cost (cp),Weight (lb),Effects,Side Effects,Rare ingredients
+"Acid, Flask","7,500",1.00,2d4 / d3 damage,,
+"Acid, Vial","3,500",0.25,d3 / 1 damage,,
+Antivenom,500,0.25,Cures poisoning,Incapacitated 3 days,Venom of the offending creature
+Bloody Tea,100,0.25,Post coital contraceptive,,
+Brown Root,10,0.25,Laxitive,,
+Colored Burn Powder,500,0.10,"Red, Green, Yellow, Orange or Purple light",,Powdered Metals
+Dream Root,100,,Hallucinogenic,,Mushrooms
+Flash Powder,500,0.10,Burns instantly and brightly,,Powdered Metals
+Gnomish Fire,"7,500",1.00,Fire deals 2d6 / d6 damage,,
+Gnome Dust,"1,500",,Stimulant (Cocaine),Increases heart rate and blood pressure,Coca Leaf
+Hypnonix,500,,"Sedative, Painkiller",Delirium,Opium Poppy
+Ipecac Tincture,100,0.10,Vomiting,,Roots of the Ipecac plant
+Itching Powder,"1,000",0.10,Itching,,Mushroom Spores
+Leechlove,500,0.10,Numbing,,Fluids from giant leach glands
+Reluna's Touch,"5,000",0.25,Increases Sex Drive,Increases heart rate,Water from a pool a nymph bathed in
+Smelling Salts,"2,500",0.10,"Sharp, short lived stimulant",,
+Smoke Bomb,"1,500",0.25,Smoke,Choking,Fire Elemental-Kin hide
+Sneezing Powder,500,0.10,Sneezing,Watery eyes,
+Starleaf,100,,Cannabis,Cannabis,
+Stink Bomb,"5,000",0.10,Bad smell,,Leucrotta saliva

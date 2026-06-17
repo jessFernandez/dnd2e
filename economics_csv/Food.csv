@@ -1,0 +1,6 @@
+Food Item,Cost (cp),Weight (lb),Spring,Summer,Autumn,Winter,Notes
+Honey,200,1,x,x,x,x,
+"Ale, Barrel (55gal)",880,450,,,,,
+"Mead, Barrel (55gal)",3500,450,,,,,
+Honeycake,200,1,,,,,
+Cheese,50,1,,,,,

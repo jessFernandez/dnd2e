@@ -1,0 +1,45 @@
+Weapon,Cost (cp),Weight,Size,Type,Speed,Damage,Reach,Range (Yards),RoF,Days to make,Notes
+"Axe, Battle",900,3,M,S,4,d8,1,,,3,
+"Axe, Hand",300,1,S,S,3,d6,1,5 / 10 / 15,1,1,
+"Axe, Wood",550,3.5,L,S,8,d10,1,,,1.5,2 handed
+"Bow, Long","3,500",3,L,,5,,,,2,25,Cannot be used on Horseback
+"Bow, Long, Bodkin",20,0.1,M,P,,d4,,70 / 140 / 210,,.05,5cp / head
+"Bow, Long, Broadhead",25,0.15,M,P,,d6,,50 / 100 / 170,,.067,10cp / head
+"Bow, Short","2,500",2,M,,4,,,,2,25,Can be use on Horseback
+"Bow, Short, Bodkin",20,0.1,M,P,,d4,,50 / 100 / 150,,.05,5cp / head
+"Bow, Short, Broadhead",25,0.15,M,P,,d6,,35 / 70 / 120,,.067,10cp / head
+Brass Knuckles,400,1,S,B,3,d4,1,,,1,
+Club,0,2,M,B,4,d4,1,,,,
+"Crossbow, Heavy","5,000",8,L,,*,,,80 / 160 / 240,1/2,5,Full action to load. Half action to fire. Preloaded crossbows have speed 1
+"Crossbow, Heavy, Quarrel",15,0.2,L,P,,d8+1,,,,.05,
+"Crossbow, Light","3,500",4.5,M,,10,,,60 / 120 / 180,1,3,Half action to load. Half action to fire. Preloaded crossbows have speed 1
+"Crossbow, Light, Quarrel",10,0.1,M,P,,d6+1,,,,.05,
+Dagger,300,1,S,P,2,d4,1,5 / 10 / 15,2,1,
+"Dagger, Throwing",375,0.5,S,P,2,d3,,15 / 30 / 50,3,1,
+"Hammer, Common",90,0.5,S,B,3,d4,1,5 / 10 / 15,,.25,
+"Hamer, Sledge","1,500",10,L,B,12,d10,1,,,4,Requires 2 hands
+"Hammer, War",650,3,M,B/P,5,d4+1,1,5 / 10 / 15,,2,+2 vs any type of plate
+Javelin,100,1.5,M,P,5,d6,1,20 / 40 / 60,1,.25,
+"Knife, Small",90,0.5,S,P,2,d3,1,5 / 10 / 15,1,.25,
+Lance,"1,000",8,L,P,8,2d4,2,,,2,"2d8 when charing from horseback. Crit is 4d8, 6d8, 8d8"
+Mace,"1,200",3,M,B,6,d6+1,1,,,3,Also Flails
+Pick Axe,500,5,M,P,7,d6,1,,,2,Requires 2 hands
+Pitchfork,450,4,L,P,6,d4,1,,,1,
+"Polearm, Bardiche","2,000",5,L,S,8,d10,1,,,5,
+"Polearm, Bec De Corbin","2,200",6,L,B,8,d8+1,1,,,6,
+"Polearm, Halberd","2,000",5,L,S/P,9,d10,2,,,5,Also Glaive and Partisan
+"Polearm, Spear, Long",450,6,L,P,8,2d4,2,,,1.5,
+"Polearm, Spear, Short",300,3,M,P,5,2d4,1,10 / 20 / 30,1,1,
+Quarterstaff,50,2,L,B,4,d4+1,1,,,1,
+Rock,0,0.5,S,B,3,d2,,5 / 10 / 15,3,,
+Scythe,350,5,L,S,8,d8,1,,,1,-4 to hit
+Shovel,300,2,M,S,5,d4,1,,,1,
+Sickle,150,1,S,S,3,d4,1,,,.5,-2 to hit
+Sling,10,-,S,,8,,,,,<1,5 per day can be made. Requires lots of space around you.
+"Sling, Bullet",15,0.25,S,B,,d6,,50 / 100 / 200,1,<1,100 per day
+"Sling, Stone",0,0.1,S,B,,d4,,40 / 80 / 160,1,,
+"Sword, Arming","3,000",3,M,S/P,5,d8,1,,,8,
+"Sword, Scimitar","3,000",3,M,S,5,d8,1,,,8,
+"Sword, Short","2,000",2,S,P,3,d6,1,,,5,
+"Sword, Two-Handed","5,000",5.5,L,S,10,d10,1,,,14,
+Trident,"1,600",4,M,P,6,2d3,1,,,6,

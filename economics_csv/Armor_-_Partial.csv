@@ -1,0 +1,16 @@
+Armor,Cost (cp),Weight,AC Bonus,Weeks to make,Notes
+"Gambeson, Body",500,8,2,0.5,
+"Leather, Full","1,000",15,3,1,
+"Leather, Body",500,9,2,0.5,
+"Leather, Limbs",500,6,1,0.5,
+"Chain, Full","8,000",40,5,10,
+"Chain, Body","3,000",15,3,4,
+"Chain, Limbs","5,000",25,2,6,
+"Plate, Full","700,000",70,9,16,
+"Plate, Cuirass","100,000",20,4,4,
+"Plate, Body","150,000",30,5,6,
+"Plate, Limbs","550,000",40,4,10,
+"Helm, Chain","1,000",2,1,1.5,Chain over padding
+"Helm, Full","4,000",5,2,2.5,Metal Helm with padding
+"Shield, Buckler",300,5,1,0.5,
+"Shield, Aspis","1,000",16,2,1,
