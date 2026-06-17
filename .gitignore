@@ -1,7 +1,8 @@
-# PyInstaller build output
+# PyInstaller intermediate build artifacts
 build/
-dist/
-*.spec
+
+# Zip archive (exceeds GitHub's 100 MB file limit)
+dist/*.zip
 
 # Python cache
 __pycache__/
