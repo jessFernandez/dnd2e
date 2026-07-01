@@ -541,6 +541,14 @@ class MainWindow(QMainWindow):
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
         self._zoom: float = float(self._settings.value("zoom", 1.0))
 
+        # Built-in screens: destination key -> (html generator, tab title, status text)
+        self._screens = {
+            "splash":   (generate_splash_html,  "Home",           "  D&D 2nd Edition  ·  Rules Reference"),
+            "dmscreen": (generate_dmscreen_html, "DM Screen",      "  DM Screen  ·  Quick Reference"),
+            "actions":  (generate_actions_html,  "Actions",        "  Actions Screen  ·  Quick Reference"),
+            "chargen":  (generate_chargen_html,  "Char. Creation", "  Character Creation  ·  Step-by-Step Walkthrough"),
+        }
+
         self._build_ui()
         self._setup_shortcuts()
         self._load_topics()
@@ -1203,110 +1211,73 @@ class MainWindow(QMainWindow):
         self.browse_tree.scrollToItem(item, QTreeWidget.PositionAtCenter)
         self.browse_tree.blockSignals(False)
 
-    # ── Page loading ───────────────────────────────────────────────────────
+    # ── Navigation ─────────────────────────────────────────────────────────
+    #
+    # A "destination" is a single canonical string that doubles as a history
+    # entry.  Every navigation path — link clicks, history, session restore —
+    # funnels through _navigate(), which renders the destination once and
+    # (optionally) pushes it onto the active tab's history.
+    #
+    #   "splash" | "dmscreen" | "actions" | "chargen"   built-in screens
+    #   "toc:<BOOK>"                                     a book's contents page
+    #   "<BOOK>/<page>.htm"                              a scraped rules page
+
+    @staticmethod
+    def _link_to_destination(url: str) -> str:
+        """Map a dnd:// link path to a canonical destination."""
+        if url.startswith("toc/"):
+            return "toc:" + url[4:]
+        if url.startswith("screen/"):
+            return url[len("screen/"):]   # screen/chargen -> chargen
+        return url                        # a page_url
 
     def _on_content_navigate(self, url: str):
-        """Dispatch dnd:// link clicks from the content viewer."""
-        if url.startswith("toc/"):
-            self._show_toc(url[4:])
-        elif url == "screen/chargen":
-            self._show_chargen()
-        elif url == "screen/dmscreen":
-            self._show_dmscreen()
-        elif url == "screen/actions":
-            self._show_actions()
-        elif url == "screen/splash":
-            self._show_splash()
-        else:
-            self._load_page(url)
+        """Handle a normal dnd:// link click from the content viewer."""
+        self._navigate(self._link_to_destination(url))
 
-    def _show_toc(self, book_code: str, add_to_history: bool = True):
-        """Display the generated TOC page for a book and optionally push to history."""
+    def _navigate(self, dest: str, add_to_history: bool = True):
+        """Render a destination and optionally record it in the tab's history."""
+        if not self._render_destination(dest):
+            return   # render failed (e.g. page not found) — leave history intact
+        if add_to_history:
+            self._history = self._history[: self._history_pos + 1]
+            self._history.append(dest)
+            self._history_pos = len(self._history) - 1
+        self._update_nav_buttons()
+
+    def _render_destination(self, dest: str) -> bool:
+        """Display a destination's content. Returns False if it could not be shown."""
+        if dest.startswith("toc:"):
+            return self._render_toc(dest[4:])
+        if dest in self._screens:
+            return self._render_screen(dest)
+        return self._render_page(dest)
+
+    def _render_screen(self, key: str) -> bool:
+        generator, title, status = self._screens[key]
+        self.content._view.setHtml(generator())
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title(title)
+        self.status.showMessage(status)
+        return True
+
+    def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])
         html     = self._generate_toc_html(book_code, chapters)
         self.content.load(html, book_code + "/")
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
-        book_name = BOOK_NAMES.get(book_code, book_code)
         self._set_tab_title(f"{book_code} — Contents")
-        self.status.showMessage(f"  {book_name}  ·  Table of Contents")
-        if add_to_history:
-            entry = f"toc:{book_code}"
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append(entry)
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
+        self.status.showMessage(f"  {BOOK_NAMES.get(book_code, book_code)}  ·  Table of Contents")
+        return True
 
-    def _navigate_history_entry(self, entry: str):
-        """Route a history entry to the correct display method without adding to history."""
-        if entry.startswith("toc:"):
-            self._show_toc(entry[4:], add_to_history=False)
-        elif entry == "dmscreen":
-            self._show_dmscreen(add_to_history=False)
-        elif entry == "actions":
-            self._show_actions(add_to_history=False)
-        elif entry == "chargen":
-            self._show_chargen(add_to_history=False)
-        elif entry == "splash":
-            self._show_splash(add_to_history=False)
-        else:
-            self._load_page(entry, add_to_history=False)
-
-    def _show_dmscreen(self, add_to_history: bool = True):
-        """Load the DM quick-reference screen into the content pane."""
-        html = generate_dmscreen_html()
-        self.content._view.setHtml(html)
-        self.current_page_url = None
-        self.bookmark_btn.setEnabled(False)
-        self._set_tab_title("DM Screen")
-        self.status.showMessage("  DM Screen  ·  Quick Reference")
-        if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append("dmscreen")
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
-
-    def _show_actions(self, add_to_history: bool = True):
-        """Load the player Actions quick-reference screen into the content pane."""
-        html = generate_actions_html()
-        self.content._view.setHtml(html)
-        self.current_page_url = None
-        self.bookmark_btn.setEnabled(False)
-        self._set_tab_title("Actions")
-        self.status.showMessage("  Actions Screen  ·  Quick Reference")
-        if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append("actions")
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
-
-    def _show_chargen(self, add_to_history: bool = True):
-        """Load the character creation walkthrough into the content pane."""
-        html = generate_chargen_html()
-        self.content._view.setHtml(html)
-        self.current_page_url = None
-        self.bookmark_btn.setEnabled(False)
-        self._set_tab_title("Char. Creation")
-        self.status.showMessage("  Character Creation  ·  Step-by-Step Walkthrough")
-        if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append("chargen")
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
-
-    def _show_splash(self, add_to_history: bool = True):
-        """Load the welcome splash screen into the content pane."""
-        html = generate_splash_html()
-        self.content._view.setHtml(html)
-        self.current_page_url = None
-        self.bookmark_btn.setEnabled(False)
-        self._set_tab_title("Home")
-        self.status.showMessage("  D&D 2nd Edition  ·  Rules Reference")
-        if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append("splash")
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
+    # Thin public entry points used by the nav-bar buttons and tree.
+    def _show_splash(self):   self._navigate("splash")
+    def _show_dmscreen(self): self._navigate("dmscreen")
+    def _show_actions(self):  self._navigate("actions")
+    def _show_chargen(self):  self._navigate("chargen")
+    def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
 
     # ── House rules helpers ────────────────────────────────────────────────
 
@@ -1390,6 +1361,10 @@ class MainWindow(QMainWindow):
         )
 
     def _load_page(self, page_url: str, add_to_history: bool = True):
+        """Public entry point for opening a scraped rules page (tree/results/bookmarks)."""
+        self._navigate(page_url, add_to_history)
+
+    def _render_page(self, page_url: str) -> bool:
         c = self.db.cursor()
         c.execute(
             "SELECT content_html, title, book_name, book_code FROM pages WHERE page_url = ?",
@@ -1398,7 +1373,7 @@ class MainWindow(QMainWindow):
         row = c.fetchone()
         if not row:
             self.status.showMessage(f"  Not found: {page_url}")
-            return
+            return False
 
         html, title, book_name, book_code = row
         rules = self._get_chapter_house_rules(page_url, book_code)
@@ -1416,22 +1391,17 @@ class MainWindow(QMainWindow):
         self.bookmark_btn.setEnabled(True)
         self._update_bookmark_btn()
         self._sync_tree_selection(page_url)
-
-        if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append(page_url)
-            self._history_pos = len(self._history) - 1
-        self._update_nav_buttons()
+        return True
 
     def _go_back(self):
         if self._history_pos > 0:
             self._history_pos -= 1
-            self._navigate_history_entry(self._history[self._history_pos])
+            self._navigate(self._history[self._history_pos], add_to_history=False)
 
     def _go_forward(self):
         if self._history_pos < len(self._history) - 1:
             self._history_pos += 1
-            self._navigate_history_entry(self._history[self._history_pos])
+            self._navigate(self._history[self._history_pos], add_to_history=False)
 
     def _update_nav_buttons(self):
         self.back_btn.setEnabled(self._history_pos > 0)
@@ -1450,13 +1420,13 @@ class MainWindow(QMainWindow):
         idx = self._content_tabs.addTab(view, "Home")
         self._content_tabs.setCurrentIndex(idx)
         if show_splash:
-            self._show_splash(add_to_history=False)
+            self._show_splash()
 
     def _on_content_navigate_newtab(self, url: str):
         """Ctrl/middle-clicked link: open the target in a new background tab."""
         prev = self._content_tabs.currentIndex()
         self._new_tab(show_splash=False)
-        self._on_content_navigate(url)
+        self._navigate(self._link_to_destination(url))
         # Keep focus on the originating tab (background-open behaviour)
         self._content_tabs.setCurrentIndex(prev)
 
@@ -1615,21 +1585,6 @@ class MainWindow(QMainWindow):
             return ctx.history[ctx.history_pos]
         return None
 
-    def _open_entry(self, entry: str):
-        """Open a saved navigation entry in the current tab (building fresh history)."""
-        if entry.startswith("toc:"):
-            self._show_toc(entry[4:])
-        elif entry == "dmscreen":
-            self._show_dmscreen()
-        elif entry == "actions":
-            self._show_actions()
-        elif entry == "chargen":
-            self._show_chargen()
-        elif entry == "splash":
-            self._show_splash()
-        else:
-            self._load_page(entry)
-
     def _restore_session(self):
         geo = self._settings.value("geometry")
         if geo is not None:
@@ -1645,7 +1600,7 @@ class MainWindow(QMainWindow):
                     self._new_tab(show_splash=False)
                 else:
                     self._content_tabs.setCurrentIndex(0)
-                self._open_entry(entry)
+                self._navigate(entry)   # a saved history entry is a destination
             try:
                 active = int(self._settings.value("activeTab", 0))
             except (TypeError, ValueError):
