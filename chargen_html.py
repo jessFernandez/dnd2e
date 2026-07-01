@@ -421,17 +421,19 @@ def generate() -> str:
                margin-bottom: 14px; overflow: hidden; }}
 
       .step-header {{ display: flex; align-items: center; gap: 14px;
-                      padding: 14px 16px; background: #1c1f32;
+                      padding: 13px 16px; background: #1c1f32;
                       border-bottom: 1px solid #2a2e45; }}
-      .step-num {{ width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      .step-num {{ width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
                    background: {ACCENT_BG}; border: 2px solid {ACCENT_DIM};
-                   color: {ACCENT}; font-size: 14px; font-weight: 800;
+                   color: {ACCENT}; font-size: 15px; font-weight: 800;
+                   line-height: 1; text-align: center;
                    display: flex; align-items: center; justify-content: center; }}
-      .step-title-group {{ flex: 1; }}
+      .step-title-group {{ flex: 1; min-width: 0; }}
       .step-title-line {{ display: flex; align-items: center; gap: 8px; }}
-      .step-title {{ font-size: 14px; font-weight: 700; color: #e8eaf0;
+      .step-title {{ font-size: 14.5px; font-weight: 700; color: #e8eaf0;
                      letter-spacing: .03em; }}
-      .step-sub {{ font-size: 11.5px; color: #5a6080; margin-top: 2px; font-style: italic; }}
+      .step-sub {{ font-size: 11.5px; color: #5a6080; margin-top: 3px;
+                   font-style: italic; line-height: 1.4; }}
       .opt-badge {{ background: #1f1430; border: 1px solid #5c3a8a; border-radius: 4px;
                     color: #a76bcc; font-size: 9.5px; font-weight: 700; padding: 2px 6px;
                     letter-spacing: .06em; text-transform: uppercase; }}
@@ -461,15 +463,16 @@ def generate() -> str:
       .class-req {{ color: #5a6080; font-size: 11px; font-style: italic; }}
 
       /* ── PHB link chips ── */
-      .link-row {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-      .phb-link {{ display: inline-flex; align-items: center; gap: 5px;
+      .link-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+      .phb-link {{ display: inline-flex; align-items: center; gap: 7px;
                    background: #1c1f32; border: 1px solid {ACCENT_DIM};
-                   border-radius: 5px; padding: 4px 10px; color: #b8a060;
-                   text-decoration: none; font-size: 11.5px; font-weight: 500;
-                   transition: all .12s; white-space: nowrap; }}
+                   border-radius: 6px; padding: 6px 11px 6px 7px; color: #c2aa68;
+                   text-decoration: none; font-size: 11.5px; font-weight: 600;
+                   line-height: 1; transition: all .12s; white-space: nowrap; }}
       .phb-link:hover {{ background: {ACCENT_BG}; border-color: {ACCENT}; color: {ACCENT}; }}
-      .phb-badge {{ background: {ACCENT_DIM}; color: #e8d090; font-size: 9px; font-weight: 800;
-                    border-radius: 3px; padding: 1px 4px; letter-spacing: .06em; }}
+      .phb-badge {{ display: inline-flex; align-items: center; justify-content: center;
+                    background: {ACCENT_DIM}; color: #f0dca0; font-size: 8.5px; font-weight: 800;
+                    border-radius: 3px; padding: 3px 5px; line-height: 1; letter-spacing: .08em; }}
 
       /* ── Search hidden ── */
       .step[style*="display:none"], .step[style*="display: none"] {{ display: none !important; }}

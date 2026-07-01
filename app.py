@@ -5,6 +5,7 @@ Run after scraper.py has built dnd2e.db.
     python app.py
 """
 
+import os
 import re
 import sys
 import sqlite3
@@ -20,10 +21,10 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QHBoxLayout, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
-    QLabel, QSizePolicy,
+    QLabel, QSizePolicy, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent
+from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -37,8 +38,18 @@ def _bundle_dir() -> Path:
         return Path(sys._MEIPASS)
     return Path(__file__).parent
 
-DB_PATH  = _bundle_dir() / "dnd2e.db"
-BASE_URL = "https://regalgoblins.com/2erules/"
+
+def _user_data_dir() -> Path:
+    """A writable per-user directory for bookmarks/settings (survives app updates)."""
+    root = os.environ.get("APPDATA") or os.environ.get("XDG_DATA_HOME") or str(Path.home())
+    base = Path(root) / "DnD2eRules"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+DB_PATH      = _bundle_dir() / "dnd2e.db"
+USER_DB_PATH = _user_data_dir() / "userdata.db"
+BASE_URL     = "https://regalgoblins.com/2erules/"
 
 BOOK_ORDER = ["PHB", "DMG", "MM", "SP", "HLC", "TM", "SM", "CT", "AEG", "ECO"]
 BOOK_NAMES = {
@@ -125,7 +136,7 @@ QScrollBar::handle:vertical {
     border-radius: 4px;
     min-height: 24px;
 }
-QScrollBar::handle:vertical:hover { background: #8b0000; }
+QScrollBar::handle:vertical:hover { background: #c9a84c; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
 
@@ -139,7 +150,7 @@ QScrollBar::handle:horizontal {
     border-radius: 4px;
     min-width: 24px;
 }
-QScrollBar::handle:horizontal:hover { background: #8b0000; }
+QScrollBar::handle:horizontal:hover { background: #c9a84c; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
 /* ── Search box ────────────────────────────────────────────────── */
@@ -150,9 +161,9 @@ QLineEdit {
     border-radius: 8px;
     padding: 7px 12px;
     font-size: 13px;
-    selection-background-color: #8b0000;
+    selection-background-color: #5c4a1c;
 }
-QLineEdit:focus { border-color: #8b0000; }
+QLineEdit:focus { border-color: #c9a84c; }
 QLineEdit:hover { border-color: #3e4560; }
 
 /* ── Buttons ───────────────────────────────────────────────────── */
@@ -165,8 +176,8 @@ QPushButton {
     font-size: 12px;
     font-weight: 500;
 }
-QPushButton:hover   { background: #272b40; border-color: #8b0000; color: #ffffff; }
-QPushButton:pressed { background: #8b0000; border-color: #8b0000; color: #ffffff; }
+QPushButton:hover   { background: #272b40; border-color: #c9a84c; color: #ffffff; }
+QPushButton:pressed { background: #c9a84c; border-color: #c9a84c; color: #1a1c26; }
 QPushButton:disabled { color: #404555; border-color: #1e2030; background: #181a24; }
 
 /* ── Tab bar ───────────────────────────────────────────────────── */
@@ -177,8 +188,8 @@ QTabBar {
 }
 QTabBar::tab {
     background: transparent;
-    color: #505870;
-    padding: 9px 20px;
+    color: #565e78;
+    padding: 9px 16px;
     border: none;
     border-bottom: 2px solid transparent;
     font-size: 12px;
@@ -187,7 +198,7 @@ QTabBar::tab {
 }
 QTabBar::tab:selected {
     color: #e0e4f0;
-    border-bottom: 2px solid #8b0000;
+    border-bottom: 2px solid #c9a84c;
 }
 QTabBar::tab:hover:!selected { color: #9aa0b8; }
 
@@ -200,47 +211,33 @@ QTabWidget#contentTabs QTabBar {
 }
 QTabWidget#contentTabs QTabBar::tab {
     background: #13151f;
-    color: #404870;
-    padding: 7px 10px 7px 14px;
+    color: #5a627e;
+    padding: 8px 8px 8px 16px;
     border: none;
+    border-top: 2px solid transparent;
     border-right: 1px solid #1a1d28;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 500;
-    min-width: 80px;
+    min-width: 96px;
     max-width: 200px;
 }
 QTabWidget#contentTabs QTabBar::tab:selected {
     background: #1e2138;
-    color: #dde0f0;
+    color: #e6e9f6;
     border-top: 2px solid #c9a84c;
-    padding-top: 5px;
 }
 QTabWidget#contentTabs QTabBar::tab:hover:!selected {
     background: #181b2a;
-    color: #707898;
+    color: #828ab0;
 }
 QTabWidget#contentTabs QTabBar::close-button {
     subcontrol-position: right;
-    padding: 2px;
+    margin-right: 4px;
+    border-radius: 4px;
 }
-
-/* ── New-tab "+" button ────────────────────────────────────────── */
-QWidget#newTabWrap {
-    background: #13151f;
-    border-bottom: 1px solid #1e2130;
+QTabWidget#contentTabs QTabBar::close-button:hover {
+    background: #4a2530;
 }
-QPushButton#newTabBtn {
-    background: #252a44;
-    border: 1px solid #3a4060;
-    border-radius: 5px;
-    color: #9aaad8;
-    font-size: 17px;
-    font-weight: 300;
-    padding: 0 0 1px 0;
-    margin: 0;
-}
-QPushButton#newTabBtn:hover   { background: #2d3358; color: #c9a84c; border-color: #c9a84c; }
-QPushButton#newTabBtn:pressed { background: #1e2240; color: #e8c26e; border-color: #c9a84c; }
 
 /* ── Tree widget ───────────────────────────────────────────────── */
 QTreeWidget {
@@ -250,12 +247,12 @@ QTreeWidget {
     show-decoration-selected: 1;
 }
 QTreeWidget::item {
-    padding: 3px 2px;
+    padding: 5px 4px;
     border-radius: 5px;
-    margin: 1px 3px;
+    margin: 1px 4px;
 }
 QTreeWidget::item:hover    { background: #1e2130; }
-QTreeWidget::item:selected { background: #6e0000; color: #ffffff; }
+QTreeWidget::item:selected { background: #4d3f18; color: #f2e8cc; }
 QTreeWidget::branch { background: #13151b; }
 QTreeWidget::branch:has-children:!has-siblings:closed,
 QTreeWidget::branch:closed:has-children:has-siblings {
@@ -269,11 +266,11 @@ QListWidget {
     outline: none;
 }
 QListWidget::item {
-    padding: 9px 12px;
+    padding: 10px 13px;
     border-bottom: 1px solid #1d1f28;
 }
 QListWidget::item:hover    { background: #1e2130; }
-QListWidget::item:selected { background: #6e0000; color: #ffffff; }
+QListWidget::item:selected { background: #4d3f18; color: #f2e8cc; }
 
 /* ── Status bar ────────────────────────────────────────────────── */
 QStatusBar {
@@ -292,7 +289,7 @@ QMenu {
     padding: 4px;
 }
 QMenu::item { padding: 7px 22px; border-radius: 4px; }
-QMenu::item:selected { background: #8b0000; color: white; }
+QMenu::item:selected { background: #c9a84c; color: #1a1c26; }
 """
 
 # ── Right-panel nav bar stylesheet (light strip above content) ────────────────
@@ -304,17 +301,44 @@ QWidget#navBar {
 }
 QPushButton {
     background: transparent;
-    color: #7a80a0;
+    color: #8087a8;
     border: 1px solid #2e3348;
-    border-radius: 6px;
-    padding: 4px 14px;
+    border-radius: 7px;
+    padding: 6px 15px;
     font-size: 12px;
     font-weight: 500;
-    min-width: 70px;
 }
-QPushButton:hover   { background: #272b40; color: #c0c4d4; border-color: #8b0000; }
-QPushButton:pressed { background: #8b0000; color: #ffffff; border-color: #8b0000; }
+QPushButton:hover   { background: #272b40; color: #d4d8e8; border-color: #c9a84c; }
+QPushButton:pressed { background: #c9a84c; color: #1a1c26; border-color: #c9a84c; }
 QPushButton:disabled { color: #303444; border-color: #1e2030; background: transparent; }
+"""
+
+# ── In-page find bar stylesheet ───────────────────────────────────────────────
+
+FIND_BAR_STYLE = """
+QWidget#findBar {
+    background: #1a1c26;
+    border-bottom: 1px solid #2a2d3a;
+}
+QWidget#findBar QLineEdit {
+    background: #23263a;
+    border: 1px solid #383c52;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: #e0e2f0;
+}
+QWidget#findBar QLineEdit:focus { border-color: #c9a84c; }
+QWidget#findBar QPushButton {
+    background: #23263a;
+    color: #b8bccf;
+    border: 1px solid #383c52;
+    border-radius: 6px;
+    padding: 4px 0;
+    font-size: 12px;
+}
+QWidget#findBar QPushButton:hover   { background: #2d3048; color: #c9a84c; border-color: #c9a84c; }
+QWidget#findBar QPushButton:pressed { background: #c9a84c; color: #1a1c26; }
 """
 
 
@@ -367,13 +391,19 @@ class SearchWorker(QThread):
 
 if HAS_WEBENGINE:
     class DnDPage(QWebEnginePage):
-        dnd_navigate = pyqtSignal(str)
+        dnd_navigate        = pyqtSignal(str)
+        dnd_navigate_newtab = pyqtSignal(str)
 
         def acceptNavigationRequest(self, url, nav_type, is_main_frame):
             if url.scheme() == "dnd":
                 page_url = url.path().lstrip("/")
                 if page_url:
-                    self.dnd_navigate.emit(page_url)
+                    mods = QApplication.keyboardModifiers()
+                    btns = QApplication.mouseButtons()
+                    if (mods & Qt.ControlModifier) or (btns & Qt.MiddleButton):
+                        self.dnd_navigate_newtab.emit(page_url)
+                    else:
+                        self.dnd_navigate.emit(page_url)
                 return False
             return True
 
@@ -381,27 +411,55 @@ if HAS_WEBENGINE:
 # ── Content viewer ────────────────────────────────────────────────────────────
 
 class ContentView(QWidget):
-    page_requested = pyqtSignal(str)
+    page_requested        = pyqtSignal(str)
+    page_requested_newtab = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: #2a2d36;")
+        self._zoom = 1.0
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
         if HAS_WEBENGINE:
             self._dnd_page = DnDPage()
             self._dnd_page.dnd_navigate.connect(self.page_requested)
+            self._dnd_page.dnd_navigate_newtab.connect(self.page_requested_newtab)
             self._view = QWebEngineView()
             self._view.setPage(self._dnd_page)
+            # Zoom factor resets whenever new content loads, so re-apply it each time.
+            self._view.loadFinished.connect(lambda ok: self._view.setZoomFactor(self._zoom))
         else:
             self._view = QTextBrowser()
             self._view.setStyleSheet("background: #2a2d36; color: #d4d6de;")
             self._view.setOpenExternalLinks(False)
             self._view.anchorClicked.connect(self._on_anchor)
-            self._view.setFont(QFont("Georgia", 11))
+            self._view.setFont(QFont("Segoe UI", 11))
 
         layout.addWidget(self._view)
+
+    # ── Zoom ──────────────────────────────────────────────────────────────
+    def apply_zoom(self, factor: float):
+        self._zoom = factor
+        if HAS_WEBENGINE:
+            self._view.setZoomFactor(factor)
+        else:
+            f = self._view.font()
+            f.setPointSizeF(11 * factor)
+            self._view.setFont(f)
+
+    # ── In-page find ──────────────────────────────────────────────────────
+    def find(self, text: str, forward: bool = True):
+        if not HAS_WEBENGINE:
+            return
+        flags = QWebEnginePage.FindFlags()
+        if not forward:
+            flags |= QWebEnginePage.FindBackward
+        self._view.findText(text, flags)
+
+    def clear_find(self):
+        if HAS_WEBENGINE:
+            self._view.findText("")
 
     def _on_anchor(self, url: QUrl):
         if url.scheme() == "dnd":
@@ -412,7 +470,10 @@ class ContentView(QWidget):
     # Injected into every page to override the site's white background
     _CSS_INJECT = (
         "<style>"
-        "html,body{background-color:#2a2d36!important;color:#d4d6de!important;}"
+        "html,body{background-color:#2a2d36!important;color:#d4d6de!important;"
+        "font-family:'Segoe UI',system-ui,sans-serif!important;}"
+        "body,p,td,th,li,a,span,div,font,h1,h2,h3,h4,h5,h6,b,i,em,strong,center,blockquote"
+        "{font-family:'Segoe UI',system-ui,sans-serif!important;}"
         "a{color:#7aabdb!important;}"
         "table{border-collapse:collapse;}"
         "td,th{border-color:#3a3e50!important;}"
@@ -471,15 +532,42 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.db = sqlite3.connect(str(DB_PATH))
+        self.user_db = sqlite3.connect(str(USER_DB_PATH))
+        self._init_user_db()
+        self._settings = QSettings(str(_user_data_dir() / "settings.ini"), QSettings.IniFormat)
         self._search_worker: SearchWorker | None = None
         self._url_to_tree_item: dict = {}
         self._book_chapters:    dict = {}
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
+        self._zoom: float = float(self._settings.value("zoom", 1.0))
 
         self._build_ui()
+        self._setup_shortcuts()
         self._load_topics()
         self._load_bookmarks()
-        self._show_splash(add_to_history=False)
+        self._restore_session()
+
+    def _init_user_db(self):
+        """Create the bookmarks table in the writable user DB, migrating any legacy rows."""
+        c = self.user_db.cursor()
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS bookmarks ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "page_url TEXT UNIQUE, "
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+        self.user_db.commit()
+        # One-time migration: copy bookmarks that used to live in the bundled DB.
+        c.execute("SELECT COUNT(*) FROM bookmarks")
+        if c.fetchone()[0] == 0:
+            try:
+                old = self.db.cursor()
+                old.execute("SELECT page_url FROM bookmarks ORDER BY created_at")
+                for (url,) in old.fetchall():
+                    c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)", (url,))
+                self.user_db.commit()
+            except sqlite3.Error:
+                pass  # no legacy bookmarks table — nothing to migrate
 
     # ── Per-tab properties (redirect to the active TabContext) ────────────────
 
@@ -525,14 +613,15 @@ class MainWindow(QMainWindow):
         sidebar.setMaximumWidth(400)
         sidebar.setMinimumWidth(260)
         sl = QVBoxLayout(sidebar)
-        sl.setContentsMargins(12, 14, 12, 10)
-        sl.setSpacing(10)
+        sl.setContentsMargins(14, 16, 14, 12)
+        sl.setSpacing(12)
 
         # App title / branding strip
         title_row = QHBoxLayout()
-        title_label = QLabel("D&D 2e Rules")
+        title_row.setSpacing(8)
+        title_label = QLabel("⚔  D&D 2e Rules")
         title_label.setStyleSheet(
-            "color: #ffffff; font-size: 15px; font-weight: 700; "
+            "color: #ffffff; font-size: 16px; font-weight: 700; "
             "letter-spacing: 0.04em;"
         )
         title_row.addWidget(title_label)
@@ -541,13 +630,14 @@ class MainWindow(QMainWindow):
 
         # Search box
         search_row = QHBoxLayout()
-        search_row.setSpacing(6)
+        search_row.setSpacing(7)
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search rules...")
+        self.search_box.setPlaceholderText("Search rules…")
         self.search_box.setClearButtonEnabled(True)
         self.search_box.returnPressed.connect(self._do_search)
         search_btn = QPushButton("Go")
-        search_btn.setFixedWidth(40)
+        search_btn.setFixedWidth(44)
+        search_btn.setCursor(Qt.PointingHandCursor)
         search_btn.clicked.connect(self._do_search)
         search_row.addWidget(self.search_box)
         search_row.addWidget(search_btn)
@@ -584,7 +674,8 @@ class MainWindow(QMainWindow):
         # Bookmark button
         self.bookmark_btn = QPushButton("☆   Bookmark This Page")
         self.bookmark_btn.setEnabled(False)
-        self.bookmark_btn.setMinimumHeight(34)
+        self.bookmark_btn.setMinimumHeight(36)
+        self.bookmark_btn.setCursor(Qt.PointingHandCursor)
         self.bookmark_btn.clicked.connect(self._toggle_bookmark)
         sl.addWidget(self.bookmark_btn)
 
@@ -600,36 +691,84 @@ class MainWindow(QMainWindow):
         # Navigation bar
         nav_bar = QWidget()
         nav_bar.setObjectName("navBar")
-        nav_bar.setFixedHeight(44)
+        nav_bar.setFixedHeight(48)
         nav_bar.setStyleSheet(NAV_BAR_STYLE)
         nl = QHBoxLayout(nav_bar)
-        nl.setContentsMargins(10, 6, 10, 6)
-        nl.setSpacing(6)
+        nl.setContentsMargins(12, 7, 12, 7)
+        nl.setSpacing(7)
 
         self.back_btn = QPushButton("◀  Back")
         self.back_btn.setEnabled(False)
+        self.back_btn.setCursor(Qt.PointingHandCursor)
         self.back_btn.clicked.connect(self._go_back)
 
         self.fwd_btn = QPushButton("Forward  ▶")
         self.fwd_btn.setEnabled(False)
+        self.fwd_btn.setCursor(Qt.PointingHandCursor)
         self.fwd_btn.clicked.connect(self._go_forward)
 
+        self.newtab_btn = QPushButton("＋  New Tab")
+        self.newtab_btn.setCursor(Qt.PointingHandCursor)
+        self.newtab_btn.setToolTip("Open a new tab")
+        self.newtab_btn.clicked.connect(lambda: self._new_tab())
+
         self.dmscreen_btn = QPushButton("⚔  DM Screen")
+        self.dmscreen_btn.setCursor(Qt.PointingHandCursor)
         self.dmscreen_btn.clicked.connect(lambda: self._show_dmscreen())
 
         self.actions_btn = QPushButton("⚡  Actions")
+        self.actions_btn.setCursor(Qt.PointingHandCursor)
         self.actions_btn.clicked.connect(lambda: self._show_actions())
 
         self.chargen_btn = QPushButton("✦  Character Creation")
+        self.chargen_btn.setCursor(Qt.PointingHandCursor)
         self.chargen_btn.clicked.connect(lambda: self._show_chargen())
 
         nl.addWidget(self.back_btn)
         nl.addWidget(self.fwd_btn)
+        nl.addSpacing(6)
+        nl.addWidget(self.newtab_btn)
         nl.addStretch()
         nl.addWidget(self.chargen_btn)
         nl.addWidget(self.actions_btn)
         nl.addWidget(self.dmscreen_btn)
         rl.addWidget(nav_bar)
+
+        # Find-on-page bar (hidden until Ctrl+F)
+        self._find_bar = QWidget()
+        self._find_bar.setObjectName("findBar")
+        self._find_bar.setStyleSheet(FIND_BAR_STYLE)
+        fl = QHBoxLayout(self._find_bar)
+        fl.setContentsMargins(12, 6, 12, 6)
+        fl.setSpacing(6)
+        find_label = QLabel("Find")
+        find_label.setStyleSheet("color:#8087a8; font-size:11px; font-weight:600;")
+        self._find_input = QLineEdit()
+        self._find_input.setPlaceholderText("Find on page…")
+        self._find_input.returnPressed.connect(lambda: self._find_next(True))
+        self._find_input.textChanged.connect(lambda _t: self._find_next(True))
+        find_prev = QPushButton("▲")
+        find_prev.setFixedWidth(30)
+        find_prev.setCursor(Qt.PointingHandCursor)
+        find_prev.setToolTip("Previous match (Shift+Enter)")
+        find_prev.clicked.connect(lambda: self._find_next(False))
+        find_next = QPushButton("▼")
+        find_next.setFixedWidth(30)
+        find_next.setCursor(Qt.PointingHandCursor)
+        find_next.setToolTip("Next match (Enter)")
+        find_next.clicked.connect(lambda: self._find_next(True))
+        find_close = QPushButton("✕")
+        find_close.setFixedWidth(30)
+        find_close.setCursor(Qt.PointingHandCursor)
+        find_close.setToolTip("Close (Esc)")
+        find_close.clicked.connect(self._hide_find_bar)
+        fl.addWidget(find_label)
+        fl.addWidget(self._find_input, 1)
+        fl.addWidget(find_prev)
+        fl.addWidget(find_next)
+        fl.addWidget(find_close)
+        self._find_bar.setVisible(False)
+        rl.addWidget(self._find_bar)
 
         self._content_tabs = QTabWidget()
         self._content_tabs.setObjectName("contentTabs")
@@ -638,18 +777,6 @@ class MainWindow(QMainWindow):
         self._content_tabs.setDocumentMode(True)
         self._content_tabs.tabCloseRequested.connect(self._close_tab)
         self._content_tabs.currentChanged.connect(self._on_tab_changed)
-
-        new_tab_btn = QPushButton("+")
-        new_tab_btn.setObjectName("newTabBtn")
-        new_tab_btn.setFixedSize(26, 24)
-        new_tab_btn.setToolTip("Open new tab")
-        new_tab_btn.clicked.connect(lambda: self._new_tab())
-        corner_wrap = QWidget()
-        corner_wrap.setObjectName("newTabWrap")
-        corner_lay = QHBoxLayout(corner_wrap)
-        corner_lay.setContentsMargins(5, 4, 6, 4)
-        corner_lay.addWidget(new_tab_btn)
-        self._content_tabs.setCornerWidget(corner_wrap, Qt.TopRightCorner)
 
         rl.addWidget(self._content_tabs)
         self._new_tab(show_splash=False)   # creates the initial blank tab
@@ -667,6 +794,94 @@ class MainWindow(QMainWindow):
                 "PyQtWebEngine not found — install with:  pip install PyQtWebEngine"
             )
         self.setStatusBar(self.status)
+
+    # ── Keyboard shortcuts ──────────────────────────────────────────────────
+
+    def _setup_shortcuts(self):
+        def sc(seq, slot):
+            s = QShortcut(QKeySequence(seq), self)
+            s.activated.connect(slot)
+            return s
+
+        sc("Ctrl+T",       lambda: self._new_tab())
+        sc("Ctrl+W",       lambda: self._close_tab(self._content_tabs.currentIndex()))
+        sc("Ctrl+Tab",     lambda: self._cycle_tab(1))
+        sc("Ctrl+Shift+Tab", lambda: self._cycle_tab(-1))
+        sc("Ctrl+PgDown",  lambda: self._cycle_tab(1))
+        sc("Ctrl+PgUp",    lambda: self._cycle_tab(-1))
+        sc("Alt+Left",     self._go_back)
+        sc("Alt+Right",    self._go_forward)
+        sc("Ctrl+K",       self._focus_search)
+        sc("Ctrl+F",       self._show_find_bar)
+        sc("Escape",       self._hide_find_bar)
+        sc("Ctrl+=",       self._zoom_in)
+        sc("Ctrl++",       self._zoom_in)
+        sc("Ctrl+-",       self._zoom_out)
+        sc("Ctrl+0",       self._zoom_reset)
+        sc("F3",           lambda: self._find_next(True))
+        sc("Shift+F3",     lambda: self._find_next(False))
+        for i in range(1, 10):
+            sc(f"Ctrl+{i}", lambda n=i: self._goto_tab(n - 1))
+
+        # Ctrl+wheel zoom, caught application-wide
+        QApplication.instance().installEventFilter(self)
+
+    def _cycle_tab(self, delta: int):
+        n = self._content_tabs.count()
+        if n:
+            self._content_tabs.setCurrentIndex((self._content_tabs.currentIndex() + delta) % n)
+
+    def _goto_tab(self, idx: int):
+        if 0 <= idx < self._content_tabs.count():
+            self._content_tabs.setCurrentIndex(idx)
+
+    def _focus_search(self):
+        self.tabs.setCurrentIndex(0)
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel and (QApplication.keyboardModifiers() & Qt.ControlModifier):
+            if event.angleDelta().y() > 0:
+                self._zoom_in()
+            else:
+                self._zoom_out()
+            return True
+        return super().eventFilter(obj, event)
+
+    # ── Zoom ────────────────────────────────────────────────────────────────
+
+    def _apply_zoom_all(self):
+        for ctx in self._tabs:
+            ctx.view.apply_zoom(self._zoom)
+
+    def _set_zoom(self, z: float):
+        self._zoom = max(0.5, min(2.5, round(z, 2)))
+        self._apply_zoom_all()
+        self.status.showMessage(f"  Zoom: {int(self._zoom * 100)}%")
+
+    def _zoom_in(self):    self._set_zoom(self._zoom + 0.1)
+    def _zoom_out(self):   self._set_zoom(self._zoom - 0.1)
+    def _zoom_reset(self): self._set_zoom(1.0)
+
+    # ── In-page find ────────────────────────────────────────────────────────
+
+    def _show_find_bar(self):
+        self._find_bar.setVisible(True)
+        self._find_input.setFocus()
+        self._find_input.selectAll()
+        if self._find_input.text():
+            self._find_next(True)
+
+    def _hide_find_bar(self):
+        if not self._find_bar.isVisible():
+            return
+        self._find_bar.setVisible(False)
+        self.content.clear_find()
+        self.content._view.setFocus()
+
+    def _find_next(self, forward: bool = True):
+        self.content.find(self._find_input.text(), forward)
 
     # ── Chapter detection ──────────────────────────────────────────────────
 
@@ -1163,12 +1378,12 @@ class MainWindow(QMainWindow):
             f'<div style="background:#1b1e2a;border-left:4px solid {accent};'
             f'padding:12px 16px 14px;margin:0 0 0 0;'
             f'font-family:Segoe UI,system-ui,sans-serif;">'
-            f'<details open>'
+            f'<details>'
             f'<summary style="cursor:pointer;color:{accent};font-size:11px;'
             f'font-weight:700;letter-spacing:.1em;list-style:none;outline:none;">'
             f'&#x2694;&#xFE0F; HOUSE RULES'
             f'<span style="color:#6b7280;font-weight:400;font-size:10px;margin-left:8px;">'
-            f'click to collapse</span></summary>'
+            f'click to expand</span></summary>'
             f'{inner}'
             f'</details>'
             f'</div>'
@@ -1228,12 +1443,22 @@ class MainWindow(QMainWindow):
         """Open a fresh content tab, optionally showing the splash screen."""
         view = ContentView()
         view.page_requested.connect(self._on_content_navigate)
+        view.page_requested_newtab.connect(self._on_content_navigate_newtab)
+        view.apply_zoom(self._zoom)
         ctx = TabContext(view)
         self._tabs.append(ctx)
         idx = self._content_tabs.addTab(view, "Home")
         self._content_tabs.setCurrentIndex(idx)
         if show_splash:
             self._show_splash(add_to_history=False)
+
+    def _on_content_navigate_newtab(self, url: str):
+        """Ctrl/middle-clicked link: open the target in a new background tab."""
+        prev = self._content_tabs.currentIndex()
+        self._new_tab(show_splash=False)
+        self._on_content_navigate(url)
+        # Keep focus on the originating tab (background-open behaviour)
+        self._content_tabs.setCurrentIndex(prev)
 
     def _close_tab(self, idx: int):
         """Close the tab at idx; always keeps at least one tab open."""
@@ -1293,7 +1518,13 @@ class MainWindow(QMainWindow):
 
         for page_url, title, book_name, book_code, _snip in rows:
             label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
-            item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
+            text  = f"  {label}\n  {book_name or ''}"
+            snip  = re.sub(r"\s+", " ", (_snip or "").replace("**", "")).strip()
+            if snip:
+                if len(snip) > 120:
+                    snip = snip[:118].rstrip() + "…"
+                text += f"\n  {snip}"
+            item = QListWidgetItem(text)
             item.setData(Qt.UserRole, page_url)
             item.setForeground(QColor("#c0c4d4"))
             item.setBackground(QColor(BOOK_ITEM_COLORS.get(book_code or "", "#1a1d24")))
@@ -1312,21 +1543,21 @@ class MainWindow(QMainWindow):
     def _toggle_bookmark(self):
         if not self.current_page_url:
             return
-        c = self.db.cursor()
+        c = self.user_db.cursor()
         c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
         if c.fetchone():
             c.execute("DELETE FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
         else:
             c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)",
                       (self.current_page_url,))
-        self.db.commit()
+        self.user_db.commit()
         self._update_bookmark_btn()
         self._load_bookmarks()
 
     def _update_bookmark_btn(self):
         if not self.current_page_url:
             return
-        c = self.db.cursor()
+        c = self.user_db.cursor()
         c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
         self.bookmark_btn.setText(
             "★   Remove Bookmark" if c.fetchone() else "☆   Bookmark This Page"
@@ -1334,14 +1565,17 @@ class MainWindow(QMainWindow):
 
     def _load_bookmarks(self):
         self.bookmarks_list.clear()
-        c = self.db.cursor()
-        c.execute(
-            """SELECT b.page_url, p.title, p.book_name, p.book_code
-               FROM   bookmarks b
-               LEFT   JOIN pages p ON b.page_url = p.page_url
-               ORDER  BY b.created_at DESC""",
-        )
-        for page_url, title, book_name, book_code in c.fetchall():
+        c = self.user_db.cursor()
+        c.execute("SELECT page_url FROM bookmarks ORDER BY created_at DESC")
+        bookmarked = [r[0] for r in c.fetchall()]
+        pc = self.db.cursor()
+        for page_url in bookmarked:
+            pc.execute(
+                "SELECT title, book_name, book_code FROM pages WHERE page_url = ?",
+                (page_url,),
+            )
+            prow = pc.fetchone()
+            title, book_name, book_code = prow if prow else (page_url, "", "")
             label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
             item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
             item.setData(Qt.UserRole, page_url)
@@ -1366,17 +1600,74 @@ class MainWindow(QMainWindow):
         remove = menu.addAction("Remove Bookmark")
         if menu.exec_(self.bookmarks_list.mapToGlobal(pos)) == remove:
             url = item.data(Qt.UserRole)
-            c   = self.db.cursor()
+            c   = self.user_db.cursor()
             c.execute("DELETE FROM bookmarks WHERE page_url = ?", (url,))
-            self.db.commit()
+            self.user_db.commit()
             self._load_bookmarks()
             if url == self.current_page_url:
                 self._update_bookmark_btn()
 
+    # ── Session persistence ─────────────────────────────────────────────────
+
+    def _current_entry(self, ctx: "TabContext"):
+        """The navigation entry currently shown in a tab, or None."""
+        if ctx.history and 0 <= ctx.history_pos < len(ctx.history):
+            return ctx.history[ctx.history_pos]
+        return None
+
+    def _open_entry(self, entry: str):
+        """Open a saved navigation entry in the current tab (building fresh history)."""
+        if entry.startswith("toc:"):
+            self._show_toc(entry[4:])
+        elif entry == "dmscreen":
+            self._show_dmscreen()
+        elif entry == "actions":
+            self._show_actions()
+        elif entry == "chargen":
+            self._show_chargen()
+        elif entry == "splash":
+            self._show_splash()
+        else:
+            self._load_page(entry)
+
+    def _restore_session(self):
+        geo = self._settings.value("geometry")
+        if geo is not None:
+            self.restoreGeometry(geo)
+        entries = self._settings.value("openTabs")
+        if isinstance(entries, str):
+            entries = [entries]
+        if not entries:
+            self._show_splash()
+        else:
+            for i, entry in enumerate(entries):
+                if i > 0:
+                    self._new_tab(show_splash=False)
+                else:
+                    self._content_tabs.setCurrentIndex(0)
+                self._open_entry(entry)
+            try:
+                active = int(self._settings.value("activeTab", 0))
+            except (TypeError, ValueError):
+                active = 0
+            if 0 <= active < self._content_tabs.count():
+                self._content_tabs.setCurrentIndex(active)
+        self._apply_zoom_all()
+
+    def _save_session(self):
+        self._settings.setValue("geometry", self.saveGeometry())
+        self._settings.setValue("zoom", self._zoom)
+        entries = [e for ctx in self._tabs if (e := self._current_entry(ctx))]
+        self._settings.setValue("openTabs", entries)
+        self._settings.setValue("activeTab", self._content_tabs.currentIndex())
+        self._settings.sync()
+
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
     def closeEvent(self, event):
+        self._save_session()
         self.db.close()
+        self.user_db.close()
         event.accept()
 
 
@@ -1405,8 +1696,8 @@ def main():
     pal.setColor(QPalette.Text,            QColor("#c9ccd6"))
     pal.setColor(QPalette.Button,          QColor("#1e2130"))
     pal.setColor(QPalette.ButtonText,      QColor("#c9ccd6"))
-    pal.setColor(QPalette.Highlight,       QColor("#8b0000"))
-    pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+    pal.setColor(QPalette.Highlight,       QColor("#5c4a1c"))
+    pal.setColor(QPalette.HighlightedText, QColor("#f2e8cc"))
     pal.setColor(QPalette.ToolTipBase,     QColor("#1e2130"))
     pal.setColor(QPalette.ToolTipText,     QColor("#c9ccd6"))
     app.setPalette(pal)

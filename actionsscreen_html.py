@@ -240,10 +240,11 @@ def generate() -> str:
                            letter-spacing: .04em; transition: background .1s; }
       .cat-btn:hover, .cat-btn.active,
       #all-btn:hover, #all-btn.active { background: #2d3048; }
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr);
-              gap: 10px; padding: 12px; align-items: start; }
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+              grid-auto-rows: 8px; column-gap: 12px; row-gap: 12px;
+              padding: 12px; align-items: start; }
       .card { background: #21243a; border-radius: 7px; overflow: hidden;
-              border: 1px solid #2a2e45; }
+              border: 1px solid #2a2e45; align-self: start; }
       .card.span-2 { grid-column: span 2; }
       .card.span-3 { grid-column: span 3; }
       .card[style*="display:none"], .card[style*="display: none"] { display: none !important; }
@@ -275,8 +276,22 @@ def generate() -> str:
     """
 
     script = """
+      const grid  = document.querySelector('.grid');
       const cards = Array.from(document.querySelectorAll('.card'));
       let activeCat = 'all';
+
+      function layoutMasonry() {
+        const styles  = getComputedStyle(grid);
+        const rowUnit = parseFloat(styles.gridAutoRows) || 8;
+        const rowGap  = parseFloat(styles.rowGap) || 0;
+        for (const card of cards) {
+          if (card.style.display === 'none') continue;
+          const h = card.getBoundingClientRect().height;
+          const span = Math.ceil((h + rowGap) / (rowUnit + rowGap));
+          card.style.gridRowEnd = 'span ' + span;
+        }
+      }
+
       function applyFilter() {
         const q = document.getElementById('search').value.toLowerCase();
         cards.forEach(c => {
@@ -284,6 +299,7 @@ def generate() -> str:
           const textMatch = !q || c.textContent.toLowerCase().includes(q);
           c.style.display = (catMatch && textMatch) ? '' : 'none';
         });
+        layoutMasonry();
       }
       function filterCat(cat) {
         activeCat = cat;
@@ -300,6 +316,14 @@ def generate() -> str:
         applyFilter();
       });
       document.getElementById('all-btn').classList.add('active');
+
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(layoutMasonry, 120);
+      });
+      window.addEventListener('load', layoutMasonry);
+      layoutMasonry();
     """
 
     grid_html = '<div class="grid">\n' + "".join(sections) + '</div>'
