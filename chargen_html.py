@@ -45,13 +45,11 @@ def _step(num, title, subtitle, body_html, *, optional=False):
     return f"""
 <div class="step" id="step-{num}">
   <div class="step-header">
-    <span class="step-num">{num}</span>
-    <div class="step-title-group">
-      <div class="step-title-line">
-        <span class="step-title">{e(title)}</span>{opt_badge}
-      </div>
-      <div class="step-sub">{e(subtitle)}</div>
+    <div class="step-title-line">
+      <span class="step-num">{num}</span>
+      <span class="step-title">{e(title)}</span>{opt_badge}
     </div>
+    <div class="step-sub">{e(subtitle)}</div>
   </div>
   <div class="step-body">
     {body_html}
@@ -420,19 +418,16 @@ def generate() -> str:
       .step {{ background: #21243a; border: 1px solid #2a2e45; border-radius: 8px;
                margin-bottom: 14px; overflow: hidden; }}
 
-      .step-header {{ display: flex; align-items: center; gap: 14px;
-                      padding: 13px 16px; background: #1c1f32;
+      .step-header {{ padding: 13px 16px; background: #1c1f32;
                       border-bottom: 1px solid #2a2e45; }}
       .step-num {{ width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
                    background: {ACCENT_BG}; border: 2px solid {ACCENT_DIM};
                    color: {ACCENT}; font-size: 15px; font-weight: 800;
-                   line-height: 1; text-align: center;
                    display: flex; align-items: center; justify-content: center; }}
-      .step-title-group {{ flex: 1; min-width: 0; }}
-      .step-title-line {{ display: flex; align-items: center; gap: 8px; }}
-      .step-title {{ font-size: 14.5px; font-weight: 700; color: #e8eaf0;
+      .step-title-line {{ display: flex; align-items: center; gap: 20px; }}
+      .step-title {{ font-size: 16.5px; font-weight: 700; color: #e8eaf0;
                      letter-spacing: .03em; }}
-      .step-sub {{ font-size: 11.5px; color: #5a6080; margin-top: 3px;
+      .step-sub {{ font-size: 12px; color: #5a6080; margin: 5px 0 0 54px;
                    font-style: italic; line-height: 1.4; }}
       .opt-badge {{ background: #1f1430; border: 1px solid #5c3a8a; border-radius: 4px;
                     color: #a76bcc; font-size: 9.5px; font-weight: 700; padding: 2px 6px;

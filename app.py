@@ -467,17 +467,27 @@ class ContentView(QWidget):
             if page_url:
                 self.page_requested.emit(page_url)
 
-    # Injected into every page to override the site's white background
-    _CSS_INJECT = (
-        "<style>"
+    # Base overrides applied to every loaded page (dark background, app font).
+    _BASE_INJECT = (
         "html,body{background-color:#2a2d36!important;color:#d4d6de!important;"
         "font-family:'Segoe UI',system-ui,sans-serif!important;}"
         "body,p,td,th,li,a,span,div,font,h1,h2,h3,h4,h5,h6,b,i,em,strong,center,blockquote"
         "{font-family:'Segoe UI',system-ui,sans-serif!important;}"
         "a{color:#7aabdb!important;}"
-        "table{border-collapse:collapse;}"
+        "img{max-width:100%!important;height:auto!important;}"
+        "table{border-collapse:collapse;max-width:100%!important;}"
         "td,th{border-color:#3a3e50!important;}"
-        "</style>"
+    )
+
+    # Extra typography for scraped rules pages: a centred, comfortable reading
+    # column instead of edge-to-edge text.  (Not applied to the generated TOC,
+    # which has its own layout.)
+    _READING_INJECT = (
+        "body{max-width:820px!important;margin:0 auto!important;"
+        "padding:32px 36px 72px!important;font-size:15px!important;"
+        "line-height:1.66!important;}"
+        "p,li,td{line-height:1.66!important;}"
+        "p{margin:0 0 12px!important;}"
     )
 
     _TOC_LINK_RE = re.compile(
@@ -485,7 +495,7 @@ class ContentView(QWidget):
         re.IGNORECASE,
     )
 
-    def load(self, html: str, page_url: str):
+    def load(self, html: str, page_url: str, reading: bool = True):
         folder     = page_url.rsplit("/", 1)[0] + "/" if "/" in page_url else page_url + "/"
         base       = QUrl(BASE_URL + folder)
         book_code  = page_url.split("/")[0] if "/" in page_url else ""
@@ -497,11 +507,13 @@ class ContentView(QWidget):
                 html,
             )
 
-        # Inject background / colour overrides
+        # Inject background / colour overrides (+ reading typography for pages)
+        css = self._BASE_INJECT + (self._READING_INJECT if reading else "")
+        style = f"<style>{css}</style>"
         if "</head>" in html:
-            html = html.replace("</head>", self._CSS_INJECT + "</head>", 1)
+            html = html.replace("</head>", style + "</head>", 1)
         else:
-            html = self._CSS_INJECT + html
+            html = style + html
 
         if HAS_WEBENGINE:
             self._view.setHtml(html, base)
@@ -538,6 +550,7 @@ class MainWindow(QMainWindow):
         self._search_worker: SearchWorker | None = None
         self._url_to_tree_item: dict = {}
         self._book_chapters:    dict = {}
+        self._book_page_order:  dict = {}   # book_code -> ordered list of page_urls
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
         self._zoom: float = float(self._settings.value("zoom", 1.0))
 
@@ -715,6 +728,18 @@ class MainWindow(QMainWindow):
         self.fwd_btn.setCursor(Qt.PointingHandCursor)
         self.fwd_btn.clicked.connect(self._go_forward)
 
+        self.prev_btn = QPushButton("‹  Prev")
+        self.prev_btn.setEnabled(False)
+        self.prev_btn.setCursor(Qt.PointingHandCursor)
+        self.prev_btn.setToolTip("Previous page in this book  ( [ )")
+        self.prev_btn.clicked.connect(self._go_prev_page)
+
+        self.next_btn = QPushButton("Next  ›")
+        self.next_btn.setEnabled(False)
+        self.next_btn.setCursor(Qt.PointingHandCursor)
+        self.next_btn.setToolTip("Next page in this book  ( ] )")
+        self.next_btn.clicked.connect(self._go_next_page)
+
         self.newtab_btn = QPushButton("＋  New Tab")
         self.newtab_btn.setCursor(Qt.PointingHandCursor)
         self.newtab_btn.setToolTip("Open a new tab")
@@ -734,7 +759,10 @@ class MainWindow(QMainWindow):
 
         nl.addWidget(self.back_btn)
         nl.addWidget(self.fwd_btn)
-        nl.addSpacing(6)
+        nl.addSpacing(10)
+        nl.addWidget(self.prev_btn)
+        nl.addWidget(self.next_btn)
+        nl.addSpacing(10)
         nl.addWidget(self.newtab_btn)
         nl.addStretch()
         nl.addWidget(self.chargen_btn)
@@ -819,6 +847,8 @@ class MainWindow(QMainWindow):
         sc("Ctrl+PgUp",    lambda: self._cycle_tab(-1))
         sc("Alt+Left",     self._go_back)
         sc("Alt+Right",    self._go_forward)
+        sc("[",            self._go_prev_page)
+        sc("]",            self._go_next_page)
         sc("Ctrl+K",       self._focus_search)
         sc("Ctrl+F",       self._show_find_bar)
         sc("Escape",       self._hide_find_bar)
@@ -1137,6 +1167,7 @@ class MainWindow(QMainWindow):
         self.browse_tree.clear()
         self._url_to_tree_item.clear()
         self._book_chapters.clear()
+        self._book_page_order.clear()
 
         total_entries = 0
         for book_code in BOOK_ORDER:
@@ -1146,6 +1177,14 @@ class MainWindow(QMainWindow):
                 continue
 
             self._book_chapters[book_code] = chapters
+            # Flat reading order for this book (Prev/Next), duplicates removed.
+            order, seen = [], set()
+            for ch in chapters:
+                for page_url, _sub in ch["entries"]:
+                    if page_url not in seen:
+                        seen.add(page_url)
+                        order.append(page_url)
+            self._book_page_order[book_code] = order
             tree_color = BOOK_TREE_COLORS.get(book_code, "#c9ccd6")
 
             # Book node
@@ -1265,7 +1304,7 @@ class MainWindow(QMainWindow):
     def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])
         html     = self._generate_toc_html(book_code, chapters)
-        self.content.load(html, book_code + "/")
+        self.content.load(html, book_code + "/", reading=False)
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title(f"{book_code} — Contents")
@@ -1326,39 +1365,44 @@ class MainWindow(QMainWindow):
             return []
 
     def _build_house_rules_callout(self, rules: list, book_code: str) -> str:
-        """Build an HTML callout block from a list of (category, rule_text) tuples."""
-        accent = BOOK_ACCENT_COLORS.get(book_code, "#e07b2a")
+        """Build a slim, collapsed house-rules chip for the top of a rules page."""
+        accent = BOOK_ACCENT_COLORS.get(book_code, "#c9a84c")
         by_cat: dict = {}
         for cat, text in rules:
             by_cat.setdefault(cat, []).append(text)
 
         inner = ""
         for cat, texts in by_cat.items():
-            inner += (
-                f'<div style="color:{accent};font-size:10px;font-weight:700;'
-                f'letter-spacing:.09em;text-transform:uppercase;margin-bottom:5px;'
-                f'margin-top:10px;">{cat}</div>'
-                f'<ul style="margin:0 0 0 16px;padding:0;color:#b8bccf;'
-                f'font-size:13.5px;line-height:1.75;">'
-            )
-            for text in texts:
-                inner += f"<li style='margin-bottom:2px;'>{text}</li>"
-            inner += "</ul>"
+            items = "".join(f"<li>{text}</li>" for text in texts)
+            inner += f'<div class="hrx-cat" style="color:{accent}">{cat}</div><ul class="hrx-list">{items}</ul>'
 
-        return (
-            f'<div style="background:#1b1e2a;border-left:4px solid {accent};'
-            f'padding:12px 16px 14px;margin:0 0 0 0;'
-            f'font-family:Segoe UI,system-ui,sans-serif;">'
-            f'<details>'
-            f'<summary style="cursor:pointer;color:{accent};font-size:11px;'
-            f'font-weight:700;letter-spacing:.1em;list-style:none;outline:none;">'
-            f'&#x2694;&#xFE0F; HOUSE RULES'
-            f'<span style="color:#6b7280;font-weight:400;font-size:10px;margin-left:8px;">'
-            f'click to expand</span></summary>'
-            f'{inner}'
-            f'</details>'
-            f'</div>'
-        )
+        return f"""<style>
+      .hrx {{ margin: 2px 0 26px; font-family:'Segoe UI',system-ui,sans-serif; }}
+      .hrx > summary {{ list-style:none; cursor:pointer; outline:none; user-select:none;
+        display:inline-flex; align-items:center; padding:6px 14px;
+        border-radius:7px; background:#23262f; border:1px solid #34384a;
+        color:#aeb4c6; font-size:12px; font-weight:600;
+        transition:background .12s, border-color .12s; }}
+      .hrx > summary:hover {{ background:#2a2e3c; border-color:{accent}; }}
+      .hrx > summary::-webkit-details-marker {{ display:none; }}
+      .hrx-ico {{ font-size:13px; }}
+      .hrx-txt {{ margin:0 10px; }}
+      .hrx-body {{ margin-top:10px; padding:12px 16px 14px; background:#1d2028;
+        border:1px solid #2a2e3b; border-left:3px solid {accent}; border-radius:8px; }}
+      .hrx-cat {{ font-size:10px; font-weight:700; letter-spacing:.09em;
+        text-transform:uppercase; margin:14px 0 5px; }}
+      .hrx-cat:first-child {{ margin-top:0; }}
+      .hrx-list {{ margin:0 0 0 18px; padding:0; color:#c2c6d6; font-size:13.5px; line-height:1.7; }}
+      .hrx-list li {{ margin-bottom:3px; }}
+    </style>
+    <details class="hrx">
+      <summary>
+        <span class="hrx-ico">&#x2694;&#xFE0F;</span>
+        <span class="hrx-txt">House rules affect this chapter</span>
+        <span class="hrx-ico">&#x2694;&#xFE0F;</span>
+      </summary>
+      <div class="hrx-body">{inner}</div>
+    </details>"""
 
     def _load_page(self, page_url: str, add_to_history: bool = True):
         """Public entry point for opening a scraped rules page (tree/results/bookmarks)."""
@@ -1406,6 +1450,29 @@ class MainWindow(QMainWindow):
     def _update_nav_buttons(self):
         self.back_btn.setEnabled(self._history_pos > 0)
         self.fwd_btn.setEnabled(self._history_pos < len(self._history) - 1)
+        self.prev_btn.setEnabled(self._adjacent_page(-1) is not None)
+        self.next_btn.setEnabled(self._adjacent_page(1) is not None)
+
+    def _adjacent_page(self, delta: int):
+        """The page_url `delta` steps from the current page within its book, or None."""
+        url = self.current_page_url
+        if not url or "/" not in url:
+            return None
+        order = self._book_page_order.get(url.split("/")[0])
+        if not order or url not in order:
+            return None
+        i = order.index(url) + delta
+        return order[i] if 0 <= i < len(order) else None
+
+    def _go_prev_page(self):
+        target = self._adjacent_page(-1)
+        if target:
+            self._load_page(target)
+
+    def _go_next_page(self):
+        target = self._adjacent_page(1)
+        if target:
+            self._load_page(target)
 
     # ── Tab management ──────────────────────────────────────────────────────
 

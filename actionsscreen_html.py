@@ -1,7 +1,7 @@
 """actionsscreen_html.py — Generates the Player Actions quick-reference HTML."""
 from html import escape as e
 
-from screen_common import page
+from screen_common import page, render_sections
 
 CAT_COLORS = {
     "offense":  "#e05555",
@@ -233,9 +233,9 @@ def generate() -> str:
       .rule-row:nth-child(odd) { background: #1e2138; }
     """
 
-    grid_html = '<div class="grid">\n' + "".join(sections) + '</div>'
+    body_html = render_sections(sections, list(CAT_COLORS), CAT_LABELS, CAT_COLORS)
     return page(
         "Actions Screen — AD&D 2nd Edition",
-        css_extra, cat_buttons, grid_html,
+        css_extra, cat_buttons, body_html,
         "Search actions, rules, penalties…",
     )

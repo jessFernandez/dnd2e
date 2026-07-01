@@ -1,11 +1,13 @@
 """screen_common.py — Shared layout for the card-grid reference screens.
 
 Both the DM Screen and the Actions Screen are the same kind of page: a sticky
-search/category bar above a masonry grid of category-coloured cards.  The common
-CSS chrome, the masonry + filter script, and the page skeleton live here so the
-individual screens only have to supply their category buttons, their cards, and
-whatever small style tweaks are unique to them (via ``css_extra``).
+search / category bar above a set of category sections, each holding a compact
+grid of cards.  The common CSS chrome, the masonry + filter script, the section
+builder, and the page skeleton live here so the individual screens only supply
+their category metadata, their cards, and any small style tweaks (``css_extra``).
 """
+
+import re
 
 # Chrome shared by every card-grid screen.  Screen-specific rules (card-body
 # padding, table-cell spacing, rule lists, section labels …) are appended after
@@ -21,7 +23,7 @@ COMMON_CSS = """
       #search { flex: 1; background: #23263a; border: 1px solid #383c52;
                 border-radius: 6px; color: #e0e2f0; padding: 7px 12px;
                 font-size: 13px; outline: none; }
-      #search:focus { border-color: #5b6aaa; }
+      #search:focus { border-color: #c9a84c; }
       #clear-btn { background: #23263a; border: 1px solid #383c52; border-radius: 6px;
                    color: #9ca3c0; padding: 6px 12px; cursor: pointer; font-size: 12px; }
       #clear-btn:hover { background: #2d3048; }
@@ -32,14 +34,25 @@ COMMON_CSS = """
                            letter-spacing: .04em; transition: background .1s; }
       .cat-btn:hover, .cat-btn.active,
       #all-btn:hover, #all-btn.active { background: #2d3048; }
-      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-              grid-auto-rows: 8px; column-gap: 12px; row-gap: 12px;
-              padding: 12px; align-items: start; }
-      .card { background: #21243a; border-radius: 7px; overflow: hidden;
-              border: 1px solid #2a2e45; align-self: start; }
-      .card.span-2 { grid-column: span 2; }
-      .card.span-3 { grid-column: span 3; }
-      .card[style*="display:none"], .card[style*="display: none"] { display: none !important; }
+
+      /* ── Category sections ── */
+      .screen { padding: 14px 0 28px; }
+      .cat-section { margin: 0 12px 20px; }
+      .cat-header { display: flex; align-items: center; gap: 9px; margin: 0 0 12px;
+                    padding-bottom: 7px; border-bottom: 2px solid var(--c); }
+      .cat-header::before { content: ""; width: 9px; height: 9px; border-radius: 2px;
+                            background: var(--c); flex-shrink: 0; }
+      .cat-name { font-size: 12.5px; font-weight: 800; letter-spacing: .09em;
+                  text-transform: uppercase; color: #e6e9f6; }
+      .cat-count { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #8891b5;
+                   background: #1c1f32; border: 1px solid #2a2e45; border-radius: 9px;
+                   padding: 1px 8px; }
+
+      /* ── Card grid: JS masonry positions cards absolutely inside .grid ── */
+      .grid { position: relative; }
+      .card { position: absolute; top: 0; left: 0; width: 100%;
+              background: #21243a; border-radius: 7px; overflow: hidden;
+              border: 1px solid #2a2e45; }
       .card-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
                    background: #1c1f32; }
       .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -59,33 +72,78 @@ COMMON_CSS = """
               margin-top: 8px; line-height: 1.5; }
 """
 
-# Masonry packing (variable-height cards, no row gaps) plus search/category
-# filtering.  Re-packs after filtering and on window resize.
+# Per-section masonry plus search / category filtering.
+#
+# Each section is packed independently: columns adapt to the window width, then
+# cards are measured and placed largest-first into whichever column stack is
+# currently shortest (span-2 / span-3 cards occupy the best-fitting run of
+# adjacent columns).  This balances the columns and minimises wasted vertical
+# space.  A category button shows just that section; the search box filters
+# individual cards and hides any section left empty.
 SCREEN_SCRIPT = """
-      const grid  = document.querySelector('.grid');
-      const cards = Array.from(document.querySelectorAll('.card'));
+      const GAP = 12, MIN_COL = 300, MAX_COLS = 4;
+      const sections = Array.from(document.querySelectorAll('.cat-section'));
       let activeCat = 'all';
 
-      function layoutMasonry() {
-        const styles  = getComputedStyle(grid);
-        const rowUnit = parseFloat(styles.gridAutoRows) || 8;
-        const rowGap  = parseFloat(styles.rowGap) || 0;
+      const spanOf = c =>
+        c.classList.contains('span-3') ? 3 : c.classList.contains('span-2') ? 2 : 1;
+
+      function layoutGrid(grid) {
+        const cw = grid.clientWidth;
+        if (cw <= 0) return;
+        const cols = Math.max(1, Math.min(MAX_COLS, Math.floor((cw + GAP) / (MIN_COL + GAP))));
+        const colW = (cw - (cols - 1) * GAP) / cols;
+
+        const cards = Array.from(grid.children)
+          .filter(c => c.classList.contains('card') && c.style.display !== 'none');
+
+        // Give every card its final width so heights measure correctly.
         for (const card of cards) {
-          if (card.style.display === 'none') continue;
-          const h = card.getBoundingClientRect().height;
-          const span = Math.ceil((h + rowGap) / (rowUnit + rowGap));
-          card.style.gridRowEnd = 'span ' + span;
+          const span = Math.min(spanOf(card), cols);
+          card._span = span;
+          card.style.width = (span * colW + (span - 1) * GAP) + 'px';
+        }
+        // Measure once (forces a single reflow), then pack tallest-first.
+        for (const card of cards) card._h = card.offsetHeight;
+        cards.sort((a, b) => b._h - a._h);
+
+        const colH = new Array(cols).fill(0);
+        for (const card of cards) {
+          const span = card._span, h = card._h;
+          let bestCol = 0, bestTop = Infinity;
+          for (let c = 0; c + span <= cols; c++) {
+            let top = 0;
+            for (let k = c; k < c + span; k++) top = Math.max(top, colH[k]);
+            if (top < bestTop) { bestTop = top; bestCol = c; }
+          }
+          card.style.left = (bestCol * (colW + GAP)) + 'px';
+          card.style.top  = bestTop + 'px';
+          for (let k = bestCol; k < bestCol + span; k++) colH[k] = bestTop + h + GAP;
+        }
+        grid.style.height = Math.max(0, Math.max(...colH) - GAP) + 'px';
+      }
+
+      function layoutAll() {
+        for (const sec of sections) {
+          if (sec.style.display === 'none') continue;
+          layoutGrid(sec.querySelector('.grid'));
         }
       }
 
       function applyFilter() {
         const q = document.getElementById('search').value.toLowerCase();
-        cards.forEach(c => {
-          const catMatch = activeCat === 'all' || c.dataset.cat === activeCat;
-          const textMatch = !q || c.textContent.toLowerCase().includes(q);
-          c.style.display = (catMatch && textMatch) ? '' : 'none';
-        });
-        layoutMasonry();
+        for (const sec of sections) {
+          const catShown = (activeCat === 'all' || activeCat === sec.dataset.cat);
+          let anyVisible = false;
+          for (const card of sec.querySelectorAll('.card')) {
+            const textMatch = !q || card.textContent.toLowerCase().includes(q);
+            const show = catShown && textMatch;
+            card.style.display = show ? '' : 'none';
+            if (show) anyVisible = true;
+          }
+          sec.style.display = anyVisible ? '' : 'none';
+        }
+        layoutAll();
       }
       function filterCat(cat) {
         activeCat = cat;
@@ -106,14 +164,44 @@ SCREEN_SCRIPT = """
       let resizeTimer;
       window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(layoutMasonry, 120);
+        resizeTimer = setTimeout(layoutAll, 120);
       });
-      window.addEventListener('load', layoutMasonry);
-      layoutMasonry();
+      window.addEventListener('load', layoutAll);
+      layoutAll();
 """
 
+_CARD_CAT_RE = re.compile(r'data-cat="([^"]+)"')
 
-def page(title: str, css_extra: str, cat_buttons: str, grid_html: str,
+
+def render_sections(cards, cat_order, cat_labels, cat_colors) -> str:
+    """Group a flat list of card-HTML strings by their data-cat attribute and
+    emit one titled section per category, in cat_order."""
+    groups: dict = {}
+    for html in cards:
+        m = _CARD_CAT_RE.search(html)
+        cat = m.group(1) if m else (cat_order[0] if cat_order else "")
+        groups.setdefault(cat, []).append(html)
+
+    out = []
+    for cat in cat_order:
+        items = groups.get(cat)
+        if not items:
+            continue
+        color = cat_colors.get(cat, "#8b93b8")
+        label = cat_labels.get(cat, cat.title())
+        out.append(
+            f'<section class="cat-section" data-cat="{cat}">'
+            f'<div class="cat-header" style="--c:{color}">'
+            f'<span class="cat-name">{label}</span>'
+            f'<span class="cat-count">{len(items)}</span>'
+            f'</div>'
+            f'<div class="grid" data-cat="{cat}">{"".join(items)}</div>'
+            f'</section>'
+        )
+    return "".join(out)
+
+
+def page(title: str, css_extra: str, cat_buttons: str, body_html: str,
          search_placeholder: str) -> str:
     """Assemble a full card-grid screen document."""
     return f"""<!DOCTYPE html>
@@ -134,7 +222,9 @@ def page(title: str, css_extra: str, cat_buttons: str, grid_html: str,
     {cat_buttons}
   </div>
 </div>
-{grid_html}
+<div class="screen">
+{body_html}
+</div>
 <script>{SCREEN_SCRIPT}</script>
 </body>
 </html>"""

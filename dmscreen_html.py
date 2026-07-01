@@ -1,7 +1,7 @@
 """dmscreen_html.py — Generates the DM Quick Reference Screen HTML."""
 from html import escape as e
 
-from screen_common import page
+from screen_common import page, render_sections
 
 CAT_COLORS = {
     "combat":      "#e05555",
@@ -10,6 +10,15 @@ CAT_COLORS = {
     "exploration": "#4db870",
     "abilities":   "#5b9bd5",
     "classes":     "#3dbfa8",
+}
+
+CAT_LABELS = {
+    "combat":      "Combat",
+    "encounter":   "Encounter",
+    "hazards":     "Hazards",
+    "exploration": "Exploration",
+    "abilities":   "Abilities",
+    "classes":     "Classes & Spells",
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1023,19 +1032,9 @@ def _thief_skills():
 
 def generate() -> str:
     cat_buttons = "".join(
-        f'<button class="cat-btn" data-cat="{k}" style="border-color:{v}">{v[:0]}'
-        f'<span style="color:{v}">{"■"}</span> {CAT_LABELS[k] if False else label}</button>'
-        for k, v in CAT_COLORS.items()
-        for label in [{"combat":"Combat","encounter":"Encounter","hazards":"Hazards",
-                       "exploration":"Exploration","abilities":"Abilities","classes":"Classes & Spells"}[k]]
-    )
-    # Simpler cat buttons
-    cat_buttons = "".join(
         f'<button class="cat-btn" data-cat="{k}" onclick="filterCat(\'{k}\')" '
-        f'style="border-bottom:3px solid {v}">{label}</button>'
-        for k, v in CAT_COLORS.items()
-        for label in [{"combat":"Combat","encounter":"Encounter","hazards":"Hazards",
-                       "exploration":"Exploration","abilities":"Abilities","classes":"Classes & Spells"}[k]]
+        f'style="border-bottom:3px solid {CAT_COLORS[k]}">{CAT_LABELS[k]}</button>'
+        for k in CAT_COLORS
     )
 
     sections = [
@@ -1086,9 +1085,9 @@ def generate() -> str:
                        letter-spacing: .07em; text-transform: uppercase; margin-top: 4px; }
     """
 
-    grid_html = '<div class="grid">\n' + "".join(sections) + '</div>'
+    body_html = render_sections(sections, list(CAT_COLORS), CAT_LABELS, CAT_COLORS)
     return page(
         "DM Screen — AD&D 2nd Edition",
-        css_extra, cat_buttons, grid_html,
+        css_extra, cat_buttons, body_html,
         "Search tables, rules, conditions…",
     )
