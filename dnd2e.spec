@@ -19,6 +19,8 @@ a = Analysis(
         ('chargen_html.py',       '.'),
         ('splash_html.py',        '.'),
         ('screen_common.py',      '.'),
+        ('askscreen_html.py',     '.'),
+        ('rules_agent.py',        '.'),
         *qtwe_data,
     ],
     hiddenimports=[
@@ -30,6 +32,8 @@ a = Analysis(
         'chargen_html',
         'splash_html',
         'screen_common',
+        'askscreen_html',
+        'rules_agent',
     ],
     hookspath=[],
     hooksconfig={},

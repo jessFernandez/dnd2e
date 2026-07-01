@@ -8,14 +8,18 @@ Run after scraper.py has built dnd2e.db.
 import os
 import re
 import sys
+import json
 import sqlite3
 from pathlib import Path
+from urllib.parse import unquote
 from collections import defaultdict
 
 from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from chargen_html import generate as generate_chargen_html
 from splash_html import generate as generate_splash_html
+import askscreen_html
+from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout,
@@ -394,17 +398,32 @@ if HAS_WEBENGINE:
         dnd_navigate        = pyqtSignal(str)
         dnd_navigate_newtab = pyqtSignal(str)
 
+        def _route(self, page_url: str):
+            """Emit the right signal for a page_url based on Ctrl/middle-click."""
+            mods = QApplication.keyboardModifiers()
+            btns = QApplication.mouseButtons()
+            if (mods & Qt.ControlModifier) or (btns & Qt.MiddleButton):
+                self.dnd_navigate_newtab.emit(page_url)
+            else:
+                self.dnd_navigate.emit(page_url)
+
         def acceptNavigationRequest(self, url, nav_type, is_main_frame):
+            # Internal dnd:// links (TOC, screens, our own rewrites)
             if url.scheme() == "dnd":
                 page_url = url.path().lstrip("/")
                 if page_url:
-                    mods = QApplication.keyboardModifiers()
-                    btns = QApplication.mouseButtons()
-                    if (mods & Qt.ControlModifier) or (btns & Qt.MiddleButton):
-                        self.dnd_navigate_newtab.emit(page_url)
-                    else:
-                        self.dnd_navigate.emit(page_url)
+                    self._route(page_url)
                 return False
+            # Cross-reference links in scraped pages are relative http links back
+            # to the source site — route the page ones through the app so they
+            # load from the DB with our styling instead of the live website.
+            # (Same-page anchors and other links fall through to default.)
+            if nav_type == QWebEnginePage.NavigationTypeLinkClicked and \
+                    url.toString().startswith(BASE_URL):
+                page_url = url.toString()[len(BASE_URL):].split("#")[0].split("?")[0]
+                if page_url.lower().endswith((".htm", ".html")):
+                    self._route(page_url)
+                    return False
             return True
 
 
@@ -757,6 +776,11 @@ class MainWindow(QMainWindow):
         self.chargen_btn.setCursor(Qt.PointingHandCursor)
         self.chargen_btn.clicked.connect(lambda: self._show_chargen())
 
+        self.ask_btn = QPushButton("✦  Jarvis")
+        self.ask_btn.setCursor(Qt.PointingHandCursor)
+        self.ask_btn.setToolTip("Ask a 2e rules question in plain English (local AI assistant)")
+        self.ask_btn.clicked.connect(lambda: self._show_ask())
+
         nl.addWidget(self.back_btn)
         nl.addWidget(self.fwd_btn)
         nl.addSpacing(10)
@@ -765,6 +789,7 @@ class MainWindow(QMainWindow):
         nl.addSpacing(10)
         nl.addWidget(self.newtab_btn)
         nl.addStretch()
+        nl.addWidget(self.ask_btn)
         nl.addWidget(self.chargen_btn)
         nl.addWidget(self.actions_btn)
         nl.addWidget(self.dmscreen_btn)
@@ -1272,7 +1297,29 @@ class MainWindow(QMainWindow):
 
     def _on_content_navigate(self, url: str):
         """Handle a normal dnd:// link click from the content viewer."""
+        # Interactive "Ask the Rules" routes are handled in place (no history entry).
+        if url.startswith("ask/"):
+            self._ask_question(unquote(url[len("ask/"):]).strip())
+            return
+        if url.startswith("ask-setmodel/"):
+            self._settings.setValue("askModel", unquote(url[len("ask-setmodel/"):]).strip())
+            self._settings.sync()
+            self._render_ask()
+            return
+        if url == "ask-refresh":
+            self._render_ask()
+            return
+        # A cited link clicked on the Jarvis page opens in a new tab so the
+        # question/answer stays put.
+        if self._on_jarvis_page():
+            self._new_tab(show_splash=False)     # opens and switches to the new tab
+            self._navigate(self._link_to_destination(url))
+            return
         self._navigate(self._link_to_destination(url))
+
+    def _on_jarvis_page(self) -> bool:
+        h, p = self._history, self._history_pos
+        return bool(h) and 0 <= p < len(h) and h[p] == "ask"
 
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
@@ -1288,6 +1335,8 @@ class MainWindow(QMainWindow):
         """Display a destination's content. Returns False if it could not be shown."""
         if dest.startswith("toc:"):
             return self._render_toc(dest[4:])
+        if dest == "ask":
+            return self._render_ask()
         if dest in self._screens:
             return self._render_screen(dest)
         return self._render_page(dest)
@@ -1316,7 +1365,88 @@ class MainWindow(QMainWindow):
     def _show_dmscreen(self): self._navigate("dmscreen")
     def _show_actions(self):  self._navigate("actions")
     def _show_chargen(self):  self._navigate("chargen")
+    def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
+
+    # ── Ask the Rules (local Ollama model) ──────────────────────────────────
+
+    def _ask_model(self, models=None) -> str:
+        chosen = (self._settings.value("askModel", "") or "").strip()
+        if models and chosen not in models:
+            chosen = pick_default_model(models)
+        return chosen or DEFAULT_MODEL
+
+    def _render_ask(self, force_setup: bool = False) -> bool:
+        """Render the Ask page (Ollama setup help, or the ask box)."""
+        ok, models = ollama_status()
+        model = self._ask_model(models)
+        state = "ready" if (ok and models) else "setup"
+        self.content._view.setHtml(
+            askscreen_html.generate(state, model=model, models=models, ollama_ok=ok)
+        )
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Jarvis")
+        self.status.showMessage("  Jarvis  ·  your local rules assistant")
+        return True
+
+    def _ask_question(self, question: str):
+        if not question:
+            return
+        ok, models = ollama_status()
+        if not ok or not models:
+            self._render_ask()          # fall back to the setup instructions
+            return
+
+        model = self._ask_model(models)
+        view  = self.content._view      # answer renders onto the tab that asked
+        self._ask_view = view
+        self._ask_question_text = question
+        self._ask_model_id = model
+        self._ask_models = models
+        view.setHtml(askscreen_html.generate("loading", model=model, models=models, question=question))
+        self._set_tab_title("Jarvis")
+        self.status.showMessage(f'  Asking {model}:  "{question[:50]}"')
+
+        worker = AskWorker(str(DB_PATH), model, question)
+        worker.status.connect(self._ask_status)
+        worker.finished.connect(self._ask_finished)
+        worker.failed.connect(self._ask_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        self._ask_worker = worker
+        worker.start()
+
+    def _ask_status(self, msg: str):
+        view = getattr(self, "_ask_view", None)
+        if view is None:
+            return
+        js = ("var s=document.getElementById('ask-status');"
+              "if(s){s.innerHTML='<span class=\"spinner\"></span><span>'+"
+              + json.dumps(msg) + "+'</span>';}")
+        view.page().runJavaScript(js)
+
+    def _ask_finished(self, answer_md: str):
+        view = getattr(self, "_ask_view", None)
+        if view is None:
+            return
+        view.setHtml(askscreen_html.generate(
+            "answer", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
+            models=getattr(self, "_ask_models", None),
+            question=getattr(self, "_ask_question_text", ""), answer_md=answer_md,
+        ))
+        self.status.showMessage("  Jarvis  ·  answer ready")
+
+    def _ask_failed(self, error: str):
+        view = getattr(self, "_ask_view", None)
+        if view is None:
+            return
+        view.setHtml(askscreen_html.generate(
+            "error", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
+            models=getattr(self, "_ask_models", None),
+            question=getattr(self, "_ask_question_text", ""), error=error,
+        ))
+        self.status.showMessage("  Jarvis  ·  error")
 
     # ── House rules helpers ────────────────────────────────────────────────
 
