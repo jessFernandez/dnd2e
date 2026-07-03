@@ -422,9 +422,10 @@ def generate() -> str:
                       border-bottom: 1px solid #2a2e45; }}
       .step-num {{ width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
                    background: {ACCENT_BG}; border: 2px solid {ACCENT_DIM};
-                   color: {ACCENT}; font-size: 15px; font-weight: 800;
+                   color: {ACCENT}; font-size: 15px; font-weight: 800; margin-right: 20px;
                    display: flex; align-items: center; justify-content: center; }}
-      .step-title-line {{ display: flex; align-items: center; gap: 20px; }}
+      /* margin-right above (not flex gap): QtWebEngine drops `gap` on this row. */
+      .step-title-line {{ display: flex; align-items: center; }}
       .step-title {{ font-size: 16.5px; font-weight: 700; color: #e8eaf0;
                      letter-spacing: .03em; }}
       .step-sub {{ font-size: 12px; color: #5a6080; margin: 5px 0 0 54px;

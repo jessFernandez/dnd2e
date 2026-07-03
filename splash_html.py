@@ -24,6 +24,9 @@ FEATURES = [
     ("screen/actions",  "⚡", "Actions Reference",
      "Every combat action explained: offense, defense, movement, and forced movement.",
      "#5b9bd5", "#0a1222"),
+    ("screen/spells",   "📖", "Spell Compendium",
+     "Every wizard & priest spell — searchable and filterable by class, level, and school.",
+     "#b06fd6", "#170a22"),
 ]
 
 
@@ -199,7 +202,7 @@ def generate() -> str:
       /* ── Feature cards ── */
       .feat-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 12px;
         margin-top: 14px;
       }

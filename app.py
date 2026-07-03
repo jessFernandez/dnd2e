@@ -17,6 +17,7 @@ from collections import defaultdict
 from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from chargen_html import generate as generate_chargen_html
+from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
 import askscreen_html
 from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
@@ -576,6 +577,7 @@ class MainWindow(QMainWindow):
         self._ask_worker = None
         self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
         self._calc = None                   # floating house-rule calculator window
+        self._spells_file = None            # cached temp file for the Spells screen
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -785,6 +787,11 @@ class MainWindow(QMainWindow):
         self.chargen_btn.setCursor(Qt.PointingHandCursor)
         self.chargen_btn.clicked.connect(lambda: self._show_chargen())
 
+        self.spells_btn = QPushButton("📖  Spells")
+        self.spells_btn.setCursor(Qt.PointingHandCursor)
+        self.spells_btn.setToolTip("The 2e Spell Compendium — every wizard & priest spell")
+        self.spells_btn.clicked.connect(lambda: self._show_spells())
+
         self.ask_btn = QPushButton("✦  Jarvis")
         self.ask_btn.setCursor(Qt.PointingHandCursor)
         self.ask_btn.setToolTip("Ask a 2e rules question in plain English (local AI assistant)")
@@ -800,6 +807,7 @@ class MainWindow(QMainWindow):
         nl.addWidget(self.calc_btn)
         nl.addStretch()
         nl.addWidget(self.ask_btn)
+        nl.addWidget(self.spells_btn)
         nl.addWidget(self.chargen_btn)
         nl.addWidget(self.actions_btn)
         nl.addWidget(self.dmscreen_btn)
@@ -1366,6 +1374,8 @@ class MainWindow(QMainWindow):
             return self._render_toc(dest[4:])
         if dest == "ask":
             return self._render_ask()
+        if dest == "spells":
+            return self._render_spells()
         if dest in self._screens:
             return self._render_screen(dest)
         return self._render_page(dest)
@@ -1377,6 +1387,36 @@ class MainWindow(QMainWindow):
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title(title)
         self.status.showMessage(status)
+        return True
+
+    def _load_spells(self) -> list:
+        self.db.row_factory = sqlite3.Row
+        try:
+            rows = [dict(r) for r in self.db.execute(
+                "SELECT * FROM spells ORDER BY caster, level, name")]
+        except sqlite3.OperationalError:
+            rows = []               # spells table missing (un-migrated DB)
+        finally:
+            self.db.row_factory = None
+        return rows
+
+    def _render_spells(self) -> bool:
+        # The full compendium is ~1.9 MB of HTML — over QtWebEngine's setHtml data-URL
+        # limit — so render it once to a temp file and load it as a file:// URL.
+        if self._spells_file is None:
+            rows = self._load_spells()
+            html = (generate_spells_html(rows) if rows else
+                    "<!doctype html><body style='background:#14151d;color:#c8cad8;"
+                    "font-family:sans-serif;padding:40px'>No spell data found — run "
+                    "<code>build_spells.py</code>.</body>")
+            path = USER_DB_PATH.parent / "spells_screen.html"
+            path.write_text(html, encoding="utf-8")
+            self._spells_file = path
+        self.content._view.setUrl(QUrl.fromLocalFile(str(self._spells_file)))
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Spells")
+        self.status.showMessage("  Spell Compendium  ·  Wizard & Priest, all levels")
         return True
 
     def _render_toc(self, book_code: str) -> bool:
@@ -1393,6 +1433,7 @@ class MainWindow(QMainWindow):
     def _show_splash(self):   self._navigate("splash")
     def _show_dmscreen(self): self._navigate("dmscreen")
     def _show_actions(self):  self._navigate("actions")
+    def _show_spells(self):   self._navigate("spells")
     def _show_chargen(self):  self._navigate("chargen")
     def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
