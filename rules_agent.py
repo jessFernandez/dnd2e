@@ -16,6 +16,8 @@ from html import unescape
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+import db
+
 OLLAMA_URL    = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.1"
 
@@ -350,14 +352,9 @@ class AskWorker(QThread):
 
     def _house_rules(self) -> str:
         """All campaign house rules, grouped by category (empty if none)."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            c    = conn.cursor()
-            c.execute("SELECT category, rule_text FROM house_rules ORDER BY id")
-            rows = c.fetchall()
-            conn.close()
-        except Exception:
-            return ""
+        conn = db.connect(self.db_path)
+        rows = db.all_house_rules(conn)
+        conn.close()
         by_cat: dict = {}
         for cat, text in rows:
             text = (text or "").replace("�", "-").strip()

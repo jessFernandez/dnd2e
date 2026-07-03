@@ -9,16 +9,17 @@ import os
 import re
 import sys
 import json
-import sqlite3
 from pathlib import Path
 from urllib.parse import unquote
-from collections import defaultdict
 
 from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from chargen_html import generate as generate_chargen_html
 from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
+import db
+import toc
+from navigation import History
 import askscreen_html
 from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
 from calculator import HouseRuleCalculator
@@ -360,33 +361,8 @@ class SearchWorker(QThread):
 
     def run(self):
         try:
-            conn = sqlite3.connect(self.db_path)
-            c    = conn.cursor()
-            fts_query = f'"{self.query.replace(chr(34), "")}"'
-            try:
-                c.execute(
-                    """SELECT p.page_url, p.title, p.book_name, p.book_code,
-                              snippet(pages_fts, 2, '**', '**', '…', 25) AS snip
-                       FROM   pages_fts
-                       JOIN   pages p ON pages_fts.page_url = p.page_url
-                       WHERE  pages_fts MATCH ?
-                       ORDER  BY rank
-                       LIMIT  300""",
-                    (fts_query,),
-                )
-            except Exception:
-                plain = " ".join(self.query.split())
-                c.execute(
-                    """SELECT p.page_url, p.title, p.book_name, p.book_code,
-                              snippet(pages_fts, 2, '**', '**', '…', 25) AS snip
-                       FROM   pages_fts
-                       JOIN   pages p ON pages_fts.page_url = p.page_url
-                       WHERE  pages_fts MATCH ?
-                       ORDER  BY rank
-                       LIMIT  300""",
-                    (plain,),
-                )
-            rows = c.fetchall()
+            conn = db.connect(self.db_path)
+            rows = db.search_pages(conn, self.query)
             conn.close()
             self.results_ready.emit(rows)
         except Exception:
@@ -554,8 +530,7 @@ class TabContext:
     """Holds all state that belongs to one content tab."""
     def __init__(self, view: ContentView):
         self.view                          = view
-        self.history:       list[str]      = []
-        self.history_pos:   int            = -1
+        self.nav                           = History()
         self.current_page_url: str | None  = None
 
 
@@ -564,8 +539,8 @@ class TabContext:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.db = sqlite3.connect(str(DB_PATH))
-        self.user_db = sqlite3.connect(str(USER_DB_PATH))
+        self.db = db.connect(DB_PATH)
+        self.user_db = db.connect(USER_DB_PATH)
         self._init_user_db()
         self._settings = QSettings(str(_user_data_dir() / "settings.ini"), QSettings.IniFormat)
         self._search_worker: SearchWorker | None = None
@@ -595,25 +570,8 @@ class MainWindow(QMainWindow):
 
     def _init_user_db(self):
         """Create the bookmarks table in the writable user DB, migrating any legacy rows."""
-        c = self.user_db.cursor()
-        c.execute(
-            "CREATE TABLE IF NOT EXISTS bookmarks ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "page_url TEXT UNIQUE, "
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
-        self.user_db.commit()
-        # One-time migration: copy bookmarks that used to live in the bundled DB.
-        c.execute("SELECT COUNT(*) FROM bookmarks")
-        if c.fetchone()[0] == 0:
-            try:
-                old = self.db.cursor()
-                old.execute("SELECT page_url FROM bookmarks ORDER BY created_at")
-                for (url,) in old.fetchall():
-                    c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)", (url,))
-                self.user_db.commit()
-            except sqlite3.Error:
-                pass  # no legacy bookmarks table — nothing to migrate
+        db.ensure_bookmarks_schema(self.user_db)
+        db.migrate_legacy_bookmarks(self.user_db, self.db)
 
     # ── Per-tab properties (redirect to the active TabContext) ────────────────
 
@@ -622,20 +580,8 @@ class MainWindow(QMainWindow):
         return self._tabs[self._content_tabs.currentIndex()].view
 
     @property
-    def _history(self) -> list:
-        return self._tabs[self._content_tabs.currentIndex()].history
-
-    @_history.setter
-    def _history(self, val: list):
-        self._tabs[self._content_tabs.currentIndex()].history = val
-
-    @property
-    def _history_pos(self) -> int:
-        return self._tabs[self._content_tabs.currentIndex()].history_pos
-
-    @_history_pos.setter
-    def _history_pos(self, val: int):
-        self._tabs[self._content_tabs.currentIndex()].history_pos = val
+    def _nav(self) -> History:
+        return self._tabs[self._content_tabs.currentIndex()].nav
 
     @property
     def current_page_url(self):
@@ -982,84 +928,11 @@ class MainWindow(QMainWindow):
 
     # ── Chapter detection ──────────────────────────────────────────────────
 
-    @staticmethod
-    def _extract_chapter_name(subtopic: str) -> str:
-        m = re.match(
-            r"^(.+?)--\s*(Chapter\s+\d+|Part\s+\d+|Book\s+\d+|Appendix\s+\w+)",
-            subtopic, re.I,
-        )
-        if m:
-            return f"{m.group(2).strip()}: {m.group(1).strip()}"
-        return subtopic.split("(")[0].strip()
-
     def _get_chapters(self, book_code: str) -> list[dict]:
-        c = self.db.cursor()
-        c.execute(
-            """SELECT DISTINCT te.page_url, te.subtopic
-               FROM   toc_entries te
-               WHERE  te.book_code = ?
-               ORDER  BY te.page_url""",
-            (book_code,),
+        return toc.build_chapters(
+            db.toc_entries(self.db, book_code),
+            db.chapter_markers(self.db, book_code),
         )
-        all_entries = c.fetchall()
-        if not all_entries:
-            return []
-
-        c.execute(
-            """SELECT te.subtopic, te.page_url
-               FROM   toc_entries te
-               WHERE  te.book_code = ?
-                 AND  (te.subtopic LIKE '%-- Chapter %'
-                    OR te.subtopic LIKE '%-- Part %'
-                    OR te.subtopic LIKE '%-- Book %'
-                    OR te.subtopic LIKE '%-- Appendix %')
-               ORDER  BY te.page_url""",
-            (book_code,),
-        )
-        markers = c.fetchall()
-        return (
-            self._chapters_from_markers(all_entries, markers)
-            if markers
-            else self._chapters_by_letter(all_entries)
-        )
-
-    def _chapters_from_markers(self, all_entries, markers) -> list[dict]:
-        marker_map = {url: sub for sub, url in markers}
-        marker_set = set(marker_map)
-        chapters, pre, current = [], [], None
-
-        for page_url, subtopic in all_entries:
-            if page_url in marker_set:
-                if current is not None:
-                    chapters.append(current)
-                elif pre:
-                    chapters.append({"name": "Introduction", "page_url": pre[0][0], "entries": pre})
-                    pre = []
-                current = {
-                    "name":     self._extract_chapter_name(marker_map[page_url]),
-                    "page_url": page_url,
-                    "entries":  [(page_url, subtopic)],
-                }
-            elif current is not None:
-                current["entries"].append((page_url, subtopic))
-            else:
-                pre.append((page_url, subtopic))
-
-        if current is not None:
-            chapters.append(current)
-        if pre:
-            chapters.insert(0, {"name": "Introduction", "page_url": pre[0][0], "entries": pre})
-        return chapters
-
-    def _chapters_by_letter(self, all_entries) -> list[dict]:
-        by_letter = defaultdict(list)
-        for page_url, subtopic in all_entries:
-            letter = subtopic[0].upper() if subtopic else "#"
-            by_letter[letter].append((page_url, subtopic))
-        return [
-            {"name": letter, "page_url": entries[0][0], "entries": entries}
-            for letter, entries in sorted(by_letter.items())
-        ]
 
     # ── TOC page generation ────────────────────────────────────────────────
 
@@ -1355,17 +1228,14 @@ class MainWindow(QMainWindow):
         self._navigate(self._link_to_destination(url))
 
     def _on_jarvis_page(self) -> bool:
-        h, p = self._history, self._history_pos
-        return bool(h) and 0 <= p < len(h) and h[p] == "ask"
+        return self._nav.current() == "ask"
 
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
         if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append(dest)
-            self._history_pos = len(self._history) - 1
+            self._nav.push(dest)
         self._update_nav_buttons()
 
     def _render_destination(self, dest: str) -> bool:
@@ -1390,15 +1260,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _load_spells(self) -> list:
-        self.db.row_factory = sqlite3.Row
-        try:
-            rows = [dict(r) for r in self.db.execute(
-                "SELECT * FROM spells ORDER BY caster, level, name")]
-        except sqlite3.OperationalError:
-            rows = []               # spells table missing (un-migrated DB)
-        finally:
-            self.db.row_factory = None
-        return rows
+        return db.all_spells(self.db)
 
     def _render_spells(self) -> bool:
         # The full compendium is ~1.9 MB of HTML — over QtWebEngine's setHtml data-URL
@@ -1545,47 +1407,17 @@ class MainWindow(QMainWindow):
 
     def _get_all_house_rules_for_book(self, book_code: str) -> dict:
         """Return {chapter_keyword: [(category, rule_text)]} for this book, or {} if table missing."""
-        try:
-            c = self.db.cursor()
-            c.execute(
-                "SELECT chapter_keyword, category, rule_text FROM house_rules "
-                "WHERE book_codes LIKE ? ORDER BY id",
-                (f"%{book_code}%",),
-            )
-            result: dict = {}
-            for kw, cat, text in c.fetchall():
-                result.setdefault(kw, []).append((cat, text))
-            return result
-        except Exception:
-            return {}
+        result: dict = {}
+        for kw, cat, text in db.house_rules_for_book(self.db, book_code):
+            result.setdefault(kw, []).append((cat, text))
+        return result
 
     def _get_chapter_house_rules(self, page_url: str, book_code: str) -> list:
         """Return [(category, rule_text)] for the chapter this page belongs to, or []."""
-        try:
-            c = self.db.cursor()
-            c.execute(
-                """SELECT subtopic FROM toc_entries
-                   WHERE book_code = ? AND page_url <= ?
-                     AND (subtopic LIKE '%-- Chapter %' OR subtopic LIKE '%-- Part %'
-                          OR subtopic LIKE '%-- Book %' OR subtopic LIKE '%-- Appendix %')
-                   ORDER BY page_url DESC LIMIT 1""",
-                (book_code, page_url),
-            )
-            row = c.fetchone()
-            if not row:
-                return []
-            m = re.search(r"(Chapter\s+\d+|Part\s+\d+)", row[0], re.I)
-            if not m:
-                return []
-            chapter_keyword = m.group(1)
-            c.execute(
-                "SELECT category, rule_text FROM house_rules "
-                "WHERE chapter_keyword = ? AND book_codes LIKE ? ORDER BY id",
-                (chapter_keyword, f"%{book_code}%"),
-            )
-            return c.fetchall()
-        except Exception:
+        keyword = db.chapter_keyword_for_page(self.db, book_code, page_url)
+        if not keyword:
             return []
+        return db.chapter_house_rules(self.db, book_code, keyword)
 
     def _build_house_rules_callout(self, rules: list, book_code: str) -> str:
         """Build a slim, collapsed house-rules chip for the top of a rules page."""
@@ -1632,12 +1464,7 @@ class MainWindow(QMainWindow):
         self._navigate(page_url, add_to_history)
 
     def _render_page(self, page_url: str) -> bool:
-        c = self.db.cursor()
-        c.execute(
-            "SELECT content_html, title, book_name, book_code FROM pages WHERE page_url = ?",
-            (page_url,),
-        )
-        row = c.fetchone()
+        row = db.get_page(self.db, page_url)
         if not row:
             self.status.showMessage(f"  Not found: {page_url}")
             return False
@@ -1661,18 +1488,18 @@ class MainWindow(QMainWindow):
         return True
 
     def _go_back(self):
-        if self._history_pos > 0:
-            self._history_pos -= 1
-            self._navigate(self._history[self._history_pos], add_to_history=False)
+        dest = self._nav.back()
+        if dest is not None:
+            self._navigate(dest, add_to_history=False)
 
     def _go_forward(self):
-        if self._history_pos < len(self._history) - 1:
-            self._history_pos += 1
-            self._navigate(self._history[self._history_pos], add_to_history=False)
+        dest = self._nav.forward()
+        if dest is not None:
+            self._navigate(dest, add_to_history=False)
 
     def _update_nav_buttons(self):
-        self.back_btn.setEnabled(self._history_pos > 0)
-        self.fwd_btn.setEnabled(self._history_pos < len(self._history) - 1)
+        self.back_btn.setEnabled(self._nav.can_back())
+        self.fwd_btn.setEnabled(self._nav.can_forward())
         self.prev_btn.setEnabled(self._adjacent_page(-1) is not None)
         self.next_btn.setEnabled(self._adjacent_page(1) is not None)
 
@@ -1803,38 +1630,22 @@ class MainWindow(QMainWindow):
     def _toggle_bookmark(self):
         if not self.current_page_url:
             return
-        c = self.user_db.cursor()
-        c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
-        if c.fetchone():
-            c.execute("DELETE FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
-        else:
-            c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)",
-                      (self.current_page_url,))
-        self.user_db.commit()
+        db.toggle_bookmark(self.user_db, self.current_page_url)
         self._update_bookmark_btn()
         self._load_bookmarks()
 
     def _update_bookmark_btn(self):
         if not self.current_page_url:
             return
-        c = self.user_db.cursor()
-        c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
+        on = db.is_bookmarked(self.user_db, self.current_page_url)
         self.bookmark_btn.setText(
-            "★   Remove Bookmark" if c.fetchone() else "☆   Bookmark This Page"
+            "★   Remove Bookmark" if on else "☆   Bookmark This Page"
         )
 
     def _load_bookmarks(self):
         self.bookmarks_list.clear()
-        c = self.user_db.cursor()
-        c.execute("SELECT page_url FROM bookmarks ORDER BY created_at DESC")
-        bookmarked = [r[0] for r in c.fetchall()]
-        pc = self.db.cursor()
-        for page_url in bookmarked:
-            pc.execute(
-                "SELECT title, book_name, book_code FROM pages WHERE page_url = ?",
-                (page_url,),
-            )
-            prow = pc.fetchone()
+        for page_url in db.bookmark_urls(self.user_db):
+            prow = db.page_meta(self.db, page_url)
             title, book_name, book_code = prow if prow else (page_url, "", "")
             label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
             item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
@@ -1860,9 +1671,7 @@ class MainWindow(QMainWindow):
         remove = menu.addAction("Remove Bookmark")
         if menu.exec_(self.bookmarks_list.mapToGlobal(pos)) == remove:
             url = item.data(Qt.UserRole)
-            c   = self.user_db.cursor()
-            c.execute("DELETE FROM bookmarks WHERE page_url = ?", (url,))
-            self.user_db.commit()
+            db.remove_bookmark(self.user_db, url)
             self._load_bookmarks()
             if url == self.current_page_url:
                 self._update_bookmark_btn()
@@ -1871,9 +1680,7 @@ class MainWindow(QMainWindow):
 
     def _current_entry(self, ctx: "TabContext"):
         """The navigation entry currently shown in a tab, or None."""
-        if ctx.history and 0 <= ctx.history_pos < len(ctx.history):
-            return ctx.history[ctx.history_pos]
-        return None
+        return ctx.nav.current()
 
     def _restore_session(self):
         geo = self._settings.value("geometry")
