@@ -20,6 +20,7 @@ from chargen_html import generate as generate_chargen_html
 from splash_html import generate as generate_splash_html
 import askscreen_html
 from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
+from calculator import HouseRuleCalculator
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout,
@@ -572,6 +573,9 @@ class MainWindow(QMainWindow):
         self._book_page_order:  dict = {}   # book_code -> ordered list of page_urls
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
         self._zoom: float = float(self._settings.value("zoom", 1.0))
+        self._ask_worker = None
+        self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
+        self._calc = None                   # floating house-rule calculator window
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -764,6 +768,11 @@ class MainWindow(QMainWindow):
         self.newtab_btn.setToolTip("Open a new tab")
         self.newtab_btn.clicked.connect(lambda: self._new_tab())
 
+        self.calc_btn = QPushButton("🧮  Calc")
+        self.calc_btn.setCursor(Qt.PointingHandCursor)
+        self.calc_btn.setToolTip("Floating THAC0 / AC house-rule converter (stays on top)")
+        self.calc_btn.clicked.connect(self._toggle_calc)
+
         self.dmscreen_btn = QPushButton("⚔  DM Screen")
         self.dmscreen_btn.setCursor(Qt.PointingHandCursor)
         self.dmscreen_btn.clicked.connect(lambda: self._show_dmscreen())
@@ -788,6 +797,7 @@ class MainWindow(QMainWindow):
         nl.addWidget(self.next_btn)
         nl.addSpacing(10)
         nl.addWidget(self.newtab_btn)
+        nl.addWidget(self.calc_btn)
         nl.addStretch()
         nl.addWidget(self.ask_btn)
         nl.addWidget(self.chargen_btn)
@@ -875,6 +885,8 @@ class MainWindow(QMainWindow):
         sc("[",            self._go_prev_page)
         sc("]",            self._go_next_page)
         sc("Ctrl+K",       self._focus_search)
+        sc("Ctrl+J",       self._show_ask)
+        sc("Ctrl+Shift+C", self._toggle_calc)
         sc("Ctrl+F",       self._show_find_bar)
         sc("Escape",       self._hide_find_bar)
         sc("Ctrl+=",       self._zoom_in)
@@ -902,6 +914,20 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(0)
         self.search_box.setFocus()
         self.search_box.selectAll()
+
+    def _toggle_calc(self):
+        """Show/hide the floating house-rule calculator (stays on top, resizable)."""
+        if self._calc is None:
+            self._calc = HouseRuleCalculator(self)
+            geo = self._settings.value("calcGeometry")
+            if geo is not None:
+                self._calc.restoreGeometry(geo)
+        if self._calc.isVisible():
+            self._calc.hide()
+        else:
+            self._calc.show()
+            self._calc.raise_()
+            self._calc.activateWindow()
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Wheel and (QApplication.keyboardModifiers() & Qt.ControlModifier):
@@ -1306,8 +1332,11 @@ class MainWindow(QMainWindow):
             self._settings.sync()
             self._render_ask()
             return
-        if url == "ask-refresh":
-            self._render_ask()
+        if url == "ask-refresh" or url == "ask-new":
+            self._render_ask()          # resets the conversation + re-checks Ollama
+            return
+        if url == "ask-stop":
+            self._ask_stop()
             return
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
@@ -1376,8 +1405,15 @@ class MainWindow(QMainWindow):
             chosen = pick_default_model(models)
         return chosen or DEFAULT_MODEL
 
+    def _ask_stop(self):
+        w = getattr(self, "_ask_worker", None)
+        if w is not None and w.isRunning():
+            w.cancel()
+
     def _render_ask(self, force_setup: bool = False) -> bool:
-        """Render the Ask page (Ollama setup help, or the ask box)."""
+        """Render the Jarvis page fresh (Ollama setup help, or an empty ask box)."""
+        self._ask_stop()                    # stop any in-flight generation
+        self._ask_thread = []               # a fresh visit starts a new conversation
         ok, models = ollama_status()
         model = self._ask_model(models)
         state = "ready" if (ok and models) else "setup"
@@ -1398,18 +1434,23 @@ class MainWindow(QMainWindow):
             self._render_ask()          # fall back to the setup instructions
             return
 
+        thread = getattr(self, "_ask_thread", None)
+        if thread is None:
+            thread = self._ask_thread = []
         model = self._ask_model(models)
         view  = self.content._view      # answer renders onto the tab that asked
         self._ask_view = view
         self._ask_question_text = question
         self._ask_model_id = model
         self._ask_models = models
-        view.setHtml(askscreen_html.generate("loading", model=model, models=models, question=question))
+        view.setHtml(askscreen_html.generate(
+            "loading", model=model, models=models, question=question, thread=thread))
         self._set_tab_title("Jarvis")
         self.status.showMessage(f'  Asking {model}:  "{question[:50]}"')
 
-        worker = AskWorker(str(DB_PATH), model, question)
+        worker = AskWorker(str(DB_PATH), model, question, history=thread)
         worker.status.connect(self._ask_status)
+        worker.delta.connect(self._ask_delta)
         worker.finished.connect(self._ask_finished)
         worker.failed.connect(self._ask_failed)
         worker.finished.connect(worker.deleteLater)
@@ -1426,14 +1467,24 @@ class MainWindow(QMainWindow):
               + json.dumps(msg) + "+'</span>';}")
         view.page().runJavaScript(js)
 
+    def _ask_delta(self, chunk: str):
+        view = getattr(self, "_ask_view", None)
+        if view is None:
+            return
+        js = ("var s=document.getElementById('ask-stream');"
+              "if(s){s.textContent += " + json.dumps(chunk) + ";}"
+              "var st=document.getElementById('ask-status');"
+              "if(st){st.innerHTML='<span class=\"spinner\"></span><span>Writing…</span>';}")
+        view.page().runJavaScript(js)
+
     def _ask_finished(self, answer_md: str):
         view = getattr(self, "_ask_view", None)
         if view is None:
             return
+        self._ask_thread.append((getattr(self, "_ask_question_text", ""), answer_md))
         view.setHtml(askscreen_html.generate(
             "answer", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
-            models=getattr(self, "_ask_models", None),
-            question=getattr(self, "_ask_question_text", ""), answer_md=answer_md,
+            models=getattr(self, "_ask_models", None), thread=self._ask_thread,
         ))
         self.status.showMessage("  Jarvis  ·  answer ready")
 
@@ -1444,7 +1495,8 @@ class MainWindow(QMainWindow):
         view.setHtml(askscreen_html.generate(
             "error", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
             models=getattr(self, "_ask_models", None),
-            question=getattr(self, "_ask_question_text", ""), error=error,
+            question=getattr(self, "_ask_question_text", ""),
+            error=error, thread=getattr(self, "_ask_thread", []),
         ))
         self.status.showMessage("  Jarvis  ·  error")
 
@@ -1805,6 +1857,8 @@ class MainWindow(QMainWindow):
             if 0 <= active < self._content_tabs.count():
                 self._content_tabs.setCurrentIndex(active)
         self._apply_zoom_all()
+        if self._settings.value("calcOpen", False, type=bool):
+            self._toggle_calc()             # reopen the calculator where it was
 
     def _save_session(self):
         self._settings.setValue("geometry", self.saveGeometry())
@@ -1812,6 +1866,9 @@ class MainWindow(QMainWindow):
         entries = [e for ctx in self._tabs if (e := self._current_entry(ctx))]
         self._settings.setValue("openTabs", entries)
         self._settings.setValue("activeTab", self._content_tabs.currentIndex())
+        if self._calc is not None:
+            self._settings.setValue("calcOpen", self._calc.isVisible())
+            self._settings.setValue("calcGeometry", self._calc.saveGeometry())
         self._settings.sync()
 
     # ── Lifecycle ──────────────────────────────────────────────────────────

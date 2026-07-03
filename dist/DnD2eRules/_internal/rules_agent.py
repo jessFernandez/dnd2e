@@ -93,7 +93,14 @@ _SYN = {
     "multiclass": ["multi-class"], "multiclassing": ["multi-class"],
     "spellcasting": ["spells"], "caster": ["wizard", "priest"],
     "rolls": ["rolling"], "movement": ["move"], "encumbrance": ["weight"],
-    "dice": ["dice"],
+    # colloquial / edition-shorthand -> 2e rulebook terminology
+    "sneak": ["backstab", "move silently"], "stealth": ["move silently", "hide in shadows"],
+    "hide": ["hide in shadows"], "hiding": ["hide in shadows"],
+    "resurrect": ["raise dead", "resurrection"], "resurrecting": ["raise dead"],
+    "revive": ["raise dead"], "rez": ["raise dead"],
+    "bribe": ["reaction"], "bribing": ["reaction"], "persuade": ["reaction"],
+    "tie": ["binding"], "restrain": ["binding", "wrestling"],
+    "disarm": ["disarm"], "enemy": ["opponent"], "opponent": ["opponent"],
 }
 
 
@@ -152,7 +159,7 @@ def _linkify(text: str, titles: dict) -> str:
 
 def _mark_house_rules(text: str) -> str:
     """Prefix house-rule mentions with the crossed-swords marker used in the books."""
-    text = re.sub(r'(?im)(?:⚔️?\s*)?\*{0,2}house rules?\*{0,2}\s*:',
+    text = re.sub(r'(?im)(?:⚔️?\s*)?\*{0,2}house rules?\*{0,2}\s*:\*{0,2}',
                   '⚔️ **House Rule:**', text)
     text = re.sub(r'(?i)\((?:⚔️?\s*)?house rules?\)', '(⚔️ house rule)', text)
     return text
@@ -160,24 +167,33 @@ def _mark_house_rules(text: str) -> str:
 
 class AskWorker(QThread):
     status   = pyqtSignal(str)
-    finished = pyqtSignal(str)
+    delta    = pyqtSignal(str)   # a streamed chunk of the answer
+    finished = pyqtSignal(str)   # the full, post-processed answer
     failed   = pyqtSignal(str)
 
-    def __init__(self, db_path: str, model: str, question: str, base_url: str = OLLAMA_URL):
+    def __init__(self, db_path: str, model: str, question: str,
+                 base_url: str = OLLAMA_URL, history=None):
         super().__init__()
         self.db_path  = db_path
         self.model    = model or DEFAULT_MODEL
         self.question = question
         self.base_url = base_url.rstrip("/")
+        self.history  = list(history or [])   # [(question, answer_md), ...] prior turns
+        self._cancel  = False
+
+    def cancel(self):
+        """Ask the worker to stop streaming as soon as possible."""
+        self._cancel = True
 
     # ── query rewriting (model turns the question into rulebook terms) ──────
-    def _rewrite_query(self, question: str) -> list:
+    def _rewrite_query(self, question: str, prev: str = "") -> list:
+        ctx = f"For context, the previous question was: {prev}\n" if prev else ""
         prompt = (
             "You turn a Dungeons & Dragons 2nd Edition rules question into search "
             "keywords. Reply with ONLY a comma-separated list of 3 to 6 short search "
             "phrases in official 2e rulebook terminology (for example: ability scores, "
             "THAC0, saving throw, hit dice). No explanations, no numbering.\n\n"
-            f"Question: {question}"
+            f"{ctx}Question: {question}"
         )
         try:
             raw = self._chat([{"role": "user", "content": prompt}])
@@ -212,18 +228,22 @@ class AskWorker(QThread):
             (query, k),
         )
         rows = c.fetchall()
-        excerpts = []
-        for i, (url, title, book, snip) in enumerate(rows):
-            title = re.sub(r"\s*\([^)]+\)\s*$", "", title or url).strip()
-            text  = re.sub(r"\s+", " ", (snip or "")).strip()
-            if i < full:
+        excerpts, seen = [], set()
+        for url, title, book, snip in rows:
+            clean = re.sub(r"\s*\([^)]+\)\s*$", "", title or url).strip()
+            norm  = re.sub(r"[^a-z0-9]+", " ", clean.lower()).strip()
+            if norm in seen:                     # drop near-duplicate titles across books
+                continue
+            seen.add(norm)
+            text = re.sub(r"\s+", " ", (snip or "")).strip()
+            if len(excerpts) < full:
                 c.execute("SELECT content_html FROM pages WHERE page_url = ?", (url,))
                 row = c.fetchone()
                 if row and row[0]:
                     body = _strip_html(row[0])
                     if len(body) > 60:
-                        text = body[:1500]
-            excerpts.append((url, title, book or "", text))
+                        text = body[:1600]
+            excerpts.append((url, clean, book or "", text))
         conn.close()
         return excerpts
 
@@ -262,10 +282,43 @@ class AskWorker(QThread):
             data = json.loads(r.read().decode("utf-8", "replace"))
         return (data.get("message") or {}).get("content", "").strip()
 
+    def _chat_stream(self, messages: list) -> str:
+        """Stream the answer, emitting `delta` per chunk; return the full text."""
+        body = json.dumps({
+            "model":    self.model,
+            "messages": messages,
+            "stream":   True,
+            "options":  {"temperature": 0.2},
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            self.base_url + "/api/chat", data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        parts = []
+        with urllib.request.urlopen(req, timeout=300) as r:
+            for raw in r:
+                if self._cancel:
+                    break
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw.decode("utf-8", "replace"))
+                except Exception:
+                    continue
+                chunk = (obj.get("message") or {}).get("content", "")
+                if chunk:
+                    parts.append(chunk)
+                    self.delta.emit(chunk)
+                if obj.get("done"):
+                    break
+        return "".join(parts).strip()
+
     def run(self):
         try:
+            prev = self.history[-1][0] if self.history else ""
             self.status.emit("Understanding your question…")
-            phrases = self._rewrite_query(self.question)
+            phrases = self._rewrite_query(self.question, prev)
             self.status.emit("Searching the rulebooks…")
             excerpts = self._retrieve(self.question, phrases)
             house    = self._house_rules()
@@ -293,17 +346,23 @@ class AskWorker(QThread):
                 "Answer using only the information above. Apply any relevant house "
                 "rule (and label it), and cite the rulebook pages you use."
             )
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": user},
-            ]
+
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            for q, a in self.history[-4:]:          # carry recent turns for follow-ups
+                messages.append({"role": "user", "content": q})
+                messages.append({"role": "assistant", "content": a})
+            messages.append({"role": "user", "content": user})
 
             self.status.emit(f"Asking {self.model}…")
-            answer = self._chat(messages)
+            answer = self._chat_stream(messages)
             if answer:
                 titles = {url: title for url, title, _b, _t in excerpts}
                 answer = _linkify(answer, titles)
                 answer = _mark_house_rules(answer)
+                if self._cancel:
+                    answer += "\n\n_(stopped)_"
+            elif self._cancel:
+                answer = "_(stopped)_"
             self.finished.emit(answer or "The model returned an empty answer. Try rephrasing the question.")
 
         except urllib.error.HTTPError as e:

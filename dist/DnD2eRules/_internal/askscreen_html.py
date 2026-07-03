@@ -90,7 +90,12 @@ _CSS = """
   .q-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7290; margin-bottom: 6px; }
   .q-text { font-size: 16px; color: #e6e9f6; font-weight: 600; line-height: 1.45; }
 
-  #ask-status { display: flex; align-items: center; gap: 10px; color: #9098b8; font-size: 13px; margin-top: 18px; }
+  .stream { white-space: pre-wrap; color: #aeb4c8; font-size: 14px; line-height: 1.7; margin-top: 14px; }
+  .status-row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+  #ask-status { display: flex; align-items: center; gap: 10px; color: #9098b8; font-size: 13px; }
+  .stopbtn { color: #e6a0a8; border: 1px solid #5c2a30; border-radius: 6px; padding: 3px 12px;
+             font-size: 11.5px; font-weight: 600; text-decoration: none; }
+  .stopbtn:hover { background: #2a1518; border-color: #e6a0a8; }
   .spinner { width: 15px; height: 15px; border: 2px solid #3a3f58; border-top-color: #c9a84c;
              border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -154,15 +159,41 @@ def _askbar(question: str = "") -> str:
     )
 
 
-def _meta(model: str, models) -> str:
+def _meta(model: str, models, show_new: bool = False) -> str:
+    new_chat = '<span>·</span><a href="dnd:///ask-new">✦ new chat</a>' if show_new else ''
     return (
         '<div class="meta">'
         '<span>Model:</span>' + _model_select(model, models) +
         '<span>·</span><span class="pill">local · Ollama</span>'
-        '<span>·</span><a href="dnd:///ask-refresh">refresh</a>'
+        '<span>·</span><a href="dnd:///ask-refresh">refresh</a>' + new_chat +
         '<span style="margin-left:auto">Runs on your machine — free & offline. Verify against the book.</span>'
         '</div>'
     )
+
+
+def _turn_card(q: str, answer_md: str) -> str:
+    return ('<div class="card"><div class="q-label">Question</div>'
+            f'<div class="q-text">{e(q)}</div>'
+            f'<div class="answer">{render_markdown(answer_md)}</div></div>')
+
+
+def _thread_html(thread) -> str:
+    return "".join(_turn_card(q, a) for q, a in reversed(thread or []))
+
+
+def _loading_card(q: str) -> str:
+    return ('<div class="card"><div class="q-label">Question</div>'
+            f'<div class="q-text">{e(q)}</div>'
+            '<div class="status-row">'
+            '<div id="ask-status"><span class="spinner"></span><span>Thinking…</span></div>'
+            '<a class="stopbtn" href="dnd:///ask-stop">Stop</a></div>'
+            '<div id="ask-stream" class="stream"></div></div>')
+
+
+def _error_card(q: str, error: str) -> str:
+    return ('<div class="card"><div class="q-label">Question</div>'
+            f'<div class="q-text">{e(q)}</div>'
+            f'<div class="err">{e(error)}</div></div>')
 
 
 def _page(body: str) -> str:
@@ -179,8 +210,10 @@ def _page(body: str) -> str:
 
 def generate(state: str, *, model: str = "llama3.1", models=None,
              ollama_ok: bool = True, question: str = "", answer_md: str = "",
-             error: str = "") -> str:
-    """state: 'setup' | 'ready' | 'loading' | 'answer' | 'error'."""
+             error: str = "", thread=None) -> str:
+    """state: 'setup' | 'ready' | 'loading' | 'answer' | 'error'.
+    thread: list of (question, answer_md) turns, oldest first."""
+    thread = thread or []
 
     if state == "setup":
         if not ollama_ok:
@@ -214,23 +247,16 @@ def generate(state: str, *, model: str = "llama3.1", models=None,
         return _page(_askbar() + _meta(model, models))
 
     if state == "loading":
-        body = (_askbar(question) + _meta(model, models) +
-                '<div class="card"><div class="q-label">Question</div>'
-                f'<div class="q-text">{e(question)}</div>'
-                '<div id="ask-status"><span class="spinner"></span><span>Thinking…</span></div></div>')
+        body = (_askbar() + _meta(model, models, show_new=True) +
+                _loading_card(question) + _thread_html(thread))
         return _page(body)
 
     if state == "answer":
-        body = (_askbar() + _meta(model, models) +
-                '<div class="card"><div class="q-label">Question</div>'
-                f'<div class="q-text">{e(question)}</div>'
-                f'<div class="answer">{render_markdown(answer_md)}</div></div>'
+        body = (_askbar() + _meta(model, models, show_new=True) + _thread_html(thread) +
                 '<div class="disclaimer">Answered by a local model from your 2e rulebooks — '
                 'double-check anything important against the source page.</div>')
         return _page(body)
 
-    body = (_askbar(question) + _meta(model, models) +
-            '<div class="card"><div class="q-label">Question</div>'
-            f'<div class="q-text">{e(question)}</div>'
-            f'<div class="err">{e(error)}</div></div>')
+    body = (_askbar() + _meta(model, models, show_new=True) +
+            _error_card(question, error) + _thread_html(thread))
     return _page(body)

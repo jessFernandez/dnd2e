@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AD&amp;D 2nd Edition — Rules Reference &amp; Campaign Tools</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1018; color: #c8cad8;
+         font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+         line-height: 1.6;
+         background-image:
+           radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201,168,76,.08) 0%, transparent 70%),
+           radial-gradient(ellipse 60% 40% at 50% 120%, rgba(91,155,213,.05) 0%, transparent 70%); }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 60px 24px 80px; }
+
+  header { text-align: center; margin-bottom: 46px; }
+  .pre { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: #4a5070; margin-bottom: 18px; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(30px, 7vw, 52px);
+       font-weight: bold; color: #c9a84c; line-height: 1.05; letter-spacing: .02em;
+       text-shadow: 0 0 34px rgba(201,168,76,.25); }
+  .sub { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: #4a5070; margin-top: 12px; }
+  .tag { color: #8890b0; font-size: 15px; margin-top: 20px; }
+
+  .cta { text-align: center; margin: 40px 0 12px; }
+  .download { display: inline-flex; align-items: center; gap: 12px;
+              background: #c9a84c; color: #17130a; text-decoration: none;
+              font-size: 18px; font-weight: 800; letter-spacing: .02em;
+              padding: 16px 34px; border-radius: 12px;
+              box-shadow: 0 8px 30px rgba(201,168,76,.28); transition: transform .12s, box-shadow .15s; }
+  .download:hover { transform: translateY(-2px); box-shadow: 0 12px 38px rgba(201,168,76,.4); }
+  .meta { text-align: center; color: #5a6080; font-size: 12.5px; margin-top: 12px; }
+  .meta a { color: #7a80a0; }
+
+  section { margin-top: 52px; }
+  h2 { font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: #c9a84c;
+       margin-bottom: 18px; padding-bottom: 8px; border-bottom: 1px solid #2a2d3e; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .feat { background: #171926; border: 1px solid #23263a; border-radius: 10px; padding: 16px 18px; }
+  .feat h3 { color: #e6e9f6; font-size: 15px; margin-bottom: 5px; }
+  .feat p { color: #8890b0; font-size: 13px; }
+
+  ol.steps { list-style: none; counter-reset: s; }
+  ol.steps li { counter-increment: s; position: relative; padding: 8px 0 8px 44px; color: #b8bccf; }
+  ol.steps li::before { content: counter(s);
+       position: absolute; left: 0; top: 8px; width: 28px; height: 28px; border-radius: 50%;
+       background: #22200a; border: 2px solid #7a6020; color: #c9a84c;
+       font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  code { background: #171926; border: 1px solid #2a2e45; border-radius: 5px;
+         padding: 2px 7px; font-family: Consolas, monospace; font-size: 13px; color: #d4b46a; }
+
+  .note { background: #16130a; border: 1px solid #3a3010; border-left: 4px solid #c9a84c;
+          border-radius: 8px; padding: 14px 18px; color: #b0a680; font-size: 13.5px; }
+
+  footer { text-align: center; margin-top: 60px; color: #3a3f58; font-size: 12px; line-height: 1.8; }
+  footer a { color: #5a6080; }
+
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="pre">A desktop reference for</div>
+    <h1>Advanced Dungeons&nbsp;&amp;&nbsp;Dragons<br>2nd Edition</h1>
+    <div class="sub">Rules Reference &nbsp;&amp;&nbsp; Campaign Tools</div>
+    <p class="tag">The full 2e rulebooks, quick-reference DM screens, a character-creation
+       walkthrough, and a local-AI rules assistant — searchable, offline, on your desktop.</p>
+  </header>
+
+  <div class="cta">
+    <a class="download" href="https://github.com/jessFernandez/dnd2e/releases/latest/download/DnD2eRules.zip">
+      ⬇&nbsp;&nbsp;Download for Windows
+    </a>
+    <div class="meta">
+      Windows 10/11 · 64-bit · ~120&nbsp;MB zip · no install needed &nbsp;·&nbsp;
+      <a href="https://github.com/jessFernandez/dnd2e">Source on GitHub</a>
+    </div>
+  </div>
+
+  <section>
+    <h2>What's inside</h2>
+    <div class="grid">
+      <div class="feat"><h3>📚 Full rulebooks</h3><p>PHB, DMG, Monstrous Manual and more — browsable, with fast full-text search.</p></div>
+      <div class="feat"><h3>⚔️ DM &amp; Actions screens</h3><p>50+ quick-reference tables and every combat action, grouped and filterable.</p></div>
+      <div class="feat"><h3>✦ Character creation</h3><p>A step-by-step walkthrough with links straight to the rules for each step.</p></div>
+      <div class="feat"><h3>✧ Jarvis (local AI)</h3><p>Ask rules questions in plain English — answered from the books, citing the pages.</p></div>
+      <div class="feat"><h3>🧮 House-rule tools</h3><p>Your house rules baked in, plus a floating THAC0 / AC converter.</p></div>
+      <div class="feat"><h3>🗂️ Browser-style</h3><p>Tabs, bookmarks, back/forward, zoom, and find-on-page — it reads like a browser.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Getting started</h2>
+    <ol class="steps">
+      <li>Download the zip and <b>extract it anywhere</b> (Desktop, Documents…).</li>
+      <li>Open the folder and run <code>DnD2eRules.exe</code>. No installer, nothing to set up.</li>
+      <li>Browse, search, and use the screens right away — everything works offline.</li>
+    </ol>
+    <div class="note" style="margin-top:14px">
+      <b>Optional — for the “Jarvis” AI assistant:</b> install
+      <a href="https://ollama.com" style="color:#c9a84c">Ollama</a> (free) and run
+      <code>ollama pull llama3.1</code>. Jarvis runs the model locally on your machine — no
+      account, no API key, no cost.
+    </div>
+  </section>
+
+  <footer>
+    Built with PyQt5. &nbsp;·&nbsp; <a href="https://github.com/jessFernandez/dnd2e">github.com/jessFernandez/dnd2e</a><br>
+    Advanced Dungeons &amp; Dragons is a trademark of Wizards of the Coast. This is an unofficial fan-made reference tool.
+  </footer>
+
+</div>
+</body>
+</html>
