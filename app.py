@@ -423,6 +423,10 @@ class ContentView(QWidget):
             self._dnd_page = DnDPage()
             self._dnd_page.dnd_navigate.connect(self.page_requested)
             self._dnd_page.dnd_navigate_newtab.connect(self.page_requested_newtab)
+            # Paint a dark base while a page loads, so there's no white flash before
+            # the content's own CSS background renders (most visible on the Spells
+            # screen, which loads from a file:// URL).
+            self._dnd_page.setBackgroundColor(QColor("#1a1c26"))
             self._view = QWebEngineView()
             self._view.setPage(self._dnd_page)
             # Zoom factor resets whenever new content loads, so re-apply it each time.
