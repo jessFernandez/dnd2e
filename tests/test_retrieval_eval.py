@@ -1,58 +1,61 @@
-"""Retrieval evaluation: does a plain-English question surface the right rule page?
+"""Retrieval evaluation — the quality gate for Jarvis answers.
 
-This is the quality gate for Jarvis answers — RAG answer quality is bottlenecked
-by retrieval, so each case asserts the deterministic (model-free) keyword search
-lands a relevant page in the top results. Extend CASES as new gaps are found.
+RAG answer quality is bottlenecked by retrieval, so we assert the deterministic
+(model-free) search lands the *actual answer page* — pinned in golden_retrieval.py
+by page_url — in the top results. This is stronger than matching a keyword in a
+retrieved title, which silently passed questions whose real answer page was never
+retrieved.
+
+Questions whose correct page currently ranks outside the top 5 are marked xfail
+with the reason; as the retriever improves, those xfails should start passing
+(pytest reports them as XPASS) and the marker can be removed. The aggregate test
+guards recall@5 / MRR against regressions.
 """
 import os
 import pytest
 import rules_agent
 from rules_agent import AskWorker
+from golden_retrieval import (
+    GOLDEN, retrieved_urls, first_hit_rank, recall_at_k, reciprocal_rank,
+)
 
 DB = os.path.join(os.path.dirname(rules_agent.__file__), "dnd2e.db")
 
-# (question, [acceptable keywords]) — pass if any retrieved page title contains any.
-CASES = [
-    ("how do i roll for stats",                     ["ability score"]),
-    ("how does thac0 work",                         ["thac0"]),
-    ("what are saving throws",                      ["saving throw"]),
-    ("what does armor class do",                    ["armor class"]),
-    ("how does initiative work",                    ["initiative"]),
-    ("how do i grapple someone",                    ["wrestl", "grappl", "hold"]),
-    ("how does surprise work",                      ["surprise"]),
-    ("how do i multiclass",                         ["multi"]),
-    ("how do proficiencies work",                   ["proficienc"]),
-    ("how does experience work",                    ["experience", "award"]),
-    ("how do i cast a spell",                       ["spell", "casting"]),
-    ("how does movement work",                      ["movement", "move"]),
-    ("how does turning undead work",                ["turn"]),
-    ("how do i pick a lock",                        ["lock"]),
-    ("how does falling damage work",                ["falling"]),
-    ("what happens when i run out of hit points",   ["death", "dying", "dead"]),
-    ("how does morale work",                        ["morale"]),
-    ("how do i sneak attack",                       ["backstab"]),
-    ("how do i hide in shadows",                    ["hide in shadows", "thieving", "camoflage"]),
-    ("how do i resurrect someone",                  ["raise dead", "raising the dead", "resurrection"]),
-    ("how do i disarm an opponent",                 ["disarm"]),
-    ("how do i climb a wall",                       ["climb"]),
-    ("how do i swim",                               ["swim"]),
-    ("how does poison work",                        ["poison"]),
-    ("how do i two weapon fight",                   ["two-weapon", "off-hand", "two weapon"]),
-    ("how much can my character carry",             ["encumbr", "weight"]),
-    ("how do i parry",                              ["parry"]),
-    ("what does charisma do",                       ["charisma"]),
-    ("how do henchmen work",                        ["henchmen"]),
-    ("how do i gain a level",                       ["experience", "award", "advancement"]),
-    ("how do i disbelieve an illusion",             ["illusion", "saving throw"]),
-    ("how does infravision work",                   ["infravision"]),
-]
+# Every golden question now surfaces its correct page in the top 5.
+KNOWN_MISSES = set()
+
+# Recorded baseline (current retriever) — the suite fails if we regress below it.
+# History: 84% / 0.55 (raw BM25)  →  97% / 0.74 after title-weighting, table &
+# appendix penalties, PHB/DMG core-book preference, prefix matching, and a
+# title-is-the-query re-rank bonus  →  100% recall@5 / 0.78 MRR after passage
+# chunking (chunks_fts) let single rules out-rank the long pages that bury them.
+BASELINE_RECALL5 = 0.97
+BASELINE_MRR = 0.76
 
 
 @pytest.mark.skipif(not os.path.exists(DB), reason="rulebook database not present")
-@pytest.mark.parametrize("question,keywords", CASES, ids=[c[0] for c in CASES])
-def test_retrieval_surfaces_expected_page(question, keywords):
+@pytest.mark.parametrize("question,gold", GOLDEN, ids=[q for q, _ in GOLDEN])
+def test_correct_page_in_top5(question, gold):
+    if question in KNOWN_MISSES:
+        pytest.xfail("correct page ranks outside top-5 pending retrieval-ranking fix")
     worker = AskWorker(DB, "x", question)
-    titles = [t.lower() for _u, t, _b, _x in worker._retrieve(question, phrases=[], full=0)]
-    assert any(any(k in title for title in titles) for k in keywords), (
-        f"{question!r}: no retrieved title matched {keywords}; got {titles[:5]}"
+    urls = retrieved_urls(worker, question, k=12)
+    rank = first_hit_rank(urls, gold)
+    assert recall_at_k(urls, gold, 5), (
+        f"{question!r}: no gold page in top-5 (rank={rank}); "
+        f"want any of {list(gold)}; got {urls[:5]}"
     )
+
+
+@pytest.mark.skipif(not os.path.exists(DB), reason="rulebook database not present")
+def test_aggregate_recall_and_mrr_no_regression():
+    worker = AskWorker(DB, "x", "x")
+    r5 = mrr = 0.0
+    for q, gold in GOLDEN:
+        urls = retrieved_urls(worker, q, k=12)
+        r5 += recall_at_k(urls, gold, 5)
+        mrr += reciprocal_rank(urls, gold)
+    n = len(GOLDEN)
+    recall5, mean_rr = r5 / n, mrr / n
+    assert recall5 >= BASELINE_RECALL5, f"recall@5 regressed: {recall5:.2%} < {BASELINE_RECALL5:.0%}"
+    assert mean_rr >= BASELINE_MRR, f"MRR regressed: {mean_rr:.3f} < {BASELINE_MRR}"

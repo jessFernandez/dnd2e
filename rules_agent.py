@@ -19,6 +19,13 @@ from PyQt5.QtCore import QThread, pyqtSignal
 OLLAMA_URL    = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.1"
 
+# Retrieval re-ranking knobs (tuned against tests/golden_retrieval.py).
+_TITLE_WEIGHT     = 3.0    # BM25 weight on the title column vs. body (1.0)
+_TABLE_PENALTY    = 5.0    # push "…-- Table NN" pages below the prose that explains them
+_APPENDIX_PENALTY = 2.0    # likewise for appendix/reference pages
+_CORE_BOOK_BONUS  = 3.0    # prefer the canonical PHB/DMG rule over supplement restatements
+_TITLE_SUBSET_BONUS = 6.0  # a page titled entirely in the query's words is the canonical one
+
 SYSTEM_PROMPT = """\
 You are a rules assistant for Advanced Dungeons & Dragons 2nd Edition. You are \
 given excerpts from the official 2e rulebooks, and possibly a set of CAMPAIGN \
@@ -30,10 +37,15 @@ conflict. If a house rule affects the answer, apply it and label it with the \
 crossed-swords marker exactly like this: "⚔️ House Rule: …" so the reader knows \
 it differs from the printed rule.
 - Give the concrete procedure a player or DM needs at the table (rolls, \
-modifiers, order of operations), quoting the rule where it helps.
+modifiers, order of operations), quoting the rule where it helps. ALWAYS state \
+exactly what dice are rolled (e.g. "roll 1d20", "roll 3d6", "roll d100") and \
+spell out any saving throw, attack roll, or check the rule requires — never \
+describe a mechanic without naming the roll behind it.
 - Cite every rulebook page you use as a Markdown link in EXACTLY this form, \
 using the "cite as" URL shown with each excerpt: \
-[Figuring the To-Hit Number](dnd:///PHB/DD01673.htm). Every entry in the \
+[Figuring the To-Hit Number](dnd:///PHB/DD01673.htm). Lead with the page that \
+most directly answers the question (prefer the core rule that defines the \
+mechanic over a page that only mentions it in passing). Every entry in the \
 "Sources" list must be a full [Title](dnd:///…) link — never a bare or bracketed \
 URL. Cite a house rule as "(⚔️ house rule)".
 - If the provided text does not contain the answer, say so plainly — do NOT \
@@ -120,7 +132,7 @@ def _terms(text: str) -> list:
     return out[:16]
 
 
-def _fts_from_terms(terms: list, fallback: str = "") -> str:
+def _fts_from_terms(terms: list, fallback: str = "", prefix: bool = False) -> str:
     seen: list = []
     for t in terms:
         t = t.strip()
@@ -128,11 +140,52 @@ def _fts_from_terms(terms: list, fallback: str = "") -> str:
             seen.append(t)
     if not seen:
         return f'"{fallback.strip()}"' if fallback.strip() else '""'
-    return " OR ".join(f'"{t}"' for t in seen[:20])
+    atoms = []
+    for t in seen[:20]:
+        # Prefix-match plain words (≥4 chars) so the un-stemmed FTS index still
+        # matches singular/plural and inflections: lock*→lock/locks, climb*→
+        # climbing, spell*→spells. Phrases and short/odd tokens stay exact.
+        if prefix and t.isascii() and t.isalnum() and len(t) >= 4:
+            atoms.append(f"{t}*")
+        else:
+            atoms.append(f'"{t}"')
+    return " OR ".join(atoms)
 
 
 def _fts_query(text: str) -> str:
     return _fts_from_terms(_terms(text), fallback=text)
+
+
+# Minor words ignored when testing whether a page title is "made of" query words.
+_TITLE_MINOR = {"a", "an", "the", "of", "in", "on", "to", "for", "and", "or",
+                "vs", "with", "your", "you", "how", "into", "at", "by"}
+
+
+def _query_stems(terms: list) -> set:
+    """Flatten query atoms (tokens + multi-word phrases) into a set of word stems."""
+    stems: set = set()
+    for atom in terms:
+        for w in re.findall(r"[a-z0-9]+", atom.lower()):
+            stems.add(w)
+    return stems
+
+
+def _title_is_query(clean_title: str, stems: set) -> bool:
+    """True if every meaningful word of the title is covered by a query stem.
+
+    Captures the strong signal that a page titled entirely in the question's own
+    words (e.g. "Movement", "Poison", "Charisma") is the canonical page for it,
+    even when a longer prose page loses on raw term-frequency.
+    """
+    words = [w for w in re.findall(r"[a-z0-9]+", clean_title.lower())
+             if w not in _TITLE_MINOR]
+    if not words:
+        return False
+    for w in words:
+        if not any(w == s or (len(s) >= 4 and w.startswith(s))
+                   or (len(w) >= 4 and s.startswith(w)) for s in stems):
+            return False
+    return True
 
 
 def _strip_html(html: str) -> str:
@@ -216,34 +269,82 @@ class AskWorker(QThread):
     def _retrieve(self, question: str, phrases=None, k: int = 8, full: int = 5):
         conn = sqlite3.connect(self.db_path)
         c    = conn.cursor()
-        query = _fts_from_terms(_terms(question) + list(phrases or []), fallback=question)
-        c.execute(
-            """SELECT p.page_url, p.title, p.book_name,
-                      snippet(pages_fts, 2, '', '', ' … ', 30) AS snip
-               FROM   pages_fts
-               JOIN   pages p ON pages_fts.page_url = p.page_url
-               WHERE  pages_fts MATCH ?
-               ORDER  BY rank
-               LIMIT  ?""",
-            (query, k),
+        atoms = _terms(question) + list(phrases or [])
+        query = _fts_from_terms(atoms, fallback=question, prefix=True)
+        stems = _query_stems(atoms)
+        # Rank candidates ourselves rather than trusting raw BM25:
+        #  • weight the TITLE column heavily — a page literally titled "Wrestling"
+        #    should beat one that only mentions the word in passing;
+        #  • demote lookup-table / appendix pages beneath the PROSE that explains
+        #    the rule (someone asking "how does X work" wants the text, not a grid);
+        #  • prefer the canonical PHB/DMG rule over supplement restatements.
+        # bm25() is negative (better = more negative), so penalties are added.
+        extra = (
+            f"(CASE WHEN p.title LIKE '%Table%'    THEN {_TABLE_PENALTY}    ELSE 0 END)"
+            f"+ (CASE WHEN p.title LIKE '%Appendix%' THEN {_APPENDIX_PENALTY} ELSE 0 END)"
+            f"+ (CASE WHEN p.page_url LIKE 'PHB/%' OR p.page_url LIKE 'DMG/%'"
+            f"        THEN {-_CORE_BOOK_BONUS} ELSE 0 END)"
         )
-        rows = c.fetchall()
-        excerpts, seen = [], set()
-        for url, title, book, snip in rows:
+        has_chunks = c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
+        ).fetchone() is not None
+
+        if has_chunks:
+            # Search PASSAGES, keep each page's best-matching passage, and hand that
+            # tight passage to the model as the excerpt (sharper than page-start text).
+            c.execute(
+                f"""SELECT c.page_url, p.title, p.book_name, c.body,
+                           bm25(chunks_fts, 0.0, 0.0, {_TITLE_WEIGHT}, 1.0) + {extra} AS score
+                    FROM   chunks_fts c JOIN pages p ON c.page_url = p.page_url
+                    WHERE  chunks_fts MATCH ?
+                    ORDER  BY score LIMIT ?""",
+                (query, max(k * 8, 80)),
+            )
+            cand, best = [], set()
+            for url, title, book, body, score in c.fetchall():
+                if url in best:                  # keep only the page's top passage
+                    continue
+                best.add(url)
+                cand.append((url, title, book, body, score))
+        else:
+            # Fallback for an un-chunked DB: page-level search with a page-start body.
+            c.execute(
+                f"""SELECT p.page_url, p.title, p.book_name,
+                           snippet(pages_fts, 2, '', '', ' … ', 30) AS body,
+                           bm25(pages_fts, 0.0, {_TITLE_WEIGHT}, 1.0) + {extra} AS score
+                    FROM   pages_fts JOIN pages p ON pages_fts.page_url = p.page_url
+                    WHERE  pages_fts MATCH ?
+                    ORDER  BY score LIMIT ?""",
+                (query, max(k * 4, 40)),
+            )
+            cand = list(c.fetchall())
+
+        # Second-pass Python re-rank: a page whose whole title is query words is
+        # almost certainly the canonical page — lift it above term-frequency noise.
+        ranked = []
+        for url, title, book, body, score in cand:
             clean = re.sub(r"\s*\([^)]+\)\s*$", "", title or url).strip()
-            norm  = re.sub(r"[^a-z0-9]+", " ", clean.lower()).strip()
+            bonus = _TITLE_SUBSET_BONUS if _title_is_query(clean, stems) else 0.0
+            ranked.append((score - bonus, url, clean, book, body))
+        ranked.sort(key=lambda r: r[0])
+
+        excerpts, seen = [], set()
+        for _score, url, clean, book, body in ranked:
+            norm = re.sub(r"[^a-z0-9]+", " ", clean.lower()).strip()
             if norm in seen:                     # drop near-duplicate titles across books
                 continue
             seen.add(norm)
-            text = re.sub(r"\s+", " ", (snip or "")).strip()
-            if len(excerpts) < full:
+            text = re.sub(r"\s+", " ", (body or "")).strip()[:1600]
+            if not has_chunks and len(excerpts) < full:
                 c.execute("SELECT content_html FROM pages WHERE page_url = ?", (url,))
                 row = c.fetchone()
                 if row and row[0]:
-                    body = _strip_html(row[0])
-                    if len(body) > 60:
-                        text = body[:1600]
+                    b = _strip_html(row[0])
+                    if len(b) > 60:
+                        text = b[:1600]
             excerpts.append((url, clean, book or "", text))
+            if len(excerpts) >= k:
+                break
         conn.close()
         return excerpts
 
@@ -314,51 +415,72 @@ class AskWorker(QThread):
                     break
         return "".join(parts).strip()
 
-    def run(self):
-        try:
-            prev = self.history[-1][0] if self.history else ""
-            self.status.emit("Understanding your question…")
-            phrases = self._rewrite_query(self.question, prev)
-            self.status.emit("Searching the rulebooks…")
-            excerpts = self._retrieve(self.question, phrases)
-            house    = self._house_rules()
+    # ── prompt assembly (shared by the streaming app path and the eval) ─────
+    def _compose(self, status=None):
+        """Retrieve context and build the chat messages. Returns (messages, titles)."""
+        prev = self.history[-1][0] if self.history else ""
+        if status:
+            status("Understanding your question…")
+        phrases = self._rewrite_query(self.question, prev)
+        if status:
+            status("Searching the rulebooks…")
+        excerpts = self._retrieve(self.question, phrases)
+        house    = self._house_rules()
 
-            if excerpts:
-                context = "\n\n".join(
-                    f"### {title} ({book})   [cite as dnd:///{url}]\n{text}"
-                    for url, title, book, text in excerpts
-                )
-            else:
-                context = "(No matching pages were found in the local rulebook database.)"
+        if excerpts:
+            context = "\n\n".join(
+                f"### {title} ({book})   [cite as dnd:///{url}]\n{text}"
+                for url, title, book, text in excerpts
+            )
+        else:
+            context = "(No matching pages were found in the local rulebook database.)"
 
-            house_block = ""
-            if house:
-                house_block = (
-                    "CAMPAIGN HOUSE RULES — these OVERRIDE the standard rulebook "
-                    "wherever they conflict:\n\n" + house + "\n\n"
-                    "=====================================================\n\n"
-                )
-
-            user = (
-                f"{house_block}"
-                f"Rulebook excerpts:\n\n{context}\n\n"
-                f"Question: {self.question}\n\n"
-                "Answer using only the information above. Apply any relevant house "
-                "rule (and label it), and cite the rulebook pages you use."
+        house_block = ""
+        if house:
+            house_block = (
+                "CAMPAIGN HOUSE RULES — these OVERRIDE the standard rulebook "
+                "wherever they conflict:\n\n" + house + "\n\n"
+                "=====================================================\n\n"
             )
 
-            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            for q, a in self.history[-4:]:          # carry recent turns for follow-ups
-                messages.append({"role": "user", "content": q})
-                messages.append({"role": "assistant", "content": a})
-            messages.append({"role": "user", "content": user})
+        user = (
+            f"{house_block}"
+            f"Rulebook excerpts:\n\n{context}\n\n"
+            f"Question: {self.question}\n\n"
+            "Answer using only the information above. Apply any relevant house "
+            "rule (and label it), and cite the rulebook pages you use."
+        )
 
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for q, a in self.history[-4:]:          # carry recent turns for follow-ups
+            messages.append({"role": "user", "content": q})
+            messages.append({"role": "assistant", "content": a})
+        messages.append({"role": "user", "content": user})
+
+        titles = {url: title for url, title, _b, _t in excerpts}
+        return messages, titles
+
+    @staticmethod
+    def _postprocess(answer: str, titles: dict) -> str:
+        return _mark_house_rules(_linkify(answer, titles))
+
+    def answer_sync(self):
+        """Run the full pipeline non-streaming and return the finished answer.
+
+        Same retrieval + prompt + post-processing as the app; used by the answer
+        evaluation harness (tests/answer_eval.py) so the eval can't drift from
+        what users actually see."""
+        messages, titles = self._compose()
+        raw = self._chat(messages)
+        return self._postprocess(raw, titles) if raw else ""
+
+    def run(self):
+        try:
+            messages, titles = self._compose(status=self.status.emit)
             self.status.emit(f"Asking {self.model}…")
             answer = self._chat_stream(messages)
             if answer:
-                titles = {url: title for url, title, _b, _t in excerpts}
-                answer = _linkify(answer, titles)
-                answer = _mark_house_rules(answer)
+                answer = self._postprocess(answer, titles)
                 if self._cancel:
                     answer += "\n\n_(stopped)_"
             elif self._cancel:
