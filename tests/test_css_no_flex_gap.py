@@ -47,9 +47,17 @@ def _offenders(source: str):
             if _FLEX.search(b) and _GAP.search(b)]
 
 
+def _css_modules():
+    # Every module that carries screen CSS: the *_html.py generators plus the
+    # shared screen_common.py chrome (which the glob would otherwise miss).
+    paths = glob.glob(os.path.join(ROOT, "*_html.py"))
+    paths.append(os.path.join(ROOT, "screen_common.py"))
+    return paths
+
+
 def test_no_flex_gap_in_html_modules():
     problems = {}
-    for path in glob.glob(os.path.join(ROOT, "*_html.py")):
+    for path in _css_modules():
         with open(path, encoding="utf-8") as f:
             offenders = _offenders(f.read())
         if offenders:
