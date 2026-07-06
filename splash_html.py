@@ -145,10 +145,10 @@ def generate() -> str:
         margin-bottom: 28px;
       }
 
+      .divider > * + * { margin-left: 12px; }  /* QtWebEngine drops flex gap */
       .divider {
         display: flex;
         align-items: center;
-        gap: 12px;
         justify-content: center;
         color: #3a3010;
         font-size: 12px;
@@ -176,10 +176,10 @@ def generate() -> str:
         margin: 28px 0 12px;
       }
 
+      .book-chips > * { margin: 0 7px 7px 0; }  /* QtWebEngine drops flex gap */
       .book-chips {
         display: flex;
         flex-wrap: wrap;
-        gap: 7px;
       }
 
       .book-chip {
@@ -207,10 +207,10 @@ def generate() -> str:
         margin-top: 14px;
       }
 
+      .feat-card > * + * { margin-top: 8px; }  /* QtWebEngine drops flex gap */
       .feat-card {
         display: flex;
         flex-direction: column;
-        gap: 8px;
         padding: 20px 18px 18px;
         border: 1px solid #1e2130;
         border-radius: 8px;

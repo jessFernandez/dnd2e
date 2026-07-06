@@ -93,10 +93,10 @@ def book_toc(book_name: str, accent: str, chapters: list, hr_by_chapter: dict) -
     margin: 18px 0 36px;
   }}
   .toc {{ max-width: 720px; }}
+  .row > * + * {{ margin-left: 18px; }}  /* QtWebEngine drops flex gap */
   .row {{
     display: flex;
     align-items: baseline;
-    gap: 18px;
     padding: 13px 10px;
     border-radius: 8px;
     transition: background .12s;

@@ -225,11 +225,13 @@ def generate() -> str:
       td { line-height: 1.5; }
       td:first-child { font-weight: 600; white-space: nowrap; }
       td:nth-child(2) { white-space: nowrap; }
-      .rule-list { display: flex; flex-direction: column; gap: 4px; }
-      .rule-row { display: flex; gap: 8px; align-items: baseline;
+      .rule-list > * + * { margin-top: 4px; }  /* QtWebEngine drops flex gap */
+      .rule-list { display: flex; flex-direction: column; }
+      .rule-row { display: flex; align-items: baseline;
                   padding: 5px 8px; border-radius: 4px;
                   font-size: 12px; line-height: 1.55; color: #c0c4d8; }
-      .rule-row::before { content: "▸"; color: #44506a; flex-shrink: 0; font-size: 10px; }
+      .rule-row::before { content: "▸"; color: #44506a; flex-shrink: 0; font-size: 10px;
+                          margin-right: 8px; }
       .rule-row:nth-child(odd) { background: #1e2138; }
     """
 

@@ -151,7 +151,8 @@ a { color: inherit; }
 /* Vertical row spacing uses margins, not flex `gap`, which this webengine drops. */
 .top { position: sticky; top: 0; z-index: 50; background: #101119; border-bottom: 1px solid #262a3d;
        padding: 11px 16px; display: flex; flex-direction: column; }
-.row1 { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.row1 > * + * { margin-left: 14px; }
+.row1 { display: flex; align-items: center; margin-bottom: 14px; }
 .brand { font-size: 15px; font-weight: 800; color: #c9a84c; letter-spacing: .02em; white-space: nowrap; }
 .brand .tot { font-size: 11px; font-weight: 600; color: #5a6080; margin-left: 8px; letter-spacing: .04em; }
 #q { flex: 1; min-width: 160px; background: #21243a; border: 1px solid #383c52; border-radius: 7px;
@@ -159,19 +160,22 @@ a { color: inherit; }
 #q:focus { border-color: #c9a84c; }
 .count { font-size: 11px; color: #8891b5; font-weight: 700; white-space: nowrap; min-width: 66px; text-align: right; }
 
-.row2 { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 9px; }
+.row2 > * { margin: 0 16px 16px 0; }
+.row2 { display: flex; align-items: center; flex-wrap: wrap; margin-bottom: 9px; }
 .row2:last-child { margin-bottom: 0; }
 .seg { display: inline-flex; background: #21243a; border: 1px solid #383c52; border-radius: 8px; overflow: hidden; }
 .seg button { background: transparent; border: 0; color: #aeb4d0; padding: 6px 15px; font-size: 12px;
               font-weight: 700; cursor: pointer; letter-spacing: .03em; }
 .seg button.on { background: #c9a84c; color: #17130a; }
-.grp { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.grp > * { margin: 0 5px 5px 0; }
+.grp { display: flex; align-items: center; flex-wrap: wrap; }
 .grp .lbl { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: #565c7d; margin-right: 3px; }
 #catwrap { padding-top: 0; }
 .cat[hidden] { display: none !important; }   /* beat .grp's display:flex */
 .pill { background: #21243a; border: 1px solid #363a52; border-radius: 20px; color: #b8bcd4;
         padding: 4px 11px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex;
-        align-items: center; gap: 6px; transition: background .1s, border-color .1s; }
+        align-items: center; transition: background .1s, border-color .1s; }
+.pill .dot { margin-right: 6px; }  /* QtWebEngine drops flex gap */
 .pill:hover { background: #2b2f47; }
 .pill.on { background: #2f3350; border-color: #c9a84c; color: #f0e4c0; }
 .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -209,7 +213,8 @@ a { color: inherit; }
 
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #2a2e45;
          border-top: 1px solid #2a2e45; border-bottom: 1px solid #2a2e45; }
-.st { background: #191c2c; padding: 6px 13px; display: flex; flex-direction: column; gap: 1px; }
+.st > * + * { margin-top: 1px; }
+.st { background: #191c2c; padding: 6px 13px; display: flex; flex-direction: column; }
 .st span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #616784; }
 .st b { font-size: 11.5px; font-weight: 600; color: #d6d9ec; }
 
@@ -227,8 +232,9 @@ a { color: inherit; }
 .card.short .more { display: none; }
 .card.open .more::after { content: " ▴"; }
 
+.foot > * + * { margin-left: 10px; }  /* QtWebEngine drops flex gap */
 .foot { padding: 8px 13px; border-top: 1px solid #262a3d; display: flex;
-        justify-content: space-between; gap: 10px; font-size: 10px; color: #5f6688; }
+        justify-content: space-between; font-size: 10px; color: #5f6688; }
 .foot .res { color: #7e6f4a; font-weight: 700; }
 .foot .src { color: #565c7d; text-align: right; }
 """

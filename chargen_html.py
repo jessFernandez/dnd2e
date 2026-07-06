@@ -396,17 +396,20 @@ def generate() -> str:
              font-size: 13px; color: #c8cad8; }}
 
       /* ── Top Bar ── */
+      .top-bar > * + * {{ margin-top: 8px; }}  /* QtWebEngine drops flex gap */
       .top-bar {{ position: sticky; top: 0; z-index: 100; background: #13151f;
                   border-bottom: 1px solid #2a2d3e; padding: 10px 14px;
-                  display: flex; flex-direction: column; gap: 8px; }}
-      .search-row {{ display: flex; gap: 8px; align-items: center; }}
+                  display: flex; flex-direction: column; }}
+      .search-row > * + * {{ margin-left: 8px; }}  /* QtWebEngine drops flex gap */
+      .search-row {{ display: flex; align-items: center; }}
       #search {{ flex: 1; background: #23263a; border: 1px solid #383c52;
                  border-radius: 6px; color: #e0e2f0; padding: 7px 12px;
                  font-size: 13px; outline: none; }}
       #search:focus {{ border-color: {ACCENT}; }}
       #clear-btn {{ background: #23263a; border: 1px solid #383c52; border-radius: 6px;
                     color: #9ca3c0; padding: 6px 12px; cursor: pointer; font-size: 12px; }}
-      .step-nav {{ display: flex; gap: 5px; flex-wrap: wrap; }}
+      .step-nav > * {{ margin: 0 5px 5px 0; }}  /* QtWebEngine drops flex gap */
+      .step-nav {{ display: flex; flex-wrap: wrap; }}
       .nav-step {{ background: #1e2138; border: 1px solid #2a2e45; border-radius: 5px;
                    color: #7a84a8; padding: 3px 9px; font-size: 10.5px; font-weight: 600;
                    text-decoration: none; letter-spacing: .03em; transition: all .12s; }}
@@ -434,13 +437,16 @@ def generate() -> str:
                     color: #a76bcc; font-size: 9.5px; font-weight: 700; padding: 2px 6px;
                     letter-spacing: .06em; text-transform: uppercase; }}
 
-      .step-body {{ padding: 16px; display: flex; flex-direction: column; gap: 12px; }}
+      .step-body > * + * {{ margin-top: 12px; }}  /* QtWebEngine drops flex gap */
+      .step-body {{ padding: 16px; display: flex; flex-direction: column; }}
 
       .step-desc {{ color: #b0b4cc; line-height: 1.65; font-size: 12.5px; }}
 
       /* ── Rules list ── */
-      .rule-list {{ display: flex; flex-direction: column; gap: 3px; }}
-      .rule-row {{ display: flex; gap: 8px; align-items: baseline; padding: 5px 10px;
+      .rule-list > * + * {{ margin-top: 3px; }}  /* QtWebEngine drops flex gap */
+      .rule-list {{ display: flex; flex-direction: column; }}
+      .rule-row > * + * {{ margin-left: 8px; }}  /* QtWebEngine drops flex gap */
+      .rule-row {{ display: flex; align-items: baseline; padding: 5px 10px;
                    border-radius: 4px; font-size: 12px; line-height: 1.55; color: #c0c4d8; }}
       .rule-row:nth-child(odd) {{ background: #1e2138; }}
       .bullet {{ color: {ACCENT_DIM}; flex-shrink: 0; font-size: 10px; }}
@@ -459,8 +465,10 @@ def generate() -> str:
       .class-req {{ color: #5a6080; font-size: 11px; font-style: italic; }}
 
       /* ── PHB link chips ── */
-      .link-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
-      .phb-link {{ display: inline-flex; align-items: center; gap: 7px;
+      .link-row > * {{ margin: 0 8px 8px 0; }}  /* QtWebEngine drops flex gap */
+      .link-row {{ display: flex; flex-wrap: wrap; }}
+      .phb-link .phb-badge {{ margin-right: 7px; }}  /* QtWebEngine drops flex gap */
+      .phb-link {{ display: inline-flex; align-items: center;
                    background: #1c1f32; border: 1px solid {ACCENT_DIM};
                    border-radius: 6px; padding: 6px 11px 6px 7px; color: #c2aa68;
                    text-decoration: none; font-size: 11.5px; font-weight: 600;
