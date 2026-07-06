@@ -69,7 +69,8 @@ _CSS = """
   .hero h1 { font-size: 26px; color: #c9a84c; letter-spacing: .02em; font-family: Georgia, serif; }
   .hero p { color: #5a6080; font-size: 12.5px; margin-top: 6px; letter-spacing: .02em; }
 
-  .askbar { display: flex; gap: 8px; margin-bottom: 10px; }
+  .askbar > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
+  .askbar { display: flex; margin-bottom: 10px; }
   #q { flex: 1; background: #23263a; border: 1px solid #383c52; border-radius: 9px;
        color: #e6e9f6; padding: 12px 15px; font-size: 15px; outline: none; }
   #q:focus { border-color: #c9a84c; }
@@ -77,7 +78,8 @@ _CSS = """
          padding: 0 20px; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .02em; }
   .btn:hover { background: #d8b968; }
 
-  .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  .meta > * { margin: 0 10px 0 0; }  /* QtWebEngine drops flex gap */
+  .meta { display: flex; align-items: center; flex-wrap: wrap;
           color: #5a6080; font-size: 11.5px; margin-bottom: 24px; }
   .meta select { background: #23263a; color: #c8cad8; border: 1px solid #383c52;
                  border-radius: 6px; padding: 4px 8px; font-size: 11.5px; outline: none; }
@@ -92,7 +94,8 @@ _CSS = """
 
   .stream { white-space: pre-wrap; color: #aeb4c8; font-size: 14px; line-height: 1.7; margin-top: 14px; }
   .status-row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
-  #ask-status { display: flex; align-items: center; gap: 10px; color: #9098b8; font-size: 13px; }
+  #ask-status > * + * { margin-left: 10px; }  /* QtWebEngine drops flex gap */
+  #ask-status { display: flex; align-items: center; color: #9098b8; font-size: 13px; }
   .stopbtn { color: #e6a0a8; border: 1px solid #5c2a30; border-radius: 6px; padding: 3px 12px;
              font-size: 11.5px; font-weight: 600; text-decoration: none; }
   .stopbtn:hover { background: #2a1518; border-color: #e6a0a8; }
@@ -122,7 +125,8 @@ _CSS = """
                       padding: 2px 7px; font-family: Consolas, monospace; font-size: 12.5px; color: #d4b46a; }
   .setup a { color: #c9a84c; }
   .setup a.btn { color: #1a1c26; }
-  .setup .row { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .setup .row > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
+  .setup .row { display: flex; align-items: center; margin-top: 6px; }
   .err { background: #2a1518; border: 1px solid #5c2a30; color: #e6a0a8; border-radius: 9px;
          padding: 12px 15px; font-size: 13px; margin-top: 16px; white-space: pre-wrap; }
 """

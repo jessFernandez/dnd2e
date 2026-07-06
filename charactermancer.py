@@ -1,0 +1,372 @@
+"""charactermancer.py — the character-builder flow controller (the step machine).
+
+Sits between the Character state (character.py) and the UI (charactermancer_html.py
++ app.py wiring). It owns:
+
+  * the ordered steps and which one is current,
+  * per-step completeness gating (you can't advance past an incomplete step),
+  * downstream invalidation (changing abilities that make your race illegal clears
+    the race/class/alignment so the build can never hold a contradiction), and
+  * `dispatch(path)` — turning a `dnd:///cm/<path>` link action into a state change.
+
+Pure and Qt-free: app.py intercepts the `cm/` links and calls `dispatch`, then
+re-renders. All the branching lives here and is unit-tested without a running app.
+"""
+import random
+
+import char_rules as cr
+from character import Character
+
+# Ordered steps and their display titles.
+STEPS = ("abilities", "race", "class", "alignment", "proficiencies",
+         "equipment", "spells", "details", "review")
+STEP_TITLES = {
+    "abilities": "Ability Scores",
+    "race": "Race",
+    "class": "Class",
+    "alignment": "Alignment",
+    "proficiencies": "Proficiencies",
+    "equipment": "Equipment",
+    "spells": "Spells",
+    "details": "Details",
+    "review": "Review",
+}
+
+
+class Charactermancer:
+    def __init__(self, character: Character = None, rng: random.Random = None):
+        self.character = character or Character()
+        self.index = 0
+        self.ability_mode = "roll"      # "roll" | "manual" — pure UI state for the first step
+        self.saved_id = None            # DB row id once this build has been saved (set by app.py)
+        self._rng = rng                 # injectable for deterministic tests
+        self.spell_catalog = []         # level-1 spells for this class (injected by app.py)
+
+    # ── step position ────────────────────────────────────────────────────────
+    @property
+    def step(self) -> str:
+        return STEPS[self.index]
+
+    @property
+    def title(self) -> str:
+        return STEP_TITLES[self.step]
+
+    def is_complete(self, step: str = None) -> bool:
+        """Whether a step has enough valid input to move past it."""
+        step = step or self.step
+        c = self.character
+        if step == "abilities":
+            return c.abilities_valid()
+        if step == "race":
+            return bool(c.race) and c.race in c.eligible_races()
+        if step == "class":
+            if not (c.char_class and c.char_class in c.eligible_classes()):
+                return False
+            # a warrior with an 18 Strength must roll exceptional Strength first
+            if c.rolls_exceptional_strength() and c.exceptional_str is None:
+                return False
+            return True
+        if step == "alignment":
+            return bool(c.alignment) and c.alignment in c.eligible_alignments()
+        if step == "details":
+            return bool(c.name.strip())
+        # proficiencies (optional in v1) and review are always passable
+        return True
+
+    def can_advance(self) -> bool:
+        return self.index < len(STEPS) - 1 and self.is_complete()
+
+    def can_go_back(self) -> bool:
+        return self.index > 0
+
+    def advance(self) -> bool:
+        if not self.can_advance():
+            return False
+        self.index += 1
+        return True
+
+    def back(self) -> bool:
+        if not self.can_go_back():
+            return False
+        self.index -= 1
+        return True
+
+    def goto(self, step: str) -> bool:
+        """Jump to a named step (used by the progress rail). Only allows landing on
+        a step whose predecessors are all complete."""
+        if step not in STEPS:
+            return False
+        target = STEPS.index(step)
+        if any(not self.is_complete(STEPS[i]) for i in range(target)):
+            return False
+        self.index = target
+        return True
+
+    # ── state mutations ──────────────────────────────────────────────────────
+    def set_mode(self, mode: str):
+        if mode in ("roll", "manual"):
+            self.ability_mode = mode
+
+    def roll(self):
+        """Roll a fresh pool and lay it out high-to-low as a starting arrangement;
+        the player then rearranges via the per-ability selectors."""
+        pool = self.character.roll_pool(self._rng)
+        for ability, score in zip(self.character.ability_names(), sorted(pool, reverse=True)):
+            self.character.assign_ability(ability, score)
+        self._revalidate()
+
+    def set_ability(self, ability: str, score: int):
+        if ability in self.character.ability_names():
+            self.character.assign_ability(ability, score)
+            self._revalidate()
+
+    def clear_abilities(self):
+        self.character.clear_abilities()
+        self._revalidate()
+
+    def set_race(self, race: str):
+        if race in cr.RACES:
+            self.character.race = race
+            self._revalidate()
+
+    def set_class(self, class_name: str):
+        if class_name in cr.CLASSES:
+            self.character.char_class = class_name
+            self._revalidate()
+
+    def set_alignment(self, alignment: str):
+        self.character.alignment = alignment
+
+    def set_name(self, name: str):
+        self.character.name = name
+
+    def set_gender(self, gender: str):
+        self.character.gender = gender
+
+    def set_age_level(self, level: int):
+        """House-rule aging: 0 = none, 1–3 apply cumulative penalties/bonuses the
+        player then places across their scores."""
+        if 0 <= level <= 3:
+            self.character.age_level = level
+
+    def roll_exceptional_strength(self):
+        """Warriors with an 18 Strength roll d100 to set the 18/xx band (1–100)."""
+        import random as _random
+        if self.character.rolls_exceptional_strength():
+            self.character.exceptional_str = (self._rng or _random).randint(1, 100)
+
+    def roll_handedness(self):
+        """House rule: roll a d10 for handedness; a 10 means ambidextrous. Rangers
+        are ambidextrous regardless."""
+        import random as _random
+        roll = (self._rng or _random).randint(1, 10)
+        self.character.handedness_roll = roll
+        self.character.ambidextrous = cr.is_ambidextrous(
+            self.character.race, self.character.char_class, roll, self.character.house_rules)
+
+    def _revalidate(self):
+        """Clear downstream choices that a change just made illegal, so the build
+        can never hold a contradictory race/class/alignment."""
+        c = self.character
+        if c.race and c.has_all_abilities() and c.race not in c.eligible_races():
+            c.race = None
+        if c.char_class and c.char_class not in c.eligible_classes():
+            c.char_class = None
+        if c.alignment and c.alignment not in c.eligible_alignments():
+            c.alignment = None
+        # drop a rolled exceptional-Strength percentile that no longer applies
+        # (Strength changed off 18, or the class is no longer a warrior)
+        if c.exceptional_str is not None and not c.rolls_exceptional_strength():
+            c.exceptional_str = None
+        # drop chosen nonweapon proficiencies the (possibly changed) class can no
+        # longer take, cascading to anything that depended on them
+        if c.char_class:
+            for name in [n for n in c.nonweapon_profs
+                         if not cr.proficiency_available(n, c.char_class)]:
+                self.remove_proficiency(name)
+
+    # ── proficiencies ────────────────────────────────────────────────────────
+    def add_weapon(self, weapon: str):
+        c = self.character
+        if weapon in cr.WEAPONS and weapon not in c.weapon_profs:
+            if cr.weapon_slot_cost(weapon, c.house_rules) <= c.weapon_slots_left():
+                c.weapon_profs.append(weapon)
+
+    def remove_weapon(self, weapon: str):
+        if weapon in self.character.weapon_profs:
+            self.character.weapon_profs.remove(weapon)
+
+    def toggle_ambidexterity(self):
+        c = self.character
+        if c.bought_ambidexterity:
+            c.bought_ambidexterity = False
+        elif c.can_buy_ambidexterity() and \
+                cr.HOUSE_RULES.ambidexterity_slot_cost <= c.weapon_slots_left():
+            c.bought_ambidexterity = True
+
+    def add_proficiency(self, name: str):
+        c = self.character
+        p = cr.NONWEAPON_PROFICIENCIES.get(name)
+        if not p or name in c.nonweapon_profs:
+            return
+        # gate on class availability and prerequisites, then on the slot budget
+        if c.char_class and not cr.proficiency_available(p, c.char_class):
+            return
+        if not cr.proficiency_prereqs_met(p, c.nonweapon_profs):
+            return
+        if p.slots <= c.nonweapon_slots_left():
+            c.nonweapon_profs[name] = p.slots
+
+    def remove_proficiency(self, name: str):
+        c = self.character
+        if name not in c.nonweapon_profs:
+            return
+        # cascade: drop any skills that required this one so the build never holds
+        # a proficiency whose prerequisite is gone
+        for dep in cr.proficiency_dependents(name, list(c.nonweapon_profs)):
+            self.remove_proficiency(dep)
+        c.nonweapon_profs.pop(name, None)
+
+    def add_proficiency_slot(self, name: str):
+        """Spend an extra slot on a known proficiency (+2 to its check, house rule)."""
+        c = self.character
+        if name in c.nonweapon_profs and c.nonweapon_slots_left() >= 1:
+            c.nonweapon_profs[name] += 1
+
+    def remove_proficiency_slot(self, name: str):
+        c = self.character
+        p = cr.NONWEAPON_PROFICIENCIES.get(name)
+        if p and c.nonweapon_profs.get(name, 0) > p.slots:
+            c.nonweapon_profs[name] -= 1
+
+    # ── equipment ─────────────────────────────────────────────────────────────
+    def roll_money(self):
+        """Roll (or re-roll) the class's starting purse, in copper pieces."""
+        import random as _random
+        if self.character.char_class:
+            self.character.money_cp = cr.roll_starting_money(
+                self.character.char_class, self._rng or _random)
+
+    def buy_item(self, name: str):
+        """Buy one of a catalog item if it's affordable (deducts its cp cost)."""
+        c = self.character
+        it = cr.item(name)
+        if it and it["cost_cp"] <= c.money_cp:
+            c.money_cp -= it["cost_cp"]
+            c.inventory[name] = c.inventory.get(name, 0) + 1
+
+    def sell_item(self, name: str):
+        """Return one owned item to the shop, refunding its cp cost (a clean undo)."""
+        c = self.character
+        if c.inventory.get(name, 0) <= 0:
+            return
+        it = cr.item(name)
+        c.inventory[name] -= 1
+        if c.inventory[name] <= 0:
+            del c.inventory[name]
+            if name in c.worn:
+                c.worn.remove(name)          # can't wear what you no longer own
+        if it:
+            c.money_cp += it["cost_cp"]
+
+    def toggle_worn(self, name: str):
+        """Equip/unequip a piece of owned armor (contributes its AC bonus)."""
+        c = self.character
+        it = cr.item(name)
+        if not it or it.get("category") != "Armor" or name not in c.inventory:
+            return
+        if name in c.worn:
+            c.worn.remove(name)
+        else:
+            c.worn.append(name)
+
+    # ── spells ────────────────────────────────────────────────────────────────
+    def _catalog_names(self) -> set:
+        return {s["name"] for s in self.spell_catalog}
+
+    def add_spell(self, name: str):
+        if name in self._catalog_names() and name not in self.character.spells:
+            self.character.spells.append(name)
+
+    def remove_spell(self, name: str):
+        if name in self.character.spells:
+            self.character.spells.remove(name)
+
+    # ── action dispatch (from dnd:///cm/<path> links) ─────────────────────────
+    def dispatch(self, path: str) -> bool:
+        """Apply a `cm/` link action. `path` is everything after `cm/`, already
+        URL-unquoted by the caller. Parsed as `verb/tail` so a tail (an ability
+        name, weapon, or proficiency) may itself contain '/' (e.g. Reading/Writing).
+        Returns True if the action was handled."""
+        verb, _, tail = path.partition("/")
+        if not verb:
+            return False
+
+        if verb == "next":
+            return self.advance()
+        if verb == "back":
+            return self.back()
+        if verb == "goto" and tail:
+            return self.goto(tail)
+        if verb == "mode" and tail:
+            self.set_mode(tail); return True
+        if verb == "roll":
+            self.roll(); return True
+        if verb == "clear":
+            self.clear_abilities(); return True
+        if verb == "assign" and tail:
+            ability, _, score = tail.partition("/")
+            if not score:
+                return False
+            try:
+                self.set_ability(ability, int(score))
+            except ValueError:
+                return False
+            return True
+        if verb == "race" and tail:
+            self.set_race(tail); return True
+        if verb == "class" and tail:
+            self.set_class(tail); return True
+        if verb == "align" and tail:
+            self.set_alignment(tail); return True
+        if verb == "name":
+            self.set_name(tail); return True
+        if verb == "gender":
+            self.set_gender(tail); return True
+        if verb == "handedness":
+            self.roll_handedness(); return True
+        if verb == "exstr":
+            self.roll_exceptional_strength(); return True
+        if verb == "age" and tail:
+            try:
+                self.set_age_level(int(tail))
+            except ValueError:
+                return False
+            return True
+        if verb == "addweapon" and tail:
+            self.add_weapon(tail); return True
+        if verb == "rmweapon" and tail:
+            self.remove_weapon(tail); return True
+        if verb == "ambi":
+            self.toggle_ambidexterity(); return True
+        if verb == "addprof" and tail:
+            self.add_proficiency(tail); return True
+        if verb == "rmprof" and tail:
+            self.remove_proficiency(tail); return True
+        if verb == "profplus" and tail:
+            self.add_proficiency_slot(tail); return True
+        if verb == "profminus" and tail:
+            self.remove_proficiency_slot(tail); return True
+        if verb == "money":
+            self.roll_money(); return True
+        if verb == "buy" and tail:
+            self.buy_item(tail); return True
+        if verb == "sell" and tail:
+            self.sell_item(tail); return True
+        if verb == "wear" and tail:
+            self.toggle_worn(tail); return True
+        if verb == "addspell" and tail:
+            self.add_spell(tail); return True
+        if verb == "rmspell" and tail:
+            self.remove_spell(tail); return True
+        return False

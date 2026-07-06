@@ -9,16 +9,24 @@ import os
 import re
 import sys
 import json
-import sqlite3
 from pathlib import Path
 from urllib.parse import unquote
-from collections import defaultdict
 
 from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from chargen_html import generate as generate_chargen_html
+from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
+import db
+import toc
+import toc_html
+from navigation import History
 import askscreen_html
+import charactermancer_html
+import proficiencies_html
+import char_rules as cr
+from charactermancer import Charactermancer, STEPS
+from character import Character
 from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
 from calculator import HouseRuleCalculator
 
@@ -359,33 +367,8 @@ class SearchWorker(QThread):
 
     def run(self):
         try:
-            conn = sqlite3.connect(self.db_path)
-            c    = conn.cursor()
-            fts_query = f'"{self.query.replace(chr(34), "")}"'
-            try:
-                c.execute(
-                    """SELECT p.page_url, p.title, p.book_name, p.book_code,
-                              snippet(pages_fts, 2, '**', '**', '…', 25) AS snip
-                       FROM   pages_fts
-                       JOIN   pages p ON pages_fts.page_url = p.page_url
-                       WHERE  pages_fts MATCH ?
-                       ORDER  BY rank
-                       LIMIT  300""",
-                    (fts_query,),
-                )
-            except Exception:
-                plain = " ".join(self.query.split())
-                c.execute(
-                    """SELECT p.page_url, p.title, p.book_name, p.book_code,
-                              snippet(pages_fts, 2, '**', '**', '…', 25) AS snip
-                       FROM   pages_fts
-                       JOIN   pages p ON pages_fts.page_url = p.page_url
-                       WHERE  pages_fts MATCH ?
-                       ORDER  BY rank
-                       LIMIT  300""",
-                    (plain,),
-                )
-            rows = c.fetchall()
+            conn = db.connect(self.db_path)
+            rows = db.search_pages(conn, self.query)
             conn.close()
             self.results_ready.emit(rows)
         except Exception:
@@ -445,6 +428,10 @@ class ContentView(QWidget):
             self._dnd_page = DnDPage()
             self._dnd_page.dnd_navigate.connect(self.page_requested)
             self._dnd_page.dnd_navigate_newtab.connect(self.page_requested_newtab)
+            # Paint a dark base while a page loads, so there's no white flash before
+            # the content's own CSS background renders (most visible on the Spells
+            # screen, which loads from a file:// URL).
+            self._dnd_page.setBackgroundColor(QColor("#1a1c26"))
             self._view = QWebEngineView()
             self._view.setPage(self._dnd_page)
             # Zoom factor resets whenever new content loads, so re-apply it each time.
@@ -553,8 +540,7 @@ class TabContext:
     """Holds all state that belongs to one content tab."""
     def __init__(self, view: ContentView):
         self.view                          = view
-        self.history:       list[str]      = []
-        self.history_pos:   int            = -1
+        self.nav                           = History()
         self.current_page_url: str | None  = None
 
 
@@ -563,8 +549,8 @@ class TabContext:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.db = sqlite3.connect(str(DB_PATH))
-        self.user_db = sqlite3.connect(str(USER_DB_PATH))
+        self.db = db.connect(DB_PATH)
+        self.user_db = db.connect(USER_DB_PATH)
         self._init_user_db()
         self._settings = QSettings(str(_user_data_dir() / "settings.ini"), QSettings.IniFormat)
         self._search_worker: SearchWorker | None = None
@@ -576,6 +562,10 @@ class MainWindow(QMainWindow):
         self._ask_worker = None
         self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
         self._calc = None                   # floating house-rule calculator window
+        self._spells_file = None            # cached temp file for the Spells screen
+        self._prof_file = None              # cached temp file for the Proficiencies book
+        self._all_spells = None             # lazily-loaded spell list for the builder
+        self._cm = None                     # in-progress Charactermancer build (window-level)
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -593,25 +583,8 @@ class MainWindow(QMainWindow):
 
     def _init_user_db(self):
         """Create the bookmarks table in the writable user DB, migrating any legacy rows."""
-        c = self.user_db.cursor()
-        c.execute(
-            "CREATE TABLE IF NOT EXISTS bookmarks ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "page_url TEXT UNIQUE, "
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
-        self.user_db.commit()
-        # One-time migration: copy bookmarks that used to live in the bundled DB.
-        c.execute("SELECT COUNT(*) FROM bookmarks")
-        if c.fetchone()[0] == 0:
-            try:
-                old = self.db.cursor()
-                old.execute("SELECT page_url FROM bookmarks ORDER BY created_at")
-                for (url,) in old.fetchall():
-                    c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)", (url,))
-                self.user_db.commit()
-            except sqlite3.Error:
-                pass  # no legacy bookmarks table — nothing to migrate
+        db.ensure_bookmarks_schema(self.user_db)
+        db.migrate_legacy_bookmarks(self.user_db, self.db)
 
     # ── Per-tab properties (redirect to the active TabContext) ────────────────
 
@@ -620,20 +593,8 @@ class MainWindow(QMainWindow):
         return self._tabs[self._content_tabs.currentIndex()].view
 
     @property
-    def _history(self) -> list:
-        return self._tabs[self._content_tabs.currentIndex()].history
-
-    @_history.setter
-    def _history(self, val: list):
-        self._tabs[self._content_tabs.currentIndex()].history = val
-
-    @property
-    def _history_pos(self) -> int:
-        return self._tabs[self._content_tabs.currentIndex()].history_pos
-
-    @_history_pos.setter
-    def _history_pos(self, val: int):
-        self._tabs[self._content_tabs.currentIndex()].history_pos = val
+    def _nav(self) -> History:
+        return self._tabs[self._content_tabs.currentIndex()].nav
 
     @property
     def current_page_url(self):
@@ -785,6 +746,16 @@ class MainWindow(QMainWindow):
         self.chargen_btn.setCursor(Qt.PointingHandCursor)
         self.chargen_btn.clicked.connect(lambda: self._show_chargen())
 
+        self.spells_btn = QPushButton("📖  Spells")
+        self.spells_btn.setCursor(Qt.PointingHandCursor)
+        self.spells_btn.setToolTip("The 2e Spell Compendium — every wizard & priest spell")
+        self.spells_btn.clicked.connect(lambda: self._show_spells())
+
+        self.cm_btn = QPushButton("🧙  Character Builder")
+        self.cm_btn.setCursor(Qt.PointingHandCursor)
+        self.cm_btn.setToolTip("Build a 2e character step by step (house rules included)")
+        self.cm_btn.clicked.connect(lambda: self._show_charactermancer())
+
         self.ask_btn = QPushButton("✦  Jarvis")
         self.ask_btn.setCursor(Qt.PointingHandCursor)
         self.ask_btn.setToolTip("Ask a 2e rules question in plain English (local AI assistant)")
@@ -800,6 +771,8 @@ class MainWindow(QMainWindow):
         nl.addWidget(self.calc_btn)
         nl.addStretch()
         nl.addWidget(self.ask_btn)
+        nl.addWidget(self.cm_btn)
+        nl.addWidget(self.spells_btn)
         nl.addWidget(self.chargen_btn)
         nl.addWidget(self.actions_btn)
         nl.addWidget(self.dmscreen_btn)
@@ -974,243 +947,21 @@ class MainWindow(QMainWindow):
 
     # ── Chapter detection ──────────────────────────────────────────────────
 
-    @staticmethod
-    def _extract_chapter_name(subtopic: str) -> str:
-        m = re.match(
-            r"^(.+?)--\s*(Chapter\s+\d+|Part\s+\d+|Book\s+\d+|Appendix\s+\w+)",
-            subtopic, re.I,
-        )
-        if m:
-            return f"{m.group(2).strip()}: {m.group(1).strip()}"
-        return subtopic.split("(")[0].strip()
-
     def _get_chapters(self, book_code: str) -> list[dict]:
-        c = self.db.cursor()
-        c.execute(
-            """SELECT DISTINCT te.page_url, te.subtopic
-               FROM   toc_entries te
-               WHERE  te.book_code = ?
-               ORDER  BY te.page_url""",
-            (book_code,),
+        return toc.build_chapters(
+            db.toc_entries(self.db, book_code),
+            db.chapter_markers(self.db, book_code),
         )
-        all_entries = c.fetchall()
-        if not all_entries:
-            return []
-
-        c.execute(
-            """SELECT te.subtopic, te.page_url
-               FROM   toc_entries te
-               WHERE  te.book_code = ?
-                 AND  (te.subtopic LIKE '%-- Chapter %'
-                    OR te.subtopic LIKE '%-- Part %'
-                    OR te.subtopic LIKE '%-- Book %'
-                    OR te.subtopic LIKE '%-- Appendix %')
-               ORDER  BY te.page_url""",
-            (book_code,),
-        )
-        markers = c.fetchall()
-        return (
-            self._chapters_from_markers(all_entries, markers)
-            if markers
-            else self._chapters_by_letter(all_entries)
-        )
-
-    def _chapters_from_markers(self, all_entries, markers) -> list[dict]:
-        marker_map = {url: sub for sub, url in markers}
-        marker_set = set(marker_map)
-        chapters, pre, current = [], [], None
-
-        for page_url, subtopic in all_entries:
-            if page_url in marker_set:
-                if current is not None:
-                    chapters.append(current)
-                elif pre:
-                    chapters.append({"name": "Introduction", "page_url": pre[0][0], "entries": pre})
-                    pre = []
-                current = {
-                    "name":     self._extract_chapter_name(marker_map[page_url]),
-                    "page_url": page_url,
-                    "entries":  [(page_url, subtopic)],
-                }
-            elif current is not None:
-                current["entries"].append((page_url, subtopic))
-            else:
-                pre.append((page_url, subtopic))
-
-        if current is not None:
-            chapters.append(current)
-        if pre:
-            chapters.insert(0, {"name": "Introduction", "page_url": pre[0][0], "entries": pre})
-        return chapters
-
-    def _chapters_by_letter(self, all_entries) -> list[dict]:
-        by_letter = defaultdict(list)
-        for page_url, subtopic in all_entries:
-            letter = subtopic[0].upper() if subtopic else "#"
-            by_letter[letter].append((page_url, subtopic))
-        return [
-            {"name": letter, "page_url": entries[0][0], "entries": entries}
-            for letter, entries in sorted(by_letter.items())
-        ]
 
     # ── TOC page generation ────────────────────────────────────────────────
 
     def _generate_toc_html(self, book_code: str, chapters: list[dict]) -> str:
-        book_name  = BOOK_NAMES.get(book_code, book_code)
-        accent     = BOOK_ACCENT_COLORS.get(book_code, "#8b0000")
-        hr_by_chap = self._get_all_house_rules_for_book(book_code)
-
-        rows = ""
-        for i, ch in enumerate(chapters, 1):
-            count = len(ch["entries"])
-            num   = f"{i:02d}"
-            if ch.get("page_url"):
-                name_html = f'<a href="dnd:///{ch["page_url"]}">{ch["name"]}</a>'
-            else:
-                name_html = ch["name"]
-
-            # Find house rules whose keyword appears in this chapter's name
-            ch_rules: list = []
-            for kw, rules in hr_by_chap.items():
-                if (kw + ":") in ch["name"] or ch["name"] == kw:
-                    ch_rules.extend(rules)
-
-            badge = ""
-            hr_block = ""
-            if ch_rules:
-                badge = (
-                    f' <span style="background:{accent}22;color:{accent};font-size:9px;'
-                    f'font-weight:700;padding:2px 7px;border-radius:3px;'
-                    f'letter-spacing:.06em;vertical-align:middle;">⚔ HR</span>'
-                )
-                by_cat: dict = {}
-                for cat, text in ch_rules:
-                    by_cat.setdefault(cat, []).append(text)
-                inner = ""
-                for cat, texts in by_cat.items():
-                    inner += f'<div class="hr-cat">{cat}</div><ul class="hr-list">'
-                    for text in texts:
-                        inner += f"<li>{text}</li>"
-                    inner += "</ul>"
-                hr_block = f'<div class="hr-block">{inner}</div>'
-
-            rows += (
-                f'    <div class="row">'
-                f'<span class="num">{num}</span>'
-                f'<span class="name">{name_html}{badge}</span>'
-                f'<span class="count">{count}</span>'
-                f'</div>\n'
-                f'{hr_block}'
-            )
-
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<style>
-  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: #2a2d36;
-    min-height: 100vh;
-    padding: 56px 72px;
-  }}
-  .book-tag {{
-    display: inline-block;
-    background: {accent}18;
-    color: {accent};
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 4px;
-    margin-bottom: 14px;
-  }}
-  h1 {{
-    font-size: 2.4em;
-    font-weight: 800;
-    color: #e4e6f0;
-    line-height: 1.1;
-    margin-bottom: 6px;
-  }}
-  .divider {{
-    height: 3px;
-    width: 48px;
-    background: {accent};
-    border-radius: 2px;
-    margin: 18px 0 36px;
-  }}
-  .toc {{ max-width: 720px; }}
-  .row {{
-    display: flex;
-    align-items: baseline;
-    gap: 18px;
-    padding: 13px 10px;
-    border-radius: 8px;
-    transition: background .12s;
-    cursor: default;
-  }}
-  .row:hover {{ background: #323642; }}
-  .num {{
-    font-size: 11px;
-    font-weight: 700;
-    color: #bdc3d0;
-    min-width: 22px;
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
-  }}
-  .name {{
-    flex: 1;
-    font-size: 15px;
-    color: #c8cad8;
-    font-weight: 500;
-  }}
-  .name a {{ color: {accent}; text-decoration: none; }}
-  .name a:hover {{ text-decoration: underline; }}
-  .count {{
-    font-size: 12px;
-    color: #9ca3af;
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-  }}
-  .count::after {{ content: " entries"; }}
-  .hr-block {{
-    margin: 0 0 6px 50px;
-    padding: 10px 14px 12px;
-    background: {accent}0f;
-    border-left: 2px solid {accent}55;
-    border-radius: 0 4px 4px 0;
-  }}
-  .hr-cat {{
-    color: {accent};
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-    margin-top: 10px;
-  }}
-  .hr-cat:first-child {{ margin-top: 0; }}
-  .hr-list {{
-    margin: 0 0 0 14px;
-    padding: 0;
-    color: #9ca3b8;
-    font-size: 12px;
-    line-height: 1.7;
-  }}
-  hr.sep {{ border: none; border-top: 1px solid #3a3e50; margin: 2px 0; }}
-</style>
-</head>
-<body>
-  <div class="book-tag">2nd Edition AD&amp;D</div>
-  <h1>{book_name}</h1>
-  <div class="divider"></div>
-  <div class="toc">
-{rows}
-  </div>
-</body>
-</html>"""
+        return toc_html.book_toc(
+            BOOK_NAMES.get(book_code, book_code),
+            BOOK_ACCENT_COLORS.get(book_code, "#8b0000"),
+            chapters,
+            self._get_all_house_rules_for_book(book_code),
+        )
 
     # ── Browse tree ────────────────────────────────────────────────────────
 
@@ -1267,6 +1018,29 @@ class MainWindow(QMainWindow):
 
             self.browse_tree.addTopLevelItem(book_item)
 
+        # ── The nonweapon-proficiency sourcebook (generated, not from the DB) ──
+        # A browsable book node whose chapters are A–Z and whose entries jump to
+        # each skill's anchor in the generated proficiencies page.
+        prof_item = QTreeWidgetItem([f"  {cr.PROFICIENCY_BOOK}"])
+        prof_item.setFont(0, QFont("Segoe UI", 12, QFont.Bold))
+        prof_item.setForeground(0, QColor(proficiencies_html.ACCENT))
+        prof_item.setData(0, Qt.UserRole, ("profbook", "proficiencies"))
+        for letter, profs in proficiencies_html.grouped().items():
+            letter_item = QTreeWidgetItem([f"  {letter}"])
+            letter_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+            letter_item.setForeground(0, QColor("#8a90a8"))
+            letter_item.setData(0, Qt.UserRole, ("profnav", "letter-" + letter))
+            for p in profs:
+                entry_item = QTreeWidgetItem([f"   {p.name}"])
+                entry_item.setFont(0, QFont("Segoe UI", 10))
+                entry_item.setForeground(0, QColor("#7a8098"))
+                entry_item.setData(0, Qt.UserRole,
+                                   ("profnav", "prof-" + proficiencies_html.slug(p.name)))
+                letter_item.addChild(entry_item)
+                total_entries += 1
+            prof_item.addChild(letter_item)
+        self.browse_tree.addTopLevelItem(prof_item)
+
         book_count = self.browse_tree.topLevelItemCount()
         self.status.showMessage(
             f"  {book_count} books  ·  {total_entries} entries"
@@ -1280,6 +1054,10 @@ class MainWindow(QMainWindow):
 
         if kind == "book":
             self._show_toc(value)
+        elif kind == "profbook":
+            self._navigate(value)                       # "proficiencies"
+        elif kind == "profnav" and value:
+            self._navigate("proficiencies#" + value)     # scroll to an anchor
         elif kind == "chapter" and value:
             self._load_page(value)
         elif kind == "entry" and value:
@@ -1338,6 +1116,10 @@ class MainWindow(QMainWindow):
         if url == "ask-stop":
             self._ask_stop()
             return
+        # Character-builder actions are applied in place (no history entry).
+        if url.startswith("cm/"):
+            self._cm_action(url[len("cm/"):])
+            return
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
@@ -1347,17 +1129,14 @@ class MainWindow(QMainWindow):
         self._navigate(self._link_to_destination(url))
 
     def _on_jarvis_page(self) -> bool:
-        h, p = self._history, self._history_pos
-        return bool(h) and 0 <= p < len(h) and h[p] == "ask"
+        return self._nav.current() == "ask"
 
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
         if add_to_history:
-            self._history = self._history[: self._history_pos + 1]
-            self._history.append(dest)
-            self._history_pos = len(self._history) - 1
+            self._nav.push(dest)
         self._update_nav_buttons()
 
     def _render_destination(self, dest: str) -> bool:
@@ -1366,6 +1145,13 @@ class MainWindow(QMainWindow):
             return self._render_toc(dest[4:])
         if dest == "ask":
             return self._render_ask()
+        if dest == "spells":
+            return self._render_spells()
+        if dest == "charactermancer":
+            return self._render_charactermancer()
+        if dest == "proficiencies" or dest.startswith("proficiencies#"):
+            frag = dest.split("#", 1)[1] if "#" in dest else ""
+            return self._render_proficiencies(frag)
         if dest in self._screens:
             return self._render_screen(dest)
         return self._render_page(dest)
@@ -1378,6 +1164,149 @@ class MainWindow(QMainWindow):
         self._set_tab_title(title)
         self.status.showMessage(status)
         return True
+
+    def _load_spells(self) -> list:
+        return db.all_spells(self.db)
+
+    def _render_spells(self) -> bool:
+        # The full compendium is ~1.9 MB of HTML — over QtWebEngine's setHtml data-URL
+        # limit — so render it once to a temp file and load it as a file:// URL.
+        if self._spells_file is None:
+            rows = self._load_spells()
+            html = (generate_spells_html(rows) if rows else
+                    "<!doctype html><body style='background:#14151d;color:#c8cad8;"
+                    "font-family:sans-serif;padding:40px'>No spell data found — run "
+                    "<code>build_spells.py</code>.</body>")
+            path = USER_DB_PATH.parent / "spells_screen.html"
+            path.write_text(html, encoding="utf-8")
+            self._spells_file = path
+        self.content._view.setUrl(QUrl.fromLocalFile(str(self._spells_file)))
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Spells")
+        self.status.showMessage("  Spell Compendium  ·  Wizard & Priest, all levels")
+        return True
+
+    def _render_proficiencies(self, fragment: str = "") -> bool:
+        """Render the nonweapon-proficiency sourcebook as a browsable page. Written
+        once to a temp file and loaded as a file:// URL so `#prof-<slug>` anchors
+        from the sidebar and the A–Z index scroll natively."""
+        if self._prof_file is None:
+            path = USER_DB_PATH.parent / "proficiencies_screen.html"
+            path.write_text(proficiencies_html.generate(), encoding="utf-8")
+            self._prof_file = path
+        url = QUrl.fromLocalFile(str(self._prof_file))
+        if fragment:
+            url.setFragment(fragment)
+        self.content._view.setUrl(url)
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Nonweapon Proficiencies")
+        self.status.showMessage(f"  {cr.PROFICIENCY_BOOK}  ·  Nonweapon Proficiencies")
+        return True
+
+    def _render_charactermancer(self) -> bool:
+        """Render the interactive character builder's current step. The build is
+        window-level state (self._cm) so leaving and returning keeps your progress."""
+        if self._cm is None:
+            self._cm = Charactermancer()
+        db.ensure_characters_schema(self.user_db)
+        saved = db.all_characters(self.user_db)
+        self._set_spell_catalog()
+        self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Character Builder")
+        self.status.showMessage(f"  Character Builder  ·  {self._cm.title}")
+        return True
+
+    def _set_spell_catalog(self):
+        """Load the level-1 spell list for the build's class onto the controller so
+        the Spells step can render and validate picks. Empty for non-casters."""
+        group = self._cm.character.spellcasting_group()
+        if not group:
+            self._cm.spell_catalog = []
+            return
+        if self._all_spells is None:
+            self._all_spells = db.all_spells(self.db)
+        self._cm.spell_catalog = [s for s in self._all_spells
+                                  if s.get("caster") == group and s.get("level") == 1]
+
+    def _cm_action(self, path: str):
+        """Apply a cm/ link action to the builder and re-render it in place. Save/
+        load/delete touch the user DB and so live here rather than in the pure
+        controller; everything else is delegated to Charactermancer.dispatch."""
+        if self._cm is None:
+            self._cm = Charactermancer()
+        self._set_spell_catalog()          # so addspell validates against the class
+        if path == "restart":
+            self._cm = Charactermancer()
+        elif path == "save":
+            self._cm_save()
+        elif path.startswith("load/"):
+            self._cm_load(path[len("load/"):])
+        elif path.startswith("delete/"):
+            self._cm_delete(path[len("delete/"):])
+        elif path == "roll20export":
+            self._cm_export_roll20()       # copies JSON to clipboard; keep the status note
+            return
+        else:
+            self._cm.dispatch(unquote(path))
+        self._render_charactermancer()
+
+    def _cm_export_roll20(self):
+        """Build the Roll20 import JSON for the current character, enrich its spells
+        from the spell DB, and copy it to the clipboard for pasting into the sheet."""
+        import roll20_export
+        from PyQt5.QtWidgets import QApplication
+        if self._all_spells is None:
+            self._all_spells = db.all_spells(self.db)
+        details = {s["name"]: {"level": s.get("level"), "school": s.get("school"),
+                               "range": s.get("range"), "casting_time": s.get("casting_time"),
+                               "duration": s.get("duration"), "aoe": s.get("aoe"),
+                               "save": s.get("save"), "damage": s.get("damage"),
+                               "materials": s.get("materials"), "components": s.get("components"),
+                               "description": s.get("description")}
+                   for s in self._all_spells}
+        data = roll20_export.character_to_roll20(self._cm.character, details)
+        QApplication.clipboard().setText(json.dumps(data, indent=2))
+        name = self._cm.character.name or "character"
+        self.status.showMessage(
+            f"  Roll20 JSON for {name} copied — paste into the sheet's Settings → Import box")
+
+    def _cm_save(self):
+        c = self._cm.character
+        db.ensure_characters_schema(self.user_db)
+        data = json.dumps(c.to_dict())
+        name = c.name or "Unnamed"
+        if self._cm.saved_id:
+            db.update_character(self.user_db, self._cm.saved_id,
+                                name, c.race, c.char_class, c.alignment, data)
+        else:
+            self._cm.saved_id = db.insert_character(
+                self.user_db, name, c.race, c.char_class, c.alignment, data)
+
+    def _cm_load(self, cid: str):
+        try:
+            cid = int(cid)
+        except ValueError:
+            return
+        raw = db.get_character(self.user_db, cid)
+        if not raw:
+            return
+        cm = Charactermancer(character=Character.from_dict(json.loads(raw)))
+        cm.saved_id = cid
+        cm.index = len(STEPS) - 1        # a saved build opens on its finished sheet
+        self._cm = cm
+
+    def _cm_delete(self, cid: str):
+        try:
+            cid = int(cid)
+        except ValueError:
+            return
+        db.delete_character(self.user_db, cid)
+        if self._cm and self._cm.saved_id == cid:
+            self._cm.saved_id = None
 
     def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])
@@ -1393,6 +1322,8 @@ class MainWindow(QMainWindow):
     def _show_splash(self):   self._navigate("splash")
     def _show_dmscreen(self): self._navigate("dmscreen")
     def _show_actions(self):  self._navigate("actions")
+    def _show_spells(self):   self._navigate("spells")
+    def _show_charactermancer(self): self._navigate("charactermancer")
     def _show_chargen(self):  self._navigate("chargen")
     def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
@@ -1407,8 +1338,24 @@ class MainWindow(QMainWindow):
 
     def _ask_stop(self):
         w = getattr(self, "_ask_worker", None)
-        if w is not None and w.isRunning():
+        if w is None:
+            return
+        try:
+            running = w.isRunning()
+        except RuntimeError:
+            # The worker finished and Qt's deleteLater already destroyed the
+            # underlying C++ object; our Python reference is stale. Nothing to
+            # stop — just drop the dangling reference.
+            self._ask_worker = None
+            return
+        if running:
             w.cancel()
+
+    def _ask_worker_done(self, *_):
+        """Drop the finished worker so a later _ask_stop can't touch a deleted
+        C++ object (worker.deleteLater runs right after this)."""
+        if self.sender() is getattr(self, "_ask_worker", None):
+            self._ask_worker = None
 
     def _render_ask(self, force_setup: bool = False) -> bool:
         """Render the Jarvis page fresh (Ollama setup help, or an empty ask box)."""
@@ -1453,6 +1400,8 @@ class MainWindow(QMainWindow):
         worker.delta.connect(self._ask_delta)
         worker.finished.connect(self._ask_finished)
         worker.failed.connect(self._ask_failed)
+        worker.finished.connect(self._ask_worker_done)
+        worker.failed.connect(self._ask_worker_done)
         worker.finished.connect(worker.deleteLater)
         worker.failed.connect(worker.deleteLater)
         self._ask_worker = worker
@@ -1504,99 +1453,29 @@ class MainWindow(QMainWindow):
 
     def _get_all_house_rules_for_book(self, book_code: str) -> dict:
         """Return {chapter_keyword: [(category, rule_text)]} for this book, or {} if table missing."""
-        try:
-            c = self.db.cursor()
-            c.execute(
-                "SELECT chapter_keyword, category, rule_text FROM house_rules "
-                "WHERE book_codes LIKE ? ORDER BY id",
-                (f"%{book_code}%",),
-            )
-            result: dict = {}
-            for kw, cat, text in c.fetchall():
-                result.setdefault(kw, []).append((cat, text))
-            return result
-        except Exception:
-            return {}
+        result: dict = {}
+        for kw, cat, text in db.house_rules_for_book(self.db, book_code):
+            result.setdefault(kw, []).append((cat, text))
+        return result
 
     def _get_chapter_house_rules(self, page_url: str, book_code: str) -> list:
         """Return [(category, rule_text)] for the chapter this page belongs to, or []."""
-        try:
-            c = self.db.cursor()
-            c.execute(
-                """SELECT subtopic FROM toc_entries
-                   WHERE book_code = ? AND page_url <= ?
-                     AND (subtopic LIKE '%-- Chapter %' OR subtopic LIKE '%-- Part %'
-                          OR subtopic LIKE '%-- Book %' OR subtopic LIKE '%-- Appendix %')
-                   ORDER BY page_url DESC LIMIT 1""",
-                (book_code, page_url),
-            )
-            row = c.fetchone()
-            if not row:
-                return []
-            m = re.search(r"(Chapter\s+\d+|Part\s+\d+)", row[0], re.I)
-            if not m:
-                return []
-            chapter_keyword = m.group(1)
-            c.execute(
-                "SELECT category, rule_text FROM house_rules "
-                "WHERE chapter_keyword = ? AND book_codes LIKE ? ORDER BY id",
-                (chapter_keyword, f"%{book_code}%"),
-            )
-            return c.fetchall()
-        except Exception:
+        keyword = db.chapter_keyword_for_page(self.db, book_code, page_url)
+        if not keyword:
             return []
+        return db.chapter_house_rules(self.db, book_code, keyword)
 
     def _build_house_rules_callout(self, rules: list, book_code: str) -> str:
         """Build a slim, collapsed house-rules chip for the top of a rules page."""
-        accent = BOOK_ACCENT_COLORS.get(book_code, "#c9a84c")
-        by_cat: dict = {}
-        for cat, text in rules:
-            by_cat.setdefault(cat, []).append(text)
-
-        inner = ""
-        for cat, texts in by_cat.items():
-            items = "".join(f"<li>{text}</li>" for text in texts)
-            inner += f'<div class="hrx-cat" style="color:{accent}">{cat}</div><ul class="hrx-list">{items}</ul>'
-
-        return f"""<style>
-      .hrx {{ margin: 2px 0 26px; font-family:'Segoe UI',system-ui,sans-serif; }}
-      .hrx > summary {{ list-style:none; cursor:pointer; outline:none; user-select:none;
-        display:inline-flex; align-items:center; padding:6px 14px;
-        border-radius:7px; background:#23262f; border:1px solid #34384a;
-        color:#aeb4c6; font-size:12px; font-weight:600;
-        transition:background .12s, border-color .12s; }}
-      .hrx > summary:hover {{ background:#2a2e3c; border-color:{accent}; }}
-      .hrx > summary::-webkit-details-marker {{ display:none; }}
-      .hrx-ico {{ font-size:13px; }}
-      .hrx-txt {{ margin:0 10px; }}
-      .hrx-body {{ margin-top:10px; padding:12px 16px 14px; background:#1d2028;
-        border:1px solid #2a2e3b; border-left:3px solid {accent}; border-radius:8px; }}
-      .hrx-cat {{ font-size:10px; font-weight:700; letter-spacing:.09em;
-        text-transform:uppercase; margin:14px 0 5px; }}
-      .hrx-cat:first-child {{ margin-top:0; }}
-      .hrx-list {{ margin:0 0 0 18px; padding:0; color:#c2c6d6; font-size:13.5px; line-height:1.7; }}
-      .hrx-list li {{ margin-bottom:3px; }}
-    </style>
-    <details class="hrx">
-      <summary>
-        <span class="hrx-ico">&#x2694;&#xFE0F;</span>
-        <span class="hrx-txt">House rules affect this chapter</span>
-        <span class="hrx-ico">&#x2694;&#xFE0F;</span>
-      </summary>
-      <div class="hrx-body">{inner}</div>
-    </details>"""
+        return toc_html.house_rules_callout(
+            rules, BOOK_ACCENT_COLORS.get(book_code, "#c9a84c"))
 
     def _load_page(self, page_url: str, add_to_history: bool = True):
         """Public entry point for opening a scraped rules page (tree/results/bookmarks)."""
         self._navigate(page_url, add_to_history)
 
     def _render_page(self, page_url: str) -> bool:
-        c = self.db.cursor()
-        c.execute(
-            "SELECT content_html, title, book_name, book_code FROM pages WHERE page_url = ?",
-            (page_url,),
-        )
-        row = c.fetchone()
+        row = db.get_page(self.db, page_url)
         if not row:
             self.status.showMessage(f"  Not found: {page_url}")
             return False
@@ -1620,18 +1499,18 @@ class MainWindow(QMainWindow):
         return True
 
     def _go_back(self):
-        if self._history_pos > 0:
-            self._history_pos -= 1
-            self._navigate(self._history[self._history_pos], add_to_history=False)
+        dest = self._nav.back()
+        if dest is not None:
+            self._navigate(dest, add_to_history=False)
 
     def _go_forward(self):
-        if self._history_pos < len(self._history) - 1:
-            self._history_pos += 1
-            self._navigate(self._history[self._history_pos], add_to_history=False)
+        dest = self._nav.forward()
+        if dest is not None:
+            self._navigate(dest, add_to_history=False)
 
     def _update_nav_buttons(self):
-        self.back_btn.setEnabled(self._history_pos > 0)
-        self.fwd_btn.setEnabled(self._history_pos < len(self._history) - 1)
+        self.back_btn.setEnabled(self._nav.can_back())
+        self.fwd_btn.setEnabled(self._nav.can_forward())
         self.prev_btn.setEnabled(self._adjacent_page(-1) is not None)
         self.next_btn.setEnabled(self._adjacent_page(1) is not None)
 
@@ -1762,38 +1641,22 @@ class MainWindow(QMainWindow):
     def _toggle_bookmark(self):
         if not self.current_page_url:
             return
-        c = self.user_db.cursor()
-        c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
-        if c.fetchone():
-            c.execute("DELETE FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
-        else:
-            c.execute("INSERT OR IGNORE INTO bookmarks (page_url) VALUES (?)",
-                      (self.current_page_url,))
-        self.user_db.commit()
+        db.toggle_bookmark(self.user_db, self.current_page_url)
         self._update_bookmark_btn()
         self._load_bookmarks()
 
     def _update_bookmark_btn(self):
         if not self.current_page_url:
             return
-        c = self.user_db.cursor()
-        c.execute("SELECT id FROM bookmarks WHERE page_url = ?", (self.current_page_url,))
+        on = db.is_bookmarked(self.user_db, self.current_page_url)
         self.bookmark_btn.setText(
-            "★   Remove Bookmark" if c.fetchone() else "☆   Bookmark This Page"
+            "★   Remove Bookmark" if on else "☆   Bookmark This Page"
         )
 
     def _load_bookmarks(self):
         self.bookmarks_list.clear()
-        c = self.user_db.cursor()
-        c.execute("SELECT page_url FROM bookmarks ORDER BY created_at DESC")
-        bookmarked = [r[0] for r in c.fetchall()]
-        pc = self.db.cursor()
-        for page_url in bookmarked:
-            pc.execute(
-                "SELECT title, book_name, book_code FROM pages WHERE page_url = ?",
-                (page_url,),
-            )
-            prow = pc.fetchone()
+        for page_url in db.bookmark_urls(self.user_db):
+            prow = db.page_meta(self.db, page_url)
             title, book_name, book_code = prow if prow else (page_url, "", "")
             label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
             item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
@@ -1819,9 +1682,7 @@ class MainWindow(QMainWindow):
         remove = menu.addAction("Remove Bookmark")
         if menu.exec_(self.bookmarks_list.mapToGlobal(pos)) == remove:
             url = item.data(Qt.UserRole)
-            c   = self.user_db.cursor()
-            c.execute("DELETE FROM bookmarks WHERE page_url = ?", (url,))
-            self.user_db.commit()
+            db.remove_bookmark(self.user_db, url)
             self._load_bookmarks()
             if url == self.current_page_url:
                 self._update_bookmark_btn()
@@ -1830,9 +1691,7 @@ class MainWindow(QMainWindow):
 
     def _current_entry(self, ctx: "TabContext"):
         """The navigation entry currently shown in a tab, or None."""
-        if ctx.history and 0 <= ctx.history_pos < len(ctx.history):
-            return ctx.history[ctx.history_pos]
-        return None
+        return ctx.nav.current()
 
     def _restore_session(self):
         geo = self._settings.value("geometry")

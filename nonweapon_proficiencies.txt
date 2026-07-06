@@ -1,0 +1,607 @@
+﻿Acting
+Acting enables a character to skillfully portray various roles. Acting is most often used as a form of entertainment; it can also be useful in aiding a disguise. If both acting and disguise are known, the proficiency check for either is made with a +1 bonus.
+
+
+Proficiency checks are required only if the actor must portray a particularly difficult character or is attempting an "ad lib" role (i.e., a non-rehearsed role or on short notice).
+
+
+Administration
+A character with this proficiency is skilled in the management and accounting of enterprises ranging from the agriculture of an entire province to the vineyards of a single small monastery. He knows how to account for money, plan work, and supervise the collection of taxes or the sale of goods.
+
+
+Alchemy
+A character with the Alchemy proficiency can make any of the alchemical items in the alchemy document, given the proper tools and supplies. Making a stimulant like Gnome Dust requires access to the correct plants, but an alchemist knows how to process and distill the plant into its final form. The price to make something from the table is 75% of its sale value, although if large batches are being made, this can be brought down to 66% or even 50% with a great scale of industry. 
+
+
+Anatomy
+This proficiency reflects a character’s detailed knowledge of the structure and arrangement of the human body, including the location and function of bones, muscles, organs, and other soft tissues. 
+
+
+A spell caster can use this skill to repair corpses that have been badly damaged. With a successful proficiency check, the caster can strengthen and reinforce a body, making it more suitable for animation as a mindless undead. This provides a hit point bonus of +1 per die for skeletal remains, or a bonus of +2 hp per die for a creature to be animated as a zombie.
+
+
+Animal Handling
+Proficiency in this area enables a character to exercise a greater-than-normal degree of control over pack animals and beasts of burden. A successful proficiency check indicates that the character has succeeded in calming an excited or agitated animal; in contrast, a character without this proficiency has only a 20% chance of succeeding in the attempt.
+
+
+Animal Lore
+This proficiency enables a character to observe the actions or habitat of an animal and interpret what is going on. Actions can show how dangerous the creature is, whether it is hungry, protecting its young, or defending a nearby den. Furthermore, careful observation of signs and behaviors can even indicate the location of a water hole, animal herd, predator, or impending danger, such as a forest fire. The DM will secretly roll a proficiency check. A successful check means the character understood the basic actions of the creature. If the check fails by 4 or less, no information is gained. If the check fails by 5 or more, the character misinterprets the actions of the animal.
+
+
+A character may also imitate the calls and cries of animals that he is reasonably familiar with, based on his background. This ability is limited by volume. The roar of a tyrannosaurus rex would be beyond the abilities of a normal character. A successful proficiency check means that only magical means can distinguish the character's call from that of the true animal. The cry is sufficient to fool animals, perhaps frightening them away or luring them closer. A failed check means the sound is incorrect in some slight way. A failed call may still fool some listeners, but creatures very familiar with the cry automatically detect a false call. All other creatures and characters are allowed a Wisdom check to detect the fake.
+
+
+Finally, animal lore increases the chance of successfully setting snares and traps (for hunting) since the character knows the general habits of the creature hunted.
+
+
+Animal Training
+Characters with this proficiency can train one type of creature (declared when the proficiency is chosen) to obey simple commands and perform tricks. A character can spend additional proficiencies to train other types of creatures or can improve his skill with an already chosen type. Creatures typically trained are dogs, horses, falcons, pigeons, elephants, ferrets, and parrots. A character can choose even more exotic creatures and monsters with animal intelligence (although these are difficult to control).
+
+
+A trainer can work with up to three creatures at one time. The trainer may choose to teach general tasks or specific tricks. A general task gives the creature the ability to react to a number of nonspecific commands to do its job. Examples of tasks include guard and attack, carry a rider, perform heavy labor, hunt, track, or fight alongside soldiers (such as a war horse or elephant). A specific trick teaches the trained creature to do one specific action. A horse may rear on command, a falcon may pluck a designated object, a dog may attack a specific person, or a rat may run through a particular maze. With enough time, a creature can be trained to do both general tasks and specific tricks.
+
+
+Training for a general task requires three months of uninterrupted work. Training for a specific trick requires 2d6 weeks. At the end of the training time, a proficiency check is made. If successful, the animal is trained. If the die roll fails, the beast is untrainable. An animal can be trained in 2d4 general tasks or specific tricks, or any combination of the two.
+
+
+An animal trainer can also try to tame wild animals (preparing them for training later on). Wild animals can be tamed only when they are very young. The taming requires one month of uninterrupted work with the creature. At the end of the month, a proficiency check is made. If successful, the beast is suitable for training. If the check fails, the creature retains enough of its wild behavior to make it untrainable. It can be kept, though it must be leashed or caged.
+
+
+Appraising
+This proficiency is highly useful for thieves, as it allows characters to estimate the value and authenticity of antiques, art objects, jewelry, cut gemstones, or other crafted items they find (although the DM can exclude those items too exotic or rare to be well known). The character must have the item in hand to examine. A successful proficiency check (rolled by the DM) enables the character to estimate the value of the item to the nearest 100 or 1,000 gp and to identify fakes. On a failed check, the character cannot estimate a price at all. On a roll of 1, the character wildly misreads the value of the item, always to the detriment of the character.
+
+
+Arcanology
+The study of the history and development of magic is termed arcanology. A character with expertise in this field is familiar with the works of past wizards. If there was a source of powerful magic in the campaign’s past—for example, Netheril or Myth Drannor in the Forgotten Realms campaign setting—the arcanologist has a good idea of who the great mages were and what they were able to accomplish. Special magical items, spells, or forms of magic wielded by these ancient sorcerers are familiar to the arcanologist. With a successful proficiency check, the arcanologist can identify the general purpose and function of an ancient magical item; the DM may apply a penalty of –1 to –4 if the item comes from a region outside the arcanologist’s normal studies, or is especially rare or obscure. Note that this ability doesn’t help a character to identify items manufactured by the “modern” school or tradition of magic, whatever that may be.
+
+
+Armorsmithing
+This character can make all of the types of armor, given the proper materials and facilities. When making armor, the proficiency check is rolled at the end of the normal construction time.
+
+
+The time required to make armor is equal to two weeks per level of AC bonus. For example, a buckler shield would require two weeks of work, whereas a suit of full plate armor would require 18 weeks of work.
+
+
+If the proficiency check indicates failure but is within 4 of the amount needed for success, the armorer has created usable, but flawed, armor. Such armor functions as 1 AC worse than usual, although it looks like the armor it was intended to be. Only a character with armorer proficiency can detect the flaws, and this requires careful and detailed inspection.
+
+
+If the flawed armor is struck in melee combat with a natural die roll of 19 or 20, it breaks. The AC provided immediately worsens by 4 (although never below 0), and the broken armor hampers the character's movement. Until the character can remove the broken armor (a process requiring 1d4 rounds), the character moves at ½ of his normal rate and suffers a -4 penalty to all of his attack rolls.
+
+
+If an armorer is creating a suit of plate armor, the character who will use the armor must be present at least once a week during the creation of the armor, since such types of armor require very exact fitting.
+
+
+Artistic Ability
+Player characters with artistic ability are naturally accomplished in various forms of the arts. They have an inherent understanding of color, form, space, flow, tone, pitch, and rhythm. Characters with artistic ability must select one art form (painting, sculpture, composition, etc.) to be proficient in. Thereafter they can attempt to create artworks or musical compositions in their given field. Although it is not necessary to make a proficiency check, one can be made to determine the quality of the work. If a 20 is rolled on the check, the artist has created a work with some truly lasting value. If the check fails, the artist has created something aesthetically displeasing or just plain bad.
+
+
+Artistic ability also confers a +1 bonus to all proficiency checks requiring artistic skill--music or dance--and to attempts to appraise objects of art.
+
+
+Baking
+A character with this skill can bake breads, pies, cakes, cookies, and all sorts of baked goods. No check need be made unless something of exceptional skill is being attempted, or a large quantity is to be done in a tight time frame.
+
+
+Blacksmithing
+A character with blacksmithing proficiency is capable of making tools and implements from the basic metals: Iron, copper, lead, tin, zinc, brass, bronze, etc.. Use of the proficiency requires a forge with a coal-fed fire and bellows, as well as a hammer and anvil. The character cannot make armor or most weapons, but can craft crowbars, grappling hooks, horseshoes, nails, hinges, plows, and most other metal objects.
+
+
+Boating
+This proficiency allows the character to pilot any small boat, such as a kayak or canoe, operating it at maximum speed. It also allows him (or the character) to make minor repairs and improvements in these boats, such as waterproofing them and patching holes. A successful proficiency check enables the character to handle the craft in treacherous situations; for instance, maneuvering the boat through choppy water without capsizing it, or avoiding collisions when guiding it through a narrow channel choked with rocks or ice. Failure does not necessarily mean that the boat sinks, but it gets swept away by the current, or turned about, or moderately swamped—with everything and everyone inside getting wet. If the rough water continues, the character must make additional proficiency checks (every 1–6 rounds). The character’s proficiency rating suffers a –1 modifier for each failed check, indicating the difficulty of steering a boat that is slowly filling with water.
+
+
+Note that while the navigation and seamanship proficiencies deal with ships in oceans, seas, and other large bodies of water, the boating proficiency is confined to small craft on rivers, lakes, on oceans close to shore, and over similar terrain, usually on relatively calm waters.
+
+
+Bookbinding
+A character with this skill is familiar with the process of assembling a book. Bookbinding is a demanding task; the pages must be glued or sewn to a common backing of some kind, protected by various kinds of varnishes or treatments, and then fastened to a strong and durable cover. Additional chemicals or compounds to ward off mildew and deter moths and bookworms are a necessary precaution.
+
+
+Bookbinding is especially helpful for a wizard assembling a spell book. Normally, a wizard must pay a bookbinder 10 gp per page for a standard spellbook, or 20 gp per page for a traveling spell book—see Chapter 7 of the DMG . A wizard who does this work himself reduces these costs by 50%, although the process takes at least two weeks, plus one day per five pages. If the character passes a proficiency check, his spell book gains a +2 bonus to item saving throws due to the quality and craftsmanship of the work. In addition, the wizard must succeed in a proficiency check if he is dealing with unusual or unsuitable materials, such as metal sheets for pages or dragon scales for a cover.
+
+
+Bowyer / Fletcher
+This character can make bows and arrows.
+
+A weaponsmith is required to fashion arrowheads, but the bowyer/fletcher can perform all other necessary functions. The construction time for a long or shortbow is one week and 1d6 arrows can be made in one day.
+
+
+When the construction time for the weapon is completed, the player makes a proficiency check. If the check is successful, the weapon is of fine quality and will last for many years of normal use without breaking. If the check fails, the weapon is still usable, but has a limited life span: An arrow breaks on the first shot; a bow breaks if the character using it rolls an unmodified 1 on his 1d20 attack roll.
+
+
+Option: If a character wishes to create a weapon of truly fine quality and the DM allows it, the player can opt to use the following alternative procedure for determining the success of his attempt. When the proficiency check is made, any failure means that the weapon is useless. However, a successful check means that the weapon enables the character to add Strength bonuses to attack and damage rolls. 
+
+
+Brewing
+The character is trained in the art of brewing beers and other strong drinks. The character can prepare brewing formulas, select quality ingredients, set up and manage a brewery, control fermentation, and age the finished product.
+
+
+Bureaucracy
+This proficiency encompasses a working knowledge of governmental protocol and the skills necessary to navigate bureaucratic organizations. A character with this proficiency knows which official to approach and the best time to approach him (a tax collector's aide may have better access to information than the tax collector himself; a city clerk may be less harried and more helpful at the beginning of the month than at the end). He knows where government records are kept and the procedures for examining them. He knows how to circumvent sluggish or uncooperative bureaucrats. He obtains permits and other government documentation in half the normal time. No proficiency checks are needed for any of these functions.
+
+
+A character can also use Bureaucracy to turn the system against someone else. A successful proficiency check doubles the amount of time to make a government decision, causes a permit to be issued under the wrong name, or temporarily misplaces an important document.
+
+The Bureaucracy proficiency covers the governmental organizations in a particular region, usually the character's homeland. He may spend additional slots to expand the proficiency to other regions. Official organizations include government councils, regulatory boards, and church hierarchies. The proficiency is only effective when dealing with organizations of 10 or more members.
+
+
+Butchery
+This proficiency grants the character with it the skill of slaughtering and preparing an animal for consumption. Skin and furs can be removed without damaging them, the various cuts of meats are known, as are the techniques for preserving them (salting, smoking, etc.).
+
+
+Calligraphy
+A character with this proficiency is skilled at calligraphy. If they wish to produce an especially fancy work, a check might be called for. 
+
+
+Carpentry
+The carpentry proficiency enables the character to do woodworking jobs: building houses, cabinetry, joinery, etc. Tools and materials must be available. The character can build basic items from experience, without the need for plans. Unusual and more complicated items (a catapult, for example) require plans prepared by an engineer. Truly unusual or highly complex items (wooden clockwork mechanisms, for example) require a proficiency check.
+
+
+Cartography
+This proficiency grants skill at map making. A character can draw maps to scale, complete with complex land formations, coastal outlines, and other geographic features. The character must be reasonably familiar with the area being mapped.
+
+
+The DM makes a proficiency check in secret to determine the accuracy of the map. A successful proficiency check means that the map is correct in all significant details. If the roll fails, the map contains a few errors, possibly a significant one. A roll of exactly 1 means the map contains serious errors, making it useless.
+
+
+Charioteering
+A character with proficiency in this skill is able to safely guide a chariot, over any type of terrain that can normally be negotiated, at a rate 1/3 faster than the normal movement rate for a chariot driven by a character without this proficiency. Note that this proficiency does not impart the ability to move a chariot over terrain that it cannot traverse; even the best charioteer in the world cannot take such a vehicle into the mountains.
+
+
+Cobbling
+The character can fashion and repair shoes, boots, and sandals.
+
+
+Cooking
+Although all characters have rudimentary cooking skills, the character with this proficiency is an accomplished cook. A proficiency check is required only when attempting to prepare a truly magnificent meal worthy of a master chef.
+
+
+Dancing
+The character knows many styles and varieties of dance, from folk dances to formal court balls.
+
+
+Direction Sense
+This is the ability to keep one’s bearings on roadless, trackless land. Proficient characters will not get lost as long as they can either see the sky or have the use of a compass. This means that they can maintain track of a given direction, keeping themselves and their companions traveling in a straight line.
+
+
+Characters who possess a map and can track their direction of travel can arrive at specific points—towns, ferry crossings, bridges, monuments, wells, springs, etc.—without proficiency checks.
+
+
+If the map is slightly erroneous, or lacking in crucial details, the characters will have to make successful proficiency checks to accurately arrive at a specific point. This check can be modified for increased difficulty based on poor weather or major problems with the map.
+
+
+Embalming
+This skill covers the techniques of preserving the dead. No check need be made unless the character wishes to preserve the body above and beyond the normal lengths of time.
+
+
+Engineering
+The character is trained as a builder of both great and small things. Engineers can prepare plans for everything from simple machines (catapults, river locks, grist mills) to large buildings (fortresses, dams). A proficiency check is required only when designing something particularly complicated or unusual. An engineer must still find talented workmen to carry out his plan, but he is trained to supervise and manage their work.
+
+
+An engineer is also familiar with the principles of siegecraft and can detect flaws in the defenses of a castle or similar construction. He knows how to construct and use siege weapons and machines, such as catapults, rams, and screws.
+
+
+Etiquette
+This proficiency gives the character a basic understanding of the proper forms of behavior and address required in many different situations, especially those involving nobility and persons of rank. Thus, the character will know the correct title to use when addressing a duke, the proper steps of ceremony to greet visiting diplomats, gestures to avoid in the presence of dwarves, etc. For extremely unusual occurrences, a proficiency check must be made for the character to know the proper etiquette for the situation (an imperial visit, for example, is a sufficiently rare event).
+
+
+However, having the character know what is correct and actually do what is correct are two different matters. The encounters must still be role-played by the character. Knowledge of etiquette does not give the character protection from a gaffe or faux pas; many people who know the correct thing still manage to do the exact opposite.
+
+
+Farming
+The character has a knowledge of the basics of farming. This includes planting, harvesting, storing crops, tending animals, butchering, and other typical farming chores.
+
+
+Fire Building
+A character with fire-building proficiency does not normally need a tinderbox to start a fire. Given some dry wood and small pieces of tinder, he can start a fire in 2d20 minutes. Flint and steel are not required. Wet wood, high winds, or other adverse conditions increase the time to 3d20, and a successful proficiency check must be rolled to start a fire.
+
+
+Fishing
+The character is skilled in the art of fishing, be it with hook and line, net, or spear. Each hour the character spends fishing, roll a proficiency check. If the roll is failed, no fish are caught that hour. Otherwise, a hook and line or a spear will land fish equal to the difference between the die roll and the character's Wisdom score. A net will catch three times this amount.
+
+
+Of course, no fish can be caught where no fish are found. On the other hand, some areas teem with fish, such as a river or pool during spawning season. The DM may modify the results according to the situation.
+
+
+Folklore
+This proficiency gives a character a knowledge of various myths and legends of monstrous or wondrous creatures. Someone with folklore would be aware that silver weapons are needed to cause real harm to werewolves, or that vampires might have trouble crossing running water. Folklore is generally somewhat unreliable so the DM should make the check in secret every time a character wishes to use this proficiency. On a failure, the DM should give out some incorrect information as well. 
+
+
+Gaming
+The character knows most common games of chance and skill, including cards, dice, bones, draughts, and chess. When playing a game, the character may either play out the actual game (which may take too much time for some) or make a proficiency check, with success indicating victory. If two proficient characters play each other, the one with the highest successful die roll wins. A character with gaming proficiency can also attempt to cheat, thus gaining a +1 bonus to his ability score. If the proficiency check for the game is 1 to 4, however, the character has been caught cheating (even if he won the game).
+
+
+Gem Cutting
+A character with this proficiency can finish the rough gems that are discovered through mining at a rate of 1d10 stones per day. A gem cutter derives no benefit from the assistance of nonproficient characters. A gem cutter must work with a good light source and must have an assortment of chisels, small hammers, and specially hardened blades.
+
+
+Uncut gems, while still of value, are not nearly as valuable as the finished product. If the cutting is successful (as determined by a proficiency check), the gem cutter increases the value of a given stone to the range appropriate for its type. If a 20 is rolled, the work is exceptionally brilliant and the value of the gem falls into the range for the next most valuable gem (the DM has the relevant tables).
+
+
+Glass Blowing
+A character skilled at this trade can manufacture all kinds of glass containers, jars, or bottles. Creating symmetrical or precise pieces requires a proficiency check, but if a character is making items for usefulness instead of decoration, he can produce about 10 small containers, 5 medium containers, or 2 large ones in a day’s work. The character must have access to a specialized glazier’s workshop and furnace in order to make use of this skill.
+
+
+Healing
+A character proficient in healing knows how to use natural medicines and basic principles of first aid and doctoring. If the character tends another within one round of wounding (and makes a successful proficiency check), his ministrations restore 1d3 hit points (but no more hit points can be restored than were lost in the previous round). Only one healing attempt can be made on a character per day.
+
+
+If a wounded character remains under the care of someone with healing proficiency, that character can recover lost hit points at the rate of 1 per day even when traveling or engaging in non-strenuous activity. If the wounded character gets complete rest, he can recover 2 hit points per day while under such care. Only characters with both healing and herbalism proficiencies can help others recover at the rate of 3 hit points per day of rest. This care does not require a proficiency check, only the regular attention of the proficient character. Up to six patients can be cared for at any time.
+
+
+A character with healing proficiency can also attempt to aid a poisoned individual, provided the poison entered through a wound. If the poisoned character can be tended to immediately (the round after the character is poisoned) and the care continues for the next five rounds, the victim gains a +2 bonus to his saving throw (delay his saving throw until the last round of tending). No proficiency check is required, but the poisoned character must be tended to immediately (normally by sacrificing any other action by the proficient character) and cannot do anything himself. If the care and rest are interrupted, the poisoned character must immediately roll a normal saving throw for the poison. This result is unalterable by normal means (i.e., more healing doesn't help). Only characters with both healing and herbalism proficiencies can attempt the same treatment for poisons the victim has swallowed or touched (the character uses his healing to diagnose the poison and his herbalist knowledge to prepare a purgative).
+
+
+A character with healing proficiency can also attempt to diagnose and treat diseases. When dealing with normal diseases, a successful proficiency check automatically reduces the disease to its mildest form and shortest duration. Those who also have herbalism knowledge gain an additional +2 bonus to this check. A proficient character can also attempt to deal with magical diseases, whether caused by spells or creatures. In this case, a successful proficiency check diagnoses the cause of the disease. However, since the disease is magical in nature, it can be treated only by magical means.
+
+
+Heraldry
+The knowledge of heraldry enables the character to identify the different crests and symbols that denote different persons and groups. Heraldry comes in many forms and is used for many different purposes. It can be used to identify noblemen, families, guilds, sects, legions, political factions, and castes. The symbols may appear on flags, shields, helmets, badges, embroidery, standards, clothing, coins, and more. The symbols used may include geometric patterns, calligraphed lines of script, fantastic beasts, religious symbols, and magical seals (made for the express purpose of identification). Heraldry can vary from the highly formalized rules and regulations of late medieval Europe to the knowledge of different shield patterns and shapes used by African tribesmen.
+The character automatically knows the different heraldic symbols of his homeland and whom they are associated with. In addition, if the character makes a successful proficiency check, he can correctly identify the signs and symbols of other lands, provided he has at least a passing knowledge of the inhabitants of that land. His heraldry skill is of little use upon first entering a foreign land.
+
+
+Herbalism
+Those with herbalist knowledge can identify plants and fungus and prepare nonmagical potions, poultices, powders, balms, salves, ointments, infusions, and plasters for medical and pseudo-medical purposes. They can also prepare natural plant poisons and purgatives. The DM must decide the exact strength of such poisons based on the poison rules in the DMG. A character with both herbalism and healing proficiencies gains bonuses when using his healing talent (see the Healing proficiency).
+
+
+History, Ancient
+The character has learned the legends, lore, and history of some ancient time and place. The knowledge must be specific, just as a historian would specialize today in the English Middle Ages, the Italian Renaissance, or the Roman Republic before Caesar. (The DM either can have ancient periods in mind for his game or can allow the players to name and designate them.) Thus, a player character could know details about the Age of Thorac Dragonking or the Time of the Sea-Raiders or whatever else was available.
+
+
+The knowledge acquired gives the character familiarity with the principal legends, historical events, characters, locations, battles, breakthroughs (scientific, cultural, and magical), unsolved mysteries, crafts, and oddities of the time. The character must roll a proficiency check to identify places or things he encounters from that age. For example, Rath knows quite a bit about the Coming of the Trolls, a particularly dark period of dwarven history. Moving through some deep caverns, he and his companions stumble across an ancient portal, sealed for untold ages. Studying the handiwork, he realizes (rolls a successful proficiency check) that it bears several seals similar to those he has seen on “banned” portals from the time of Angnar, doorways to the legendary realm of Trolhel.
+
+
+History, Local
+The character is a storehouse of facts about the history of a region the size of a large county or a small province. The character knows when the ruined tower on the hill was built and who built it (and what happened to him), what great heroes and villains fought and fell at the old battlefield, what great treasure is supposed to be kept in a local temple, how the mayor of the next town miraculously grew hair on his balding pate, and more.
+
+
+The DM will provide information about local sites and events as the character needs to know them. Furthermore, the character can try to retell these events as entertaining stories. Once the subject is chosen, he can either make a proficiency check and, if successful, add that tale to his repertoire, or actually tell the story to other characters. If the character succeeds in entertaining them, the player need not make a proficiency roll for the character, since he has succeeded. The character can tell these stories to entertain others, granting him a +2 bonus to his Charisma for the encounter. But telling stories to hostile beings is probably not going to do any good.
+
+
+Hunting
+When in wilderness settings, the character can attempt to stalk and bring down game. A proficiency check must be made with a -1 penalty to the ability score for every nonproficient hunter in the party. If the die roll is successful, the hunter (and those with him) have come within 101 to 200 yards (100+1d100) of an animal. The group can attempt to close the range, but a proficiency check must be made for each 20 yards closed. If the stalking is successful, the hunter automatically surprises the game. The type of animal stalked depends on the nature of the terrain and the whim of the DM.
+
+
+Jeweler
+A proficient jeweler can make, with the right tools, various sorts and types of jewelry. Repairs and embellishments can be made to existing pieces as well. Knowing how to make jewelry and knowing what its worth are two different things. 
+
+
+Juggling
+The character can juggle, a talent useful for entertainments, diversions, and certain rare emergencies. When juggling normally (to entertain or distract), no proficiency check is required. A check is made when trying spectacular tricks ("Watch me eat this apple in mid-air!"). However, juggling also enables the character to attempt desperate moves. On a successful attack roll vs. AC 20 (not a proficiency check), the character can catch small items thrown to harm him (as opposed to items thrown for him to catch). Thus, the character could catch a dagger or a dart before it hits. If this attack roll fails, however, the character automatically suffers damage (sticking your hand in the path of a dagger is likely to hurt).
+
+
+Jumping
+The character can attempt exceptional leaps both vertically and horizontally. If the character has at least a 20-foot running start, he can leap (broad jump) 2d6+his level in feet. No character can broad jump more than six times his height, however. With the same start, he can leap vertically (high jump) 1d3 plus half his level in feet. No character can high jump more than 1-½ times his own height.
+
+
+From a standing start, a character with this proficiency can broad jump 1d6 plus half his level in feet and high jump only three feet.
+
+
+The character can also attempt vaults using a pole. A vault requires at least a 30-foot running start. If a pole is used, it must be four to 10 feet longer than the character's height. The vault spans a distance equal to 1-½ times the length of the pole. The character can clear heights equal to the height of the pole. He can also choose to land on his feet if the vault carries him over an obstacle no higher than ½ the height of his pole. Thus, using a 12-foot pole, the character could either vault through a window 12 feet off the ground (tumbling into the room beyond), land on his feet in an opening six feet off the ground, or vault across a moat 18 feet wide. In all cases, the pole is dropped at the end of the vault.
+
+
+Languages, Ancient
+The character has mastered a difficult and obscure tongue, now primarily found in the writings of pedantic sages and sorcerers. The main use of the language is to read tomes of ancient secrets written by long-dead mystics. This proficiency enables the character to either read and write or speak the language (his choice).
+
+
+Leatherworking
+This proficiency enables a character to tan and treat leather and to make clothing and other leather objects. The character can make leather armor, as well as backpacks, saddlebags, saddles, and all sorts of harnesses.
+
+
+Lumberjacking
+A character with the Lumberjacking proficiency is adept at felling and stripping trees. He can direct which way a tree will fall, identify which trees might be too warped to provide good wood for construction, and is knowledgeable about tree diseases and pests. If a tree needs to be felled in an exact direction, say to fall between two buildings without striking them, or to land just so as part of a trap, a proficiency check must be made. 
+
+
+Mathematics
+Having this proficiency makes a character familiar with all types of mathematics upto and including algebra, geometry, trigonometry, and statistics.
+
+
+Mining
+A character with mining proficiency is needed to site and supervise the operations of any mine. First, the character can attempt to determine what types of ores or gems can be found in a given area. To do this, he must spend at least a week searching a four-square-mile area. The DM may rule that more area must be searched to find anything of value and may thus increase the amount of time required. At the end of the search, the character can say what is likely to be found in this area. After this, the character can site the mine. On a successful proficiency check (made secretly by the DM), the character has found a good site to begin mining for any minerals that may be in the area. The check does not guarantee a successful mine, only that a particular site is the best choice in a given area. The DM must determine what minerals, if any, are to be found in the region of the mine. On a failed check, the character only thinks he has found a good site. Much effort is spent before the character is proved wrong, of course.
+
+
+Once the mine is in operation, a character with mining proficiency must remain on site to supervise all work. Although this is a steady job, most player characters will find it better to hire an NPC for this purpose.
+
+
+Mountaineering
+A character with this proficiency can make difficult and dangerous climbs up steep slopes and cliffs with the aid of spikes, ropes, etc. If a character with mountaineering proficiency leads a party, placing the pitons (spikes) and guiding the others, all in the party can gain the benefit of his knowledge. A mountaineer can guide a party up a cliff face it could not otherwise climb. A character with this proficiency gains a 10% bonus per proficiency slot spent to his chance to climb any surface. Note that mountaineering is not the same as the thief's climbing ability, since the latter does not require aids of any sort.
+
+
+Musical Instrument
+The character can play a specific musical instrument. An additional instrument can be added for every extra slot devoted to this proficiency. The character plays quite well, and no proficiency check is normally required. The DM may direct the character to make a proficiency check in what he feels are extraordinary circumstances.
+
+
+Navigation
+The character has learned the arts of navigating by the stars, studying currents, and watching for telltale signs of land, reefs, and hidden danger. This is not particularly useful on land. At sea, a successful proficiency check by the navigator reduces the chance of getting lost by 20 percent.
+ 
+Omen Reading
+There are hundreds of myths and superstitions about the art of divination, or predicting the future through the reading of signs or indications. A character with this proficiency is skilled in a form of divination and knows the proper ceremonies and observances to use in order to obtain a valid reading. He is also familiar with the various messages or indications that characterize a form of divination. Omen readers use dozens of different methods for their auguries, including astrology, numerology, reading palms, examining animal entrails, casting bones, dice, or runes, and burning incense to observe the smoke, just to name a few. The exact nature of the character’s expertise is up to the player.
+
+
+To use this proficiency, the omen reader phrases a general question about a course of action, such as “Is this a good day to start our journey?,” “Should we try to track the orcs to their lair, or wait for their next raid?,” or “When will the dragon return?” The DM then makes a proficiency check in secret; if the character fails, the DM can tell him that the signs were inconclusive, or make up a false answer for a spectacular failure (a natural 1 on the check, for instance). If the omen reader succeeds, the DM can give the character a vague answer based on his assessment of the situation. An omen is usually good, bad, or inconclusive, although an answer of “a day or two” or “proceed, but with caution” is acceptable as well. Omens aren’t guaranteed; if a party ignores a bad omen, they might succeed in their task anyway. An omen is nothing more than the DM’s best guess about a course of action.
+
+
+Performing the ceremony of reading an omen requires an hour or more. Special tools or supplies, such as rune sticks, may be necessary depending on the character’s favored form of omen reading. Some superstitious or primitive cultures may place a great deal of weight on omen reading, and a skilled diviner may be held in high regard by these people.
+
+
+Papermaking
+A character with this skill knows how to manufacture paper. This can be an invaluable skill for a wizard, since paper may be fairly rare in many campaign settings. Rag pulp, bark, linen, hemp, and wood were all used to make paper in medieval times. The material is pounded or pressed flat and treated with various chemical compounds to bind and strengthen it. At the DM’s option, the character may also be familiar with the manufacture of parchment and vellum. Parchment is finely-scraped animal skin, treated with lime and other chemicals; vellum is unusually supple and smooth parchment taken from very young animals.
+
+
+A wizard who makes his own paper can reduce the costs of manufacturing a spell book by 50%, although this requires one to two weeks of time and a suitable work area. Normally, a traveling spell book costs 20 gp per page, and a standard spell book costs 10 gp per page. If the wizard also knows the bookbinding nonweapon proficiency and binds the volume himself, the cost of the spell book is reduced by 75% altogether.
+
+
+Pottery
+A character with this proficiency can create any type of clay vessel or container commonly used in the campaign world. The character requires a wheel and a kiln, as well as a supply of clay and glaze. The character can generally create two small- or medium-sized items or one large-sized item per day. The pieces of pottery must then be fired in the kiln for an additional day.
+The raw materials involved cost 3 cp to make a small item, 5 cp to make a medium-sized item, and 1 sp to make a large item.
+
+
+Prestidigitation
+This is the art of street magic or sleight of hand, the trade of the magician. The character is skilled at concealing or manipulating small items and familiar with such tricks as pulling a coin from a child’s ear, separating two joined rings, or causing a pigeon or rabbit to vanish. For the most part, nothing more than manual dexterity and showmanship are required, and any kind of character may learn prestidigitation.
+
+
+There is no particular game effect for prestidigitation, although it is a form of entertainment and can earn a wizard his dinner with a good performance, or possibly distract or fool an NPC under very limited circumstances. For example, a wizard trying to conceal a wand or precious gem from a robber searching him at knifepoint might be able to hide the item with a successful proficiency check.
+
+
+Reading / Writing
+The character can read and write any modern language he can speak, provided there is someone available to teach the character (another PC, a hireling, or an NPC)
+
+
+Reading Lips
+The character can understand the speech of those he can see but not hear. When this proficiency is chosen, the player must specify what language the character can lip read (it must be a language the character can already speak). To use the proficiency, the character must be within 30 feet of the speaker and be able to see him speak. A proficiency check is made. If the check fails, nothing is learned. If the check is successful, 70% of the conversation is understood. Since certain sounds are impossible to differentiate, the understanding of a lip-read conversation is never better than this.
+
+
+Religion
+Characters with religion proficiency know the common beliefs and cults of their homeland and the major faiths of neighboring regions. Ordinary information (type of religious symbol used, basic attitude of the faith, etc.) of any religion is automatically known by the character. Special information, such as how the clergy is organized or the significance of particular holy days, requires a proficiency check.
+
+
+Additional proficiencies spent on religion enable the character either to expand his general knowledge into more distant regions (using the guidelines above) or to gain precise information about a single faith. If the latter is chosen, the character is no longer required to make a proficiency check when answering questions about that religion. Such expert knowledge is highly useful to priest characters when dealing with their own and rival faiths.
+
+
+Riding, Airborne
+The character is trained in handling a flying mount. The particular creature must be chosen when the proficiency is chosen. Additional proficiency slots can be used to learn how to handle other types of mounts. Unlike land-based riding, a character must have this proficiency (or ride with someone who does) to handle a flying mount. In addition, a proficient character can do the following:
+* Leap onto the saddle of the creature (when it is standing on the ground) and spur it airborne as a single action. This requires no proficiency check.
+* Leap from the back of the mount and drop 10 feet to the ground or onto the back of another mount (land-based or flying). Those with only light encumbrance can drop to the ground without a proficiency check. In all other situations, a proficiency check is required. A failed roll means the character takes normal falling damage (for falling flat on his face) or misses his target (perhaps taking large amounts of damage as a result). A character who is dropping to the ground can attempt an immediate melee attack, if his proficiency check is made with a -4 penalty to the ability roll. Failure has the consequences given above.
+* Spur his mount to greater speeds on a successful check, adding 1d4 to the movement rate of the mount. This speed can be maintained for four consecutive rounds. If the check fails, an attempt can be made again the next round. If two checks fail, no attempt can be made for a full turn. After the rounds of increased speed, its movement drops to 2/3 its normal rate and its Maneuverability Class (see Glossary) becomes one class worse. These conditions last until the mount lands and is allowed to rest for at least one hour.
+* The rider can guide the mount with his knees and feet, keeping his hands free. A proficiency check is made only after the character suffers damage. If the check is failed, the character is knocked from the saddle. A second check is allowed to see if the character manages to catch himself (thus hanging from the side by one hand or in some equally perilous position). If this fails, the rider falls. Of course a rider can strap himself into the saddle, although this could be a disadvantage if his mount is slain and plummets toward the ground.
+
+
+Riding, Land based
+Those skilled in land riding are proficient in the art of riding and handling horses or other types of ground mounts. When the proficiency slot is filled, the character must declare which type of mount he is proficient in. Possibilities include griffons, unicorns, dire wolves, and virtually any creatures used as mounts by humans, demihumans, or humanoids.
+
+
+A character with riding proficiency can perform all of the following feats. Some of them are automatic, while others require a proficiency check for success.
+* The character can vault onto a saddle whenever the horse or other mount is standing still, even when the character is wearing armor. This does not require a proficiency check. The character must make a check, however, if he wishes to get the mount moving during the same round in which he lands in its saddle. He must also make a proficiency check if he attempts to vault onto the saddle of a moving mount. Failure indicates that the character falls to the ground--presumably quite embarrassed.
+* The character can urge the mount to jump tall obstacles or leap across gaps. No check is required if the obstacle is less than three feet tall or the gap is less than 12 feet wide. If the character wants to roll a proficiency check, the mount can be urged to leap obstacles up to seven feet high, or jump across gaps up to 30 feet wide. Success means that the mount has made the jump. Failure indicates that it balks, and the character must make another proficiency check to see whether he retains his seat or falls to the ground.
+* The character can spur his steed on to great speeds, adding 6 feet per round to the animal's movement rate for up to four turns. This requires a proficiency check each turn to see if the mount can be pushed this hard. If the initial check fails, no further attempts may be made, but the mount can move normally. If the second or subsequent check fails, the mount immediately slows to a walk, and the character must dismount and lead the animal for a turn. In any event, after four turns of racing, the steed must be walked by its dismounted rider for one turn.
+* The character can guide his mount with his knees, enabling him to use weapons that require two hands (such as bows and two-handed swords) while mounted. This feat does not require a proficiency check unless the character takes damage while so riding. In this case, a check is required and failure means that the character falls to the ground and sustains an additional 1d6 points of damage.
+* The character can drop down and hang alongside the steed, using it as a shield against attack. The character cannot make an attack or wear armor while performing this feat. The character's Armor Class is raised by 6 while this maneuver is performed. Any attacks that would have struck the character's normal Armor Class are considered to have struck the mount instead. No proficiency check is required.
+* The character can leap from the back of his steed to the ground and make a melee attack against any character or creature within 10 feet. The player must roll a successful proficiency check with a -4 penalty to succeed. On a failed roll, the character fails to land on his feet, falls clumsily to the ground, and suffers 1d3 points of damage.
+
+
+Riding, Seaborne
+This proficiency allows the character to handle a particular species of sea-based mount The type of mount must be specified when the proficiency is acquired. The character may spend additional slots to enable him to handle other species.
+
+
+In addition to riding the mount, the proficiency enables the character to do the following:
+* When the mount is on the surface of the water, the character can leap onto its back and spur it to move in the same round. No proficiency check is required.
+* The character can urge the mount to leap over obstacles in the water that are less than 3' high and 5' across (in the direction of the jump). No proficiency check is required. Greater jumps require a proficiency check, with bonuses or penalties assigned by the DM according to the height and breadth of the obstacle and the type and size of mount. Failure means the mount balks; an immediate second check determines if the character stays on the mount or falls off.
+* The character can spur the mount to great speeds. If an initial proficiency check fails, the mount resists moving faster than normal. Otherwise, the mount begins to move up to 2d6 feet per round beyond its normal rate. Proficiency checks must be made every five rounds. So long as the checks succeed, the mount continues to move at the faster rate for up to two turns. After the mount moves at this accelerated rate for two turns, its rate then drops to 2/3 of its normal rate. It can move no faster than 2/3 of its normal rate until allowed to rest for a full hour.
+* If the second or any subsequent check fails, the mount's movement drops to half its normal rate. It continues to move at this half-speed rate until allowed to rest for an hour.
+* If a sea-based mount on the surface of the water is attacked, it will normally submerge unless it makes a successful morale roll. If the morale roll fails, the rider can command the mount to re-surface by making a successful proficiency check. If the check fails, the rider can attempt another check each round thereafter, so long as he is physically able. While submerged with the mount and attempting to force it to surface, the rider risks drowning (see Chapter 14 of the Player's Handbook). Because he's exerting himself, the number of rounds the rider can hold his breath is equal to half his Constitution score.
+
+
+Rope Use
+This proficiency enables a character to accomplish amazing feats with rope. A character with rope use proficiency is familiar with all sorts of knots and can tie knots that slip, hold tightly, slide slowly, or loosen with a quick tug. If the character's hands are bound and held with a knot, he can roll a proficiency check (with a -6 penalty) to escape the bonds.
+
+
+This character gains a +2 bonus to all attacks made with a lasso. The character also receives a +10% bonus to all climbing checks made while he is using a rope, including attempts to belay (secure the end of a climbing rope) companions.
+
+
+Running
+The character can move at twice his normal movement rate for a day. At the end of the day he must sleep for eight hours. After the first day's movement, the character must roll a proficiency check for success. If the die roll succeeds, the character can continue his running movement the next day. If the die roll fails, the character cannot use his running ability the next day. If involved in a battle during a day he spent running, he suffers a -1 penalty to his attack rolls.
+
+
+Sage Knowledge
+This proficiency represents a specialized area of knowledge or learning. A character with this skill is a fully qualified sage in the area of study chosen and is capable of answering questions concerning the topic after some time spent researching. Refer to Table 62 : Sage Modifiers and Table 63 : Research Times in the DMG. As noted in the DMG , a sage requires an excellent library as a resource—at least 50 to 100 books, costing no less than 10,000 gp altogether. Naturally, a character may be able to strike a deal with a university, monastery, or wizards’ guild hall in order to gain access to their library.
+
+
+In addition to his ability to perform sage research, the character’s high level of learning allows him to make field observations or attempt to come up with knowledge off the top of his head. For example, a sage who studies botany may attempt a proficiency check in order to identify a particular plant, while one who studies toxicology may be able to identify a poison by its symptoms in a victim. These on-the-spot observations should be limited to information any expert could reasonably come up with in the field— identifying a common gemstone is one thing for a geologist, but making a guess about the electrical conductivity of quartz crystal or the enchantments of a magical gem is a different matter entirely.
+
+
+Purchasing this proficiency at its base cost gives the sage a broad overview of the area of study in question, allowing him to answer general or specific questions in the field. For an additional proficiency slot, the character may become an expert in one particular aspect of the topic. For example, a botanist may spend another slot to specialize in moss and lichens, ferns, or all plants found in a particular climate or ecosystem. This detailed knowledge allows the character to attempt to answer exacting questions in the field. The fields of study available to a sage include:
+
+
+* Alchemy: This is the study of magical chemistry, especially as it applies to elemental transmutations and potions, oils, and magical compounds or solvents. Unlike the proficiency of alchemy, the sage knowledge of alchemy concentrates on theories and principles, not on the practical day-to-day manufacture of specific compounds and substances. An alchemist specialist wizard or a character with the alchemy proficiency gains a +2 bonus to his proficiency rating in this area of sage knowledge.
+* Architecture: This is the study of the development, theories and styles of architecture. (The architecture proficiency, on the other hand, represents the practical execution of workable building plans.) A sage with this field of study can attempt to identify the age, origins, and general purpose of ruined buildings or structures.
+* Art: The sage is familiar with the great works of the past as well as the works of the best contemporary artists. If he specializes in one particular art form (sculpture, paintings, ornamental pottery, etc.) he is able to identify works of the masters, spot fakes, and appraise pieces for sale value.
+* Astrology: This is the history and theoretical background of astrology, not the actual art of prediction. Someone with the astrology proficiency knows that Planet X passing in front of Constellation Y means trouble, but a sage knows why that’s a sign of ill fortune. In addition, the sage has the ability to perform historical astrology by working backwards to determine the stars’ and planet’s alignments for thousands of years in the past. An expert in this field may be familiar with the constellations and beliefs of vanished or dead cultures.
+* Astronomy: For the astrologer, planets and constellations are representations of greater powers. The astronomer, on the other hand, assigns no characteristics or indications to these heavenly bodies, and instead concentrates on studying their movements in the skies. He can predict eclipses, anticipate the return of comets or meteor showers, and answer questions about the locations or predicted locations of various planets or other bodies in the skies.
+* Botany: This is the study of plants, ranging from simple cataloguing and observation to detailed studies of life-cycles and ecologies. Areas of specialization include simple plants, water plants, grasses and brush, flowering plants, domesticated plants, plant diseases, and ecological systems such as rain forest, tundra, prairie, etc.
+* Cartography: Cartography is the art of map-making. A sage who specializes in this field knows where to find maps for any given region or area, knows how to interpret maps using various forms of notation, and can attempt to solve or complete encrypted or partial maps.
+* Chemistry: While alchemy focuses on the study of magical substances, chemistry concentrates on the study of the properties of mundane substances. Note that a character with the alchemy proficiency is assumed to use a fair amount of mundane chemistry to produce acids, solvents, and pyrotechnic substances.
+* Cryptography: This is the study of codes, ciphers, and puzzles. A sage with skill in cryptography can attempt to break codes or solve written puzzles with time and study.
+* Engineering: The character is familiar with the science of building devices, engines, and structures. Sage knowledge of engineering provides a +2 bonus to the character’s nonweapon proficiency score in engineering, if he has both proficiencies. The character can specialize in small machines, large machines (water wheels, etc.), siege engineering, fortifications, bridges and roads, or buildings.
+* Genealogy: This is the study of lines of descent. A sage with this skill knows research techniques and sources for tracing family trees and is also familiar with the histories of the important royal and noble families.
+* Geography: A sage with this knowledge has learned about the lands and cultures of his world. He knows general principles of cartography, topography, climatology, and sociology, and can identify individuals or artifacts from other lands.
+* Geology: Geology is the study of landforms, rock, and the physical makeup of the earth. A sage with knowledge in this area can add a +2 bonus to his rating in the mining nonweapon proficiency and can attempt a proficiency check to identify various sorts of gemstones or precious minerals.
+* Heraldry: Coats of arms, banners, flags, and standards are all emblazoned with heraldic designs. A sage with this skill is familiar with the evolution of heraldry and the significance of various symbols and colors. He can identify common coats of arms on sight and knows where to research obscure or unknown devices. This area of knowledge adds a +2 bonus to a character’s heraldry nonweapon proficiency score.
+* History: A sage with this skill has an excellent grasp of history and the historical methods. Unlike a character with the ancient or local history proficiencies, a sage with this skill is a generalist, but he can be considered an expert on a particular era or culture by spending an additional slot to specialize. Whether or not the historian knows something off the top of his head doesn’t matter—he knows exactly where to look when he needs to find out the details of a person’s life or an important event. Skill in this field of knowledge provides a +2 bonus to the character’s proficiency score in ancient history or local history.
+* Languages: A character with a modern language proficiency knows how to speak a second language, and a character with an ancient languages proficiency knows how to read a second language, but a sage who specializes in languages is concerned with the study of the language itself—grammar, syntax and constructs, and vocabulary and word origin. His expertise is limited to one particular tongue, but for each additional slot the linguist may add another language to his field of expertise. This knowledge adds a +2 bonus to the linguist’s rating in any modern or ancient language proficiencies he possesses.
+* Law: A sage with this field of study is an expert on matters of law. He is familiar with any national constitutions or charters, the origin and history of the law, and important matters of precedent. He can examine contracts, warrants, orders, or decrees and determine if there is a way to enforce or avoid them.
+* Mathematics: The study of abstract or theoretical mathematics may seem unusual in a fantasy setting, but it dates back thousands of years in our own world; the ancient Greeks laid the groundwork for geometry, while algebra was a pastime of Islamic scholars and nobles before the European Renaissance. A dimensionalist gains a +2 bonus on his proficiency rating in this area of study.
+* Medicine: A sage with this skill studies both the history and development of medicine, as well as current methods and treatments. This provides the character with a +2 bonus to his healing nonweapon proficiency score. In addition, the character may be able to come up with treatments for nonmagical diseases or injuries.
+* Meteorology: This is the study of weather and weather patterns. A sage with this skill knows historical records and prediction methods. In the field, his knowledge of weather provides a +2 bonus to any weather sense proficiency checks he makes.
+* Music: The sage knows the theory and notation systems of music and has studied the works of the great masters. He can attempt to identify unknown pieces or decipher musical puzzles.
+* Myconology: Myconology is the study of fungi. A myconologist can identify samples of fungus, mold, or spores. He is familiar with dangerous or monstrous varieties as well and may be able to spot these in the wild before he or his companions come to harm. His knowledge of mushrooms and molds gives him a +2 bonus to herbalism nonweapon proficiency checks.
+* Oceanography: A sage with this skill studies the ocean, including weather, marine biology, navigation and charting, and undersea topography. An oceanographer may be able to explain unusual phenomena at sea or discover the location of wrecks or other sites of interest.
+* Philosophy: The study of philosophy is the study of logic, ethics, aesthetics, and metaphysics (for game purposes, anyway), and a sage with expertise in this field is conversant with the great thinkers and arguments of his race or culture.
+* Physics: In most AD&D campaigns, the study of physics centers around mechanics and thermodynamics; some of the more advanced fields of study simply haven’t been invented yet.
+* Planes, Inner: Most individuals in a campaign have little to no knowledge of worlds beyond the one in which they live, but a sage with expertise in this field is familiar with the characteristics and properties of the Ethereal Plane and the various Elemental Planes beyond that. He understands how the Inner Planes are aligned and how the multiverse is put together. If he spends an additional slot to specialize, he can be an expert on a particular plane, capable of answering exacting questions on the topic.
+* Planes, Outer: The great religions of a campaign tend to disseminate a very limited view of the multiverse, centering on the home of their deity and that of their deity’s principal foes. A sage who studies this field has a general understanding with the general arrangement of all the Outer Planes and the characteristics of the Astral Plane. For an additional slot, he can specialize in a particular plane, learning the general properties of its layers, its chief inhabitants and domains, and other important details.
+* School of Magic: A sage with expertise in a school of magic is familiar with the important theories, works, and great mages of that field. By engaging in research and passing a proficiency check, the sage could identify spells or magical items belonging to the school by the item’s general effects or appearance. For example, if he was a student of the school of force, he could identify a wand of force or beads of force as if he were trying to answer a specific question. If the sage is also a wizard, he gains a +5% bonus to his chance to learn spells from the school in question. A specialist wizard gains a +2 to his score in this proficiency if the school of magic is his own specialty.
+* Sociology: This is the study of social structures, customs, mores, and ways of life. The sage is also acquainted with past societies and their customs.
+* Theology: A sage with expertise in this area is conversant with the tenets and beliefs of most major religions, gaining a +2 bonus to his religion nonweapon proficiency check. In addition, he studies the theories and lore surrounding the powers and boundaries of the gods themselves. With research, a theologist can determine what a particular god might or might not be capable of doing.
+* Toxicology: This is the study of poisons, both natural and artificial. A sage with expertise in toxicology can identify poisons both from samples and from examining the symptoms of a poisoned victim. By using toxicology, a sage can also gain a +1 to any healing proficiency check dealing with poisons.
+* Zoology: Zoology is the study of animals. A sage who acquires knowledge in this area has a good overall grasp of the science of zoology, and in addition, he is considered a specialist in one general class of animals or monsters. Each additional slot he spends on this proficiency adds one more type or class to his expertise. Classes of animals available include birds, reptiles, mammals, fish, amphibians, insects, amorphous monsters (slimes, jellies, and molds), aquatic monsters, insectile monsters, reptilian monsters, mammalian monsters, hybrid monsters (griffins, perytons, etc.), and any other reasonable class or grouping the DM allows.
+
+A zoologist can identify common species in the field with a successful proficiency check and may be able to predict behavior or capabilities based on his knowledge of the creature in question.
+
+
+Seamanship
+The character is familiar with boats and ships. He is qualified to work as a crewman, although he cannot actually navigate. Crews of trained seamen are necessary to manage any ship, and they improve the movement rates of inland boats by 50 percent.
+
+
+Seamstress / Tailor
+The character can sew and design clothing. He can also do all kinds of embroidery and ornamental work. Although no proficiency check is required, the character must have at least needle and thread to work.
+
+
+Set Snares
+The character can make simple snares and traps, primarily to catch small game. These can include rope snares and spring traps. A proficiency check must be rolled when the snare is first constructed and every time the snare is set. A failed proficiency check means the trap does not work for some reason. It may be that the workmanship was bad, the character left too much scent in the area, or he poorly concealed the finished work. The exact nature of the problem does not need to be known. The character can also attempt to set traps and snares for larger creatures: tiger pits and net snares, for example. A proficiency check must be rolled, this time with a -4 penalty to the ability score. In both cases, setting a successful snare does not ensure that it catches anything, only that the snare works if triggered. The DM must decide if the trap is triggered.
+
+
+Thief characters (and only thieves) with this proficiency can also attempt to rig man-traps. These can involve such things as crossbows, deadfalls, spiked springboards, etc. The procedure is the same as that for setting a large snare. The DM must determine the amount of damage caused by a man-trap.
+
+
+Setting a small snare or trap takes one hour of work. Setting a larger trap requires two to three people (only one need have the proficiency) and 2d4 hours of work. Setting a man-trap requires one or more people (depending on its nature) and 1d8 hours of work. To prepare any trap, the character must have appropriate materials on hand.
+
+
+Characters with animal lore proficiency gain a +2 bonus to their ability score when attempting to set a snare for the purposes of catching game. Their knowledge of animals and the woods serves them well for this purpose. They gain no benefit when attempting to trap monsters or intelligent beings.
+
+
+Shipwright
+A character with the Shipwright proficiency can oversee the construction of basic ships. For larger vessels the character must also have an engineering proficiency or be working with someone who has one. 
+
+
+Singing
+The character is an accomplished singer and can use this ability to entertain others and perhaps earn a small living (note that bards can do this automatically). No proficiency check is required to sing. The character can also create choral works on a successful proficiency check.
+
+
+Spellcraft
+Although this proficiency does not grant the character any spellcasting powers, it does give him familiarity with the different forms and rites of spellcasting. If he observes and overhears someone who is casting a spell, or if he examines the material components used, he can attempt to identify the spell being cast. A proficiency check must be rolled to make a correct identification. Wizard specialists gain a +3 bonus to the check when attempting to identify magic of their own school. Note that since the spellcaster must be observed until the very instant of casting, the spellcraft proficiency does not grant an advantage against combat spells. The proficiency is quite useful, however, for identifying spells that would otherwise have no visible effect.
+
+
+Those talented in this proficiency also have a chance (equal to ½ of their normal proficiency check) of recognizing magical or magically endowed constructs for what they are.
+
+
+Stonemasonry
+ A stonemason is able to build structures from stone so that they last many years. He can do simple stone carvings, such as lettering, columns, and flourishes. The stone can be mortared, carefully fitted without mortar, or loosely fitted and chinked with rocks and earth. A stonemason equipped with his tools (hammers, chisels, wedges, block and tackle) can build a plain section of wall one foot thick, ten feet long, and five feet high in one day, provided the stone has already been cut. A stonemason can also supervise the work of unskilled laborers to quarry stone; one stonemason is needed for every five laborers. Dwarves are among the most accomplished stonemasons in the world; they receive a +2 bonus when using this skill.
+
+
+Survival
+This proficiency must be applied to a specific environment--i.e., a specific type of terrain and weather factors. Typical environments include: arctic, woodland, desert, plains, or tropical. Mountains are not usually a separate terrain type, a mountain range may be tropical, wooded, snow-covered, etc.. The character has basic survival knowledge for that terrain type. Additional proficiency slots can be used to add more types of terrain.
+
+
+A character skilled in survival has a basic knowledge of the hazards he might face in that land. He understands the effects of the weather and knows the proper steps to lessen the risk of exposure. He knows the methods to locate or gather drinkable water. He knows how to find basic, not necessarily appetizing, food where none is apparent, thus staving off starvation. The character can roll a proficiency check once a day for each category. Success means food, water, or shelter is found. Typically it will take 1d6 hours to find water, and 2d6 turns to forage enough food for one person. If one is going to be foraging a lot in one day and wishes to simplify, the following optional system may be used.
+
+
+A forager may spend 2 hours searching for food to find 1d2 standard days of food. This requires a single proficiency check. Overland travel while foraging can be accomplished by reducing movement speed to ¼ during the time foraging.
+
+
+A character with this skill also understands the perils inherent in sudden storms and dangerous topical features: avalanches, quicksand, sandstorms, and landslides, for example. The DM might allow a player to roll a proficiency check when one of these dangers appears on the horizon, success means the character has noticed the menace.
+
+
+The survival skill in no way releases the player characters from the hardships and horrors of being lost in the wilderness. At best it alleviates a small portion of the suffering. The food found is barely adequate, and water is discovered in minuscule amounts. It is still quite possible for a character with survival knowledge to die in the wilderness. Indeed, the little knowledge the character has may lead to overconfidence and doom!
+
+
+Swimming
+A character with swimming proficiency knows how to swim. Those without this proficiency cannot swim. They can hold their breath and float, but they cannot move themselves about in the water.
+Teaching
+
+
+Tightrope Walking
+The character can attempt to walk narrow ropes or beams with greater than normal chances of success. He can negotiate any narrow surface not angled up or down greater than 45 degrees. Each round the character can walk 60 feet. One proficiency check is made every 60 feet (or part thereof), with failure indicating a fall. The check is made with a -10 penalty to the ability score if the surface is one inch or less in width (a rope), a -5 penalty if two inches to six inches wide, and unmodified if seven inches to 12 inches wide. Wider than one foot requires no check for proficient characters under normal circumstances. Every additional proficiency spent on tightrope walking reduces these penalties by 1. Use of a balancing rod reduces the penalties by 2. Winds or vibrations in the line increases the penalties by 2 to 6.
+
+
+The character can attempt to fight while on a tightrope, but he suffers a -5 penalty to his attack roll and must roll a successful proficiency check at the beginning of each round to avoid falling off. Since the character cannot maneuver, he gains no adjustments to his Armor Class for Dexterity. If he is struck while on the rope, he must roll an immediate proficiency check to retain his balance.
+
+
+Torturing
+A character with this skill knows how to inflict the most amount of pain on a subject without killing them. They are versed in many ways of making a person suffer. It is worth noting that torture is an unreliable way of extracting information from people. Typically the tortured individual will tell the torturer anything to make it stop, will admit to anything (including things they’ve not done), and will tell half truths and lies about key information.
+
+
+Tutoring
+Instructing someone in skills is a difficult task, but someone with this proficiency is able to instruct others in a skill or language that the tutor knows. Your DM will tell you how this works out.
+
+
+Toxicology
+This skill gives a character an intimate knowledge of the various types of toxins, poisons, and venoms of the world. They can, with a successful proficiency check, determine the type of poison a character or NPC has been subject to if they can examine the patient. Additionally they are capable of extracting these toxic substances from their original source for their own uses, no check required given time and tools. If the character is in a pinch, or does not have the right equipment, a toxicology check can be made to see if the improvised extraction was successful. 
+
+
+Tracking
+Characters with tracking proficiency are able to follow the trail of creatures and characters across most types of terrain. 
+
+
+The modifiers in Table 39 are cumulative--total the modifiers for all conditions that apply and combine that with the tracker's Perception score to get the modified chance to track.
+For example, if Thule's Perception score is 16 and he is trying to track through mud (+4), at night (-6), during a sleet storm (-5), his chance to track is 9 (16+4-6-5). 
+
+
+For tracking to succeed, the creature tracked must leave some type of trail. Thus, it is virtually impossible to track flying or noncorporeal creatures. The DM may allow this in rare instances, but he should also assign substantial penalties to the attempt.
+
+
+To track a creature, the character must first find the trail. Indoors, the tracker must have seen the creature in the last 30 minutes and must begin tracking from the place last seen. Outdoors, the tracker must either have seen the creature, have eyewitness reports of its recent movement ("Yup, we saw them orcs just high-tail it up that trail there not but yesterday."), or must have obvious evidence that the creature is in the area (such as a well-used game trail). If these conditions are met, a proficiency check is rolled. Success means a trail has been found. Failure means no trail has been found. Another attempt cannot be made until the above conditions are met again under different circumstances.
+
+
+Once the trail is found, additional proficiency checks are rolled for the following situations:
+   * The chance to track decreases (terrain, rain, creatures leaving the group, darkness, etc.).
+   * A second track crosses the first.
+   * The party resumes tracking after a halt (to rest, eat, fight, etc.).
+
+
+Once the tracker fails a proficiency check, another check can be rolled after spending at least one hour searching the area for new signs. If this check is failed, no further attempts can be made. If several trackers are following a trail, a +1 bonus is added to the ability score of the most adept tracker. Once he loses the trail, it is lost to all.
+
+
+If the modifiers lower the chance to track below 0 (for example, the modifiers are -11 and the character's Perception is 10), the trail is totally lost to that character and further tracking is impossible (even if the chance later improves). Other characters may be able to continue tracking, but that character cannot.
+
+
+A tracking character can also attempt to identify the type of creatures being followed and the approximate number by rolling a proficiency check. All the normal tracking modifiers apply. One identifying check can be rolled each time a check is rolled to follow the trail. A successful check identifies the creatures (provided the character has some knowledge of that type of creature) and gives a rough estimate of their numbers. Just how accurate this estimate is depends on the DM.
+When following a trail, the character (and those with him) must slow down, the speed depending on the character's modified chance to track as found from Table 39.
+
+
+In the earlier example, Thule has a modified tracking chance of 9, so he moves at ½ his normal movement rate.
+
+
+Tumbling
+The character is practiced in all manner of acrobatics--dives, rolls, somersaults, handstands, flips, etc. Tumbling can only be performed while burdened with light encumbrance or less. Aside from entertaining, the character with tumbling proficiency can improve his Armor Class by 4 against attacks directed solely at him in any round of combat, provided he has the initiative and foregoes all attacks that round. When in unarmed combat he can improve his attack roll by 2.
+
+
+On a successful proficiency check, he suffers only one-half the normal damage from falls of 60 feet or less and none from falls of 10 feet or less. Falls from greater heights result in normal damage.
+
+
+Undead Lore
+A character with this proficiency is trained in the identification, powers, and vulnerabilities of common undead monsters. With a proficiency check, the character can recall specific tactics or weaknesses of a monster; for example, if confronted by a vampire, he may recall that a mirror, garlic, or holy symbol strongly presented can drive the monster away for a short time. How the character uses this information is up to the player.
+
+
+Ventriloquism
+The character has learned the secrets of “throwing his voice.” Although not actually making sound come from somewhere else (like the spell), the character can deceive others into believing this to be so. When using ventriloquism, the supposed source of the sound must be relatively close to the character. The nature of the speaking object and the intelligence of those watching can modify the character's chance of success. If the character makes an obviously inanimate object talk (a book, mug, etc.), a -5 penalty is applied to his ability score. If a believable source (a PC or NPC) is made to appear to speak, a +2 bonus is added to his ability score. The observer's intelligence modifies this as follows:
+Intelligence 
+	Modifier 
+	less than 3 
+	+6 
+	3-5 
+	+4 
+	6-8 
+	+2 
+	9-14 
+	0 
+	15-16 
+	-1 
+	17-18 
+	-2 
+	19+ 
+	-4 
+	A successful proficiency check means the character has successfully deceived his audience. One check must be made for every sentence or response. The character is limited to sounds he could normally make (thus, the roar of a lion is somewhat beyond him).
+
+
+Since ventriloquism relies on deception, people's knowledge of speech, and assumptions about what should and shouldn't talk, it is effective only on intelligent creatures. Thus, it has no effect on animals and the like. Furthermore, the audience must be watching the character since part of the deception is visual ("Hey, his lips don't move!"). Using ventriloquism to get someone to look behind him does not work, since the voice is not actually behind him (this requires the ventriloquism spell). All but those with the gullibility of children realize what is truly happening. They may be amused--or they may not be.
+
+
+Weaponsmithing
+This highly specialized proficiency enables a character to perform the difficult and highly exacting work involved in making metal weapons, particularly those with blades. The character blends some of the skill of the blacksmith with an ability to create blades of strength and sharpness. A fully equipped smithy is necessary to use this proficiency.
+
+
+The time and cost to make various types of weapons are listed on Table 41.
+
+
+Weaving
+A character with weaving proficiency is able to create garments, tapestries, and draperies from wool or cotton. The character requires a spinning apparatus and a loom. A weaver can create two square yards of material per day.

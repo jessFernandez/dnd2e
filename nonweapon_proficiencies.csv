@@ -1,0 +1,89 @@
+Proficiency,Cost,Ability,Pre. Req,Modifier,Warrior,Rogue,Wizard,Priest
+Administration,1,Intelligence,,1,x,x,x,x
+Animal Handling,1,Wisdom,,-1,x,x,x,x
+Animal Lore,1,Intelligence,,0,x,x,x,
+Animal Training,1,Wisdom,Animal Handling,0,x,x,x,x
+Armorsmithing,1,Intelligence,Blacksmithing,-2,x,,,
+Artistic Ability,1,Wisdom,,0,x,x,x,x
+Baking,1,Intelligence,,0,x,x,x,x
+Blacksmithing,1,Strength,,0,x,x,x,x
+Boating,1,Intelligence,,0,x,x,x,x
+Bowyer/Fletcher,1,Dexterity,,-1,x,,,
+Brewing,1,Intelligence,,0,x,x,x,x
+Bureaucracy,2,Intelligence,,0,x,x,x,x
+Butchery,1,Intelligence,,0,x,x,x,x
+Carpentry,1,Dexterity,,0,x,x,x,x
+Charioteering,1,Dexterity,,2,x,,,
+Cobbling,1,Dexterity,,0,x,x,x,x
+Cooking,1,Intelligence,,0,x,x,x,x
+Dancing,1,Dexterity,,0,x,x,x,x
+Direction Sense,1,Perception,,1,x,x,x,x
+Etiquette,1,Charisma,,0,x,x,x,x
+Farming,2,Intelligence,,0,x,x,x,x
+Fire-building,1,Wisdom,,-1,x,x,x,x
+Fishing,1,Wisdom,,-1,x,x,x,x
+Folklore,1,Intelligence,,-1,x,x,x,x
+Gaming,1,Charisma,,0,x,x,,
+Heraldry,1,Charisma,,0,x,x,x,x
+Hunting,1,Wisdom,,-1,x,,,
+Jeweler,1,Dexterity,,-2,x,x,x,x
+Jumping,1,Strength,,0,x,x,,
+"Languages, Modern",1,Intelligence,,0,x,x,x,x
+Leatherworking,1,Intelligence,,0,x,x,x,x
+Lumberjacking,1,Strength,,3,x,,,
+Mining,2,Intelligence,,-3,x,x,x,x
+Mountaineering,2,NA,,NA,x,x,x,x
+Musical Instrument,1,Dexterity,,-1,x,x,x,x
+Navigation,1,Intelligence,Seamanship,-2,x,x,x,x
+Pottery,1,Dexterity,,-2,x,x,x,x
+"Riding, Airborne",2,Wisdom,,-2,x,x,x,x
+"Riding, Land-Based",1,Wisdom,,3,x,x,x,x
+"Riding, Seaborne",2,Wisdom,,-2,x,x,x,x
+Rope Use,1,Dexterity,,0,x,x,,
+Running,1,Constitution,,-6,x,,,
+Seamanship,1,Wisdom,,1,x,x,x,x
+Seamstress/Tailor,1,Dexterity,,-1,x,x,x,x
+Set Snares,1,Wisdom,,-1,x,x,,
+Shipwright,1,Intelligence,Carpentry,-2,x,x,x,x
+Singing,1,Charisma,,0,x,x,x,x
+Stonemasonry,1,Strength,,-2,x,x,x,x
+Story Telling,1,Charisma,,0,x,x,,x
+Survival,2,Wisdom,,0,x,,,
+Swimming,1,Strength,,0,x,x,x,x
+Torturing ,1,Wisdom,,0,x,x,,x
+Tracking,2,Perception,,0,x,,,
+Tumbling,1,Dexterity,,0,x,x,,
+Tutoring,1,Wisdom,,0,x,x,,x
+Weaponsmithing,2,Intelligence,Blacksmithing,-3,x,,,
+Weaving,1,Intelligence,,-1,x,x,x,x
+Acting,1,Charisma,,-1,,x,,
+Alchemy,2,Intelligence,,-3,,,x,
+Anatomy,1,Intelligence,,-2,,x,x,x
+Appraising,1,Intelligence,,0,,x,,
+Arcanology,1,Intelligence,,-3,,,x,
+Bookbinding,1,Intelligence,,3,,,x,x
+Calligraphy,1,Dexterity,,1,,,x,x
+Cartography,1,Intelligence,Literacy,0,,x,x,x
+Embalming,1,Intelligence,Anatomy,2,,,,x
+Engineering,1,Intelligence,Mathmatics,-3,,,x,x
+Gem Cutting,1,Dexterity,Jeweler,-2,,x,x,
+Glassblowing,1,Dexterity,,0,,,x,
+Healing,1,Wisdom,Anatomy,-2,,,,x
+Herbalism,2,Intelligence,,-2,,,x,x
+"History, Ancient",1,Intelligence,,-1,,x,x,x
+"History, Local",1,Charisma,,0,,x,x,x
+Juggling,1,Dexterity,,-1,,x,,
+"Languages, Ancient",1,Intelligence,,0,,,x,x
+Literacy,1,NA,,NA,,,x,x
+Mathematics,1,Intelligence,,-3,,,x,x
+Omen Reading,2,Wisdom,,-2,,,x,x
+Papermaking,1,Intelligence,,0,,,x,x
+Prestidigitation,1,Dexterity,Juggling,-1,,x,,
+Reading Lips,2,Perception,,-2,,x,,
+Religion,1,Wisdom,,0,,,,x
+Sage Knowledge,2,Intelligence,,-2,,,x,x
+Spellcraft,2,Intelligence,,-2,,,x,x
+Tightrope Walking,1,Dexterity,,0,,x,,
+Toxicology,0,Intelligence,"Herbalism, Animal Lore",-2,,x,,
+Undead Lore,2,Intelligence,,-1,,,,x
+Ventriloquism,1,Intelligence,,-2,,x,,
