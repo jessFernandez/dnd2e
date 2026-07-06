@@ -39,12 +39,17 @@ def test_splash():
     assert "dnd:///screen/charactermancer" in html # Character Builder card (replaced the walkthrough)
 
 
-def test_charactermancer_shows_phb_refs():
-    # The builder folds in the old walkthrough's value: per-step PHB deep-links.
+def test_charactermancer_step_references():
+    # The builder folds in the old walkthrough's value: per-step deep-links.
     html = charactermancer_html.generate(Charactermancer())
     _is_page(html)
-    assert "Read in the PHB" in html
-    assert 'href="dnd:///PHB/' in html
+    assert "References" in html
+    assert 'href="dnd:///PHB/' in html                  # abilities step -> PHB rules
+    # Proficiency and spell steps point at the in-app pages instead of the PHB.
+    prof = charactermancer_html._step_refs("proficiencies")
+    assert 'href="dnd:///proficiencies"' in prof and "Codex of Worldly Craft" in prof
+    spells = charactermancer_html._step_refs("spells")
+    assert 'href="dnd:///screen/spells"' in spells and "Spell Compendium" in spells
 
 
 def test_spells_screen():

@@ -925,63 +925,64 @@ def _placeholder_body(cm, saved=None) -> str:
     )
 
 
-# ── PHB references per step (folded in from the old static walkthrough) ───────
-# Each build step links out to the exact PHB rules/tables it draws on, so the
-# builder doubles as the reference the standalone walkthrough used to provide.
-_PHB_REFS = {
+# ── Per-step references (folded in from the old static walkthrough) ───────────
+# Each build step links out to the reference it draws on. Most point at the PHB
+# rules/tables; the proficiency and spell steps point at the campaign's own
+# in-app pages instead (the Codex of Worldly Craft and the Spell Compendium).
+# Each entry is (label, dnd-path, kind) where kind is "phb" or "app".
+_STEP_REFS = {
     "abilities": [
-        ("Rolling Ability Scores", "PHB/DD01422.htm"),
-        ("Alternative Methods", "PHB/DD01423.htm"),
-        ("What the Numbers Mean", "PHB/DD01437.htm"),
+        ("Rolling Ability Scores", "PHB/DD01422.htm", "phb"),
+        ("Alternative Methods", "PHB/DD01423.htm", "phb"),
+        ("What the Numbers Mean", "PHB/DD01437.htm", "phb"),
     ],
     "race": [
-        ("Racial Requirements", "PHB/DD01438.htm"),
-        ("Min/Max Scores (Table 8)", "PHB/DD01440.htm"),
-        ("Racial Ability Adjustments", "PHB/DD01441.htm"),
+        ("Racial Requirements", "PHB/DD01438.htm", "phb"),
+        ("Min/Max Scores (Table 8)", "PHB/DD01440.htm", "phb"),
+        ("Racial Ability Adjustments", "PHB/DD01441.htm", "phb"),
     ],
     "class": [
-        ("Class Overview", "PHB/DD01456.htm"),
-        ("Ability Minimums (Table 13)", "PHB/DD01458.htm"),
-        ("Multi-/Dual-Class Rules", "PHB/DD01511.htm"),
+        ("Class Overview", "PHB/DD01456.htm", "phb"),
+        ("Ability Minimums (Table 13)", "PHB/DD01458.htm", "phb"),
+        ("Multi-/Dual-Class Rules", "PHB/DD01511.htm", "phb"),
     ],
     "alignment": [
-        ("Alignment Overview", "PHB/DD01515.htm"),
-        ("The Nine Alignments", "PHB/DD01518.htm"),
+        ("Alignment Overview", "PHB/DD01515.htm", "phb"),
+        ("The Nine Alignments", "PHB/DD01518.htm", "phb"),
     ],
     "proficiencies": [
-        ("Proficiency Slots (Table 34)", "PHB/DD01524.htm"),
-        ("Weapon Proficiencies", "PHB/DD01526.htm"),
-        ("NWP Groups (Table 37)", "PHB/DD01538.htm"),
+        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+        ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
     ],
     "equipment": [
-        ("Starting Gold (Table 43)", "PHB/DD01613.htm"),
-        ("Equipment Lists (Table 44)", "PHB/DD01614.htm"),
-        ("Armor Costs", "PHB/DD01623.htm"),
+        ("Starting Gold (Table 43)", "PHB/DD01613.htm", "phb"),
+        ("Equipment Lists (Table 44)", "PHB/DD01614.htm", "phb"),
+        ("Armor Costs", "PHB/DD01623.htm", "phb"),
     ],
     "spells": [
-        ("Wizard Spells (Table 21)", "PHB/DD01471.htm"),
-        ("Priest Spells (Table 24)", "PHB/DD01479.htm"),
-        ("Int & Spell Learning (Table 4)", "PHB/DD01432.htm"),
+        ("Spell Compendium", "screen/spells", "app"),             # in-app spell browser
     ],
     "details": [
-        ("Languages (Table 4)", "PHB/DD01432.htm"),
-        ("Charisma (Table 6)", "PHB/DD01436.htm"),
-        ("Other Details", "PHB/DD01452.htm"),
+        ("Languages (Table 4)", "PHB/DD01432.htm", "phb"),
+        ("Charisma (Table 6)", "PHB/DD01436.htm", "phb"),
+        ("Other Details", "PHB/DD01452.htm", "phb"),
     ],
 }
 
+_REF_BADGE = {"phb": "PHB", "app": "APP"}
 
-def _phb_refs(step) -> str:
-    """A compact 'Read in the PHB' row of deep-links for the current step."""
-    refs = _PHB_REFS.get(step)
+
+def _step_refs(step) -> str:
+    """A compact reference row of deep-links for the current step."""
+    refs = _STEP_REFS.get(step)
     if not refs:
         return ""
     chips = "".join(
-        f'<a class="phb-ref" href="dnd:///{url}"><span class="phb-badge">PHB</span>'
-        f'{_esc(label)}</a>'
-        for label, url in refs
+        f'<a class="phb-ref {kind}" href="dnd:///{url}">'
+        f'<span class="phb-badge">{_REF_BADGE[kind]}</span>{_esc(label)}</a>'
+        for label, url, kind in refs
     )
-    return (f'<div class="phb-refs"><span class="phb-refs-label">Read in the PHB</span>'
+    return (f'<div class="phb-refs"><span class="phb-refs-label">References</span>'
             f'{chips}</div>')
 
 
@@ -1043,7 +1044,7 @@ def generate(cm, saved=None) -> str:
   <section class="step">
     <h2 class="step-h">{STEP_TITLES[cm.step]}</h2>
     {body}
-    {_phb_refs(cm.step)}
+    {_step_refs(cm.step)}
   </section>
   {_footer(cm)}
 </div>
@@ -1330,4 +1331,8 @@ _CSS = f"""
   .phb-ref .phb-badge {{ margin-right: 7px; background: #7a6020; color: #f0dca0;
                          font-size: 8px; font-weight: 800; border-radius: 3px; padding: 3px 4px;
                          line-height: 1; letter-spacing: .06em; }}
+  /* in-app references (Codex of Worldly Craft, Spell Compendium) — blue, not gold */
+  .phb-ref.app {{ border-color: #35506b; color: #9fc0dc; }}
+  .phb-ref.app:hover {{ background: #5b9bd518; border-color: #5b9bd5; color: #cfe4f6; }}
+  .phb-ref.app .phb-badge {{ background: #2f4a63; color: #cfe4f6; }}
 """
