@@ -15,8 +15,8 @@ BOOKS = [
 ]
 
 FEATURES = [
-    ("screen/chargen",  "✦",  "Character Creation",
-     "Step-by-step walkthrough with direct links to every PHB rule you need.",
+    ("screen/charactermancer",  "🧙",  "Character Builder",
+     "Build a 2e character step by step — abilities, race, class, proficiencies, equipment, and spells — with house rules and PHB references.",
      "#c9a84c", "#22200a"),
     ("screen/dmscreen", "⚔",  "DM Screen",
      "50+ quick-reference tables — THAC0, saves, ability scores, spells, and more.",

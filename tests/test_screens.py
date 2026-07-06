@@ -7,11 +7,12 @@ a template break, a bad f-string, or a missing section.
 """
 import actionsscreen_html
 import askscreen_html
-import chargen_html
+import charactermancer_html
 import dmscreen_html
 import splash_html
 import spellsscreen_html
 import toc_html
+from charactermancer import Charactermancer
 
 
 def _is_page(html: str):
@@ -30,17 +31,20 @@ def test_actionsscreen():
     _is_page(html)
 
 
-def test_chargen():
-    html = chargen_html.generate()
-    _is_page(html)
-    assert "Ability Scores" in html               # step 1 of the walkthrough
-
-
 def test_splash():
     html = splash_html.generate()
     _is_page(html)
     assert "2nd Edition" in html
-    assert "dnd:///screen/spells" in html         # the Spells feature card we added
+    assert "dnd:///screen/spells" in html          # the Spells feature card we added
+    assert "dnd:///screen/charactermancer" in html # Character Builder card (replaced the walkthrough)
+
+
+def test_charactermancer_shows_phb_refs():
+    # The builder folds in the old walkthrough's value: per-step PHB deep-links.
+    html = charactermancer_html.generate(Charactermancer())
+    _is_page(html)
+    assert "Read in the PHB" in html
+    assert 'href="dnd:///PHB/' in html
 
 
 def test_spells_screen():
