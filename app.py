@@ -1181,6 +1181,12 @@ class MainWindow(QMainWindow):
         if url.startswith("cm/"):
             self._cm_action(url[len("cm/"):])
             return
+        # Links explicitly tagged to open beside the current page (e.g. the
+        # builder's step references) — open in a new tab so the page stays put.
+        if url.startswith("newtab/"):
+            self._new_tab(show_splash=False)     # opens and switches to the new tab
+            self._navigate(self._link_to_destination(url[len("newtab/"):]))
+            return
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
@@ -1619,6 +1625,8 @@ class MainWindow(QMainWindow):
 
     def _on_content_navigate_newtab(self, url: str):
         """Ctrl/middle-clicked link: open the target in a new background tab."""
+        if url.startswith("newtab/"):          # already-tagged links carry no extra meaning here
+            url = url[len("newtab/"):]
         prev = self._content_tabs.currentIndex()
         self._new_tab(show_splash=False)
         self._navigate(self._link_to_destination(url))

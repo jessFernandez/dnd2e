@@ -44,12 +44,14 @@ def test_charactermancer_step_references():
     html = charactermancer_html.generate(Charactermancer())
     _is_page(html)
     assert "References" in html
-    assert 'href="dnd:///PHB/' in html                  # abilities step -> PHB rules
-    # Proficiency and spell steps point at the in-app pages instead of the PHB.
+    assert 'href="dnd:///newtab/PHB/' in html           # abilities -> PHB, in a new tab
+    # Proficiency, spell, and equipment steps point at in-app pages, not the PHB.
     prof = charactermancer_html._step_refs("proficiencies")
-    assert 'href="dnd:///proficiencies"' in prof and "Codex of Worldly Craft" in prof
+    assert 'href="dnd:///newtab/proficiencies"' in prof and "Codex of Worldly Craft" in prof
     spells = charactermancer_html._step_refs("spells")
-    assert 'href="dnd:///screen/spells"' in spells and "Spell Compendium" in spells
+    assert 'href="dnd:///newtab/screen/spells"' in spells and "Spell Compendium" in spells
+    equip = charactermancer_html._step_refs("equipment")
+    assert 'href="dnd:///newtab/toc/ECO"' in equip and "Economics of the Realm" in equip
 
 
 def test_spells_screen():

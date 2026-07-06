@@ -955,9 +955,8 @@ _STEP_REFS = {
         ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
     ],
     "equipment": [
+        ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book
         ("Starting Gold (Table 43)", "PHB/DD01613.htm", "phb"),
-        ("Equipment Lists (Table 44)", "PHB/DD01614.htm", "phb"),
-        ("Armor Costs", "PHB/DD01623.htm", "phb"),
     ],
     "spells": [
         ("Spell Compendium", "screen/spells", "app"),             # in-app spell browser
@@ -977,8 +976,9 @@ def _step_refs(step) -> str:
     refs = _STEP_REFS.get(step)
     if not refs:
         return ""
+    # Prefix with newtab/ so references open beside the builder, not over it.
     chips = "".join(
-        f'<a class="phb-ref {kind}" href="dnd:///{url}">'
+        f'<a class="phb-ref {kind}" href="dnd:///newtab/{url}">'
         f'<span class="phb-badge">{_REF_BADGE[kind]}</span>{_esc(label)}</a>'
         for label, url, kind in refs
     )
