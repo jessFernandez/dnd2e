@@ -7,11 +7,12 @@ a template break, a bad f-string, or a missing section.
 """
 import actionsscreen_html
 import askscreen_html
-import chargen_html
+import charactermancer_html
 import dmscreen_html
 import splash_html
 import spellsscreen_html
 import toc_html
+from charactermancer import Charactermancer
 
 
 def _is_page(html: str):
@@ -30,17 +31,27 @@ def test_actionsscreen():
     _is_page(html)
 
 
-def test_chargen():
-    html = chargen_html.generate()
-    _is_page(html)
-    assert "Ability Scores" in html               # step 1 of the walkthrough
-
-
 def test_splash():
     html = splash_html.generate()
     _is_page(html)
     assert "2nd Edition" in html
-    assert "dnd:///screen/spells" in html         # the Spells feature card we added
+    assert "dnd:///screen/spells" in html          # the Spells feature card we added
+    assert "dnd:///screen/charactermancer" in html # Character Builder card (replaced the walkthrough)
+
+
+def test_charactermancer_step_references():
+    # The builder folds in the old walkthrough's value: per-step deep-links.
+    html = charactermancer_html.generate(Charactermancer())
+    _is_page(html)
+    assert "References" in html
+    assert 'href="dnd:///newtab/PHB/' in html           # abilities -> PHB, in a new tab
+    # Proficiency, spell, and equipment steps point at in-app pages, not the PHB.
+    prof = charactermancer_html._step_refs("proficiencies")
+    assert 'href="dnd:///newtab/proficiencies"' in prof and "Codex of Worldly Craft" in prof
+    spells = charactermancer_html._step_refs("spells")
+    assert 'href="dnd:///newtab/screen/spells"' in spells and "Spell Compendium" in spells
+    equip = charactermancer_html._step_refs("equipment")
+    assert 'href="dnd:///newtab/toc/ECO"' in equip and "Economics of the Realm" in equip
 
 
 def test_spells_screen():

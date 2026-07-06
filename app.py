@@ -14,7 +14,6 @@ from urllib.parse import unquote
 
 from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
-from chargen_html import generate as generate_chargen_html
 from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
 import db
@@ -598,7 +597,6 @@ class MainWindow(QMainWindow):
             "splash":   (generate_splash_html,  "Home",           "  D&D 2nd Edition  ·  Rules Reference"),
             "dmscreen": (generate_dmscreen_html, "DM Screen",      "  DM Screen  ·  Quick Reference"),
             "actions":  (generate_actions_html,  "Actions",        "  Actions Screen  ·  Quick Reference"),
-            "chargen":  (generate_chargen_html,  "Char. Creation", "  Character Creation  ·  Step-by-Step Walkthrough"),
         }
 
         self._build_ui()
@@ -759,8 +757,8 @@ class MainWindow(QMainWindow):
         self.calc_btn.setToolTip("Floating THAC0 / AC house-rule converter (stays on top)")
         self.calc_btn.clicked.connect(self._toggle_calc)
 
-        # Screen destinations (DM Screen, Actions, Spells, Character Creation /
-        # Builder, Jarvis) live on the left icon rail — see _build_rail().
+        # Screen destinations (DM Screen, Actions, Spells, Character Builder,
+        # Jarvis) live on the left icon rail — see _build_rail().
 
         nl.addWidget(self.back_btn)
         nl.addWidget(self.fwd_btn)
@@ -880,7 +878,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(rail_btn("📖", "Spells", self._show_spells))
         layout.addSpacing(14)
         # Build a character
-        layout.addWidget(rail_btn("✦", "Character Creation", self._show_chargen))
         layout.addWidget(rail_btn("🧙", "Character Builder", self._show_charactermancer))
         layout.addSpacing(14)
         # Assistant
@@ -1150,7 +1147,7 @@ class MainWindow(QMainWindow):
     # funnels through _navigate(), which renders the destination once and
     # (optionally) pushes it onto the active tab's history.
     #
-    #   "splash" | "dmscreen" | "actions" | "chargen"   built-in screens
+    #   "splash" | "dmscreen" | "actions"               built-in screens
     #   "toc:<BOOK>"                                     a book's contents page
     #   "<BOOK>/<page>.htm"                              a scraped rules page
 
@@ -1160,7 +1157,7 @@ class MainWindow(QMainWindow):
         if url.startswith("toc/"):
             return "toc:" + url[4:]
         if url.startswith("screen/"):
-            return url[len("screen/"):]   # screen/chargen -> chargen
+            return url[len("screen/"):]   # screen/dmscreen -> dmscreen
         return url                        # a page_url
 
     def _on_content_navigate(self, url: str):
@@ -1184,6 +1181,12 @@ class MainWindow(QMainWindow):
         if url.startswith("cm/"):
             self._cm_action(url[len("cm/"):])
             return
+        # Links explicitly tagged to open beside the current page (e.g. the
+        # builder's step references) — open in a new tab so the page stays put.
+        if url.startswith("newtab/"):
+            self._new_tab(show_splash=False)     # opens and switches to the new tab
+            self._navigate(self._link_to_destination(url[len("newtab/"):]))
+            return
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
@@ -1197,7 +1200,7 @@ class MainWindow(QMainWindow):
 
     # Built-in reference/tool screens that take the full content width; opening
     # one hides the book browser. Book pages (toc:/page urls) leave it as-is.
-    _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions", "chargen",
+    _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions",
                           "spells", "charactermancer", "ask"}
 
     def _navigate(self, dest: str, add_to_history: bool = True):
@@ -1395,7 +1398,6 @@ class MainWindow(QMainWindow):
     def _show_actions(self):  self._navigate("actions")
     def _show_spells(self):   self._navigate("spells")
     def _show_charactermancer(self): self._navigate("charactermancer")
-    def _show_chargen(self):  self._navigate("chargen")
     def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
 
@@ -1623,6 +1625,8 @@ class MainWindow(QMainWindow):
 
     def _on_content_navigate_newtab(self, url: str):
         """Ctrl/middle-clicked link: open the target in a new background tab."""
+        if url.startswith("newtab/"):          # already-tagged links carry no extra meaning here
+            url = url[len("newtab/"):]
         prev = self._content_tabs.currentIndex()
         self._new_tab(show_splash=False)
         self._navigate(self._link_to_destination(url))

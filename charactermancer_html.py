@@ -925,6 +925,67 @@ def _placeholder_body(cm, saved=None) -> str:
     )
 
 
+# ── Per-step references (folded in from the old static walkthrough) ───────────
+# Each build step links out to the reference it draws on. Most point at the PHB
+# rules/tables; the proficiency and spell steps point at the campaign's own
+# in-app pages instead (the Codex of Worldly Craft and the Spell Compendium).
+# Each entry is (label, dnd-path, kind) where kind is "phb" or "app".
+_STEP_REFS = {
+    "abilities": [
+        ("Rolling Ability Scores", "PHB/DD01422.htm", "phb"),
+        ("Alternative Methods", "PHB/DD01423.htm", "phb"),
+        ("What the Numbers Mean", "PHB/DD01437.htm", "phb"),
+    ],
+    "race": [
+        ("Racial Requirements", "PHB/DD01438.htm", "phb"),
+        ("Min/Max Scores (Table 8)", "PHB/DD01440.htm", "phb"),
+        ("Racial Ability Adjustments", "PHB/DD01441.htm", "phb"),
+    ],
+    "class": [
+        ("Class Overview", "PHB/DD01456.htm", "phb"),
+        ("Ability Minimums (Table 13)", "PHB/DD01458.htm", "phb"),
+        ("Multi-/Dual-Class Rules", "PHB/DD01511.htm", "phb"),
+    ],
+    "alignment": [
+        ("Alignment Overview", "PHB/DD01515.htm", "phb"),
+        ("The Nine Alignments", "PHB/DD01518.htm", "phb"),
+    ],
+    "proficiencies": [
+        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+        ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
+    ],
+    "equipment": [
+        ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book
+        ("Starting Gold (Table 43)", "PHB/DD01613.htm", "phb"),
+    ],
+    "spells": [
+        ("Spell Compendium", "screen/spells", "app"),             # in-app spell browser
+    ],
+    "details": [
+        ("Languages (Table 4)", "PHB/DD01432.htm", "phb"),
+        ("Charisma (Table 6)", "PHB/DD01436.htm", "phb"),
+        ("Other Details", "PHB/DD01452.htm", "phb"),
+    ],
+}
+
+_REF_BADGE = {"phb": "PHB", "app": "APP"}
+
+
+def _step_refs(step) -> str:
+    """A compact reference row of deep-links for the current step."""
+    refs = _STEP_REFS.get(step)
+    if not refs:
+        return ""
+    # Prefix with newtab/ so references open beside the builder, not over it.
+    chips = "".join(
+        f'<a class="phb-ref {kind}" href="dnd:///newtab/{url}">'
+        f'<span class="phb-badge">{_REF_BADGE[kind]}</span>{_esc(label)}</a>'
+        for label, url, kind in refs
+    )
+    return (f'<div class="phb-refs"><span class="phb-refs-label">References</span>'
+            f'{chips}</div>')
+
+
 _BODIES = {
     "abilities": _abilities_body, "race": _race_body, "class": _class_body,
     "alignment": _alignment_body, "proficiencies": _proficiencies_body,
@@ -983,6 +1044,7 @@ def generate(cm, saved=None) -> str:
   <section class="step">
     <h2 class="step-h">{STEP_TITLES[cm.step]}</h2>
     {body}
+    {_step_refs(cm.step)}
   </section>
   {_footer(cm)}
 </div>
@@ -1256,4 +1318,21 @@ _CSS = f"""
   .nav-btn:hover {{ border-color: {ACCENT}66; }}
   .nav-btn.primary {{ background: {ACCENT}; border-color: {ACCENT}; color: #1a1c26; }}
   .nav-btn.off {{ opacity: .38; pointer-events: none; }}
+
+  /* PHB reference links (folded in from the old walkthrough) */
+  .phb-refs {{ margin-top: 20px; padding-top: 14px; border-top: 1px solid #262a3d; }}
+  .phb-refs-label {{ display: block; color: #5a6080; font-size: 10px; font-weight: 700;
+                     letter-spacing: .09em; text-transform: uppercase; margin-bottom: 8px; }}
+  .phb-ref {{ display: inline-flex; align-items: center; margin: 0 7px 7px 0;
+              background: #1c1f32; border: 1px solid {ACCENT}55; border-radius: 6px;
+              padding: 5px 10px 5px 6px; color: #c2aa68; text-decoration: none;
+              font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }}
+  .phb-ref:hover {{ background: {ACCENT}18; border-color: {ACCENT}; color: {ACCENT}; }}
+  .phb-ref .phb-badge {{ margin-right: 7px; background: #7a6020; color: #f0dca0;
+                         font-size: 8px; font-weight: 800; border-radius: 3px; padding: 3px 4px;
+                         line-height: 1; letter-spacing: .06em; }}
+  /* in-app references (Codex of Worldly Craft, Spell Compendium) — blue, not gold */
+  .phb-ref.app {{ border-color: #35506b; color: #9fc0dc; }}
+  .phb-ref.app:hover {{ background: #5b9bd518; border-color: #5b9bd5; color: #cfe4f6; }}
+  .phb-ref.app .phb-badge {{ background: #2f4a63; color: #cfe4f6; }}
 """
