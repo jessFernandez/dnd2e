@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
     QLabel, QSizePolicy, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer
 from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence
 
 try:
@@ -326,6 +326,32 @@ QPushButton:pressed { background: #c9a84c; color: #1a1c26; border-color: #c9a84c
 QPushButton:disabled { color: #303444; border-color: #1e2030; background: transparent; }
 """
 
+# ── Left icon rail stylesheet (screen / tool destinations) ────────────────────
+
+RAIL_STYLE = """
+QWidget#railBar {
+    background: #15171f;
+    border-right: 1px solid #262a38;
+}
+QWidget#railBar QPushButton {
+    background: transparent;
+    color: #8087a8;
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    font-size: 19px;
+    padding: 0;
+}
+QWidget#railBar QPushButton:hover {
+    background: #21243a;
+    color: #e6e9f6;
+    border-left: 2px solid #c9a84c;
+}
+QWidget#railBar QPushButton:pressed { background: #2a2e48; }
+QWidget#railBar QPushButton#railHome { color: #c2aa68; }
+QWidget#railBar QPushButton#railHome:hover { color: #e8c26e; }
+"""
+
 # ── In-page find bar stylesheet ───────────────────────────────────────────────
 
 FIND_BAR_STYLE = """
@@ -611,10 +637,9 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1200, 720)
 
         splitter = QSplitter(Qt.Horizontal)
-        self.setCentralWidget(splitter)
 
-        # ── Left sidebar ───────────────────────────────────────────────
-        sidebar = QWidget()
+        # ── Left sidebar (book browser; toggled by the rail's Books icon) ──
+        self._sidebar = sidebar = QWidget()
         sidebar.setMaximumWidth(400)
         sidebar.setMinimumWidth(260)
         sl = QVBoxLayout(sidebar)
@@ -734,32 +759,8 @@ class MainWindow(QMainWindow):
         self.calc_btn.setToolTip("Floating THAC0 / AC house-rule converter (stays on top)")
         self.calc_btn.clicked.connect(self._toggle_calc)
 
-        self.dmscreen_btn = QPushButton("⚔  DM Screen")
-        self.dmscreen_btn.setCursor(Qt.PointingHandCursor)
-        self.dmscreen_btn.clicked.connect(lambda: self._show_dmscreen())
-
-        self.actions_btn = QPushButton("⚡  Actions")
-        self.actions_btn.setCursor(Qt.PointingHandCursor)
-        self.actions_btn.clicked.connect(lambda: self._show_actions())
-
-        self.chargen_btn = QPushButton("✦  Character Creation")
-        self.chargen_btn.setCursor(Qt.PointingHandCursor)
-        self.chargen_btn.clicked.connect(lambda: self._show_chargen())
-
-        self.spells_btn = QPushButton("📖  Spells")
-        self.spells_btn.setCursor(Qt.PointingHandCursor)
-        self.spells_btn.setToolTip("The 2e Spell Compendium — every wizard & priest spell")
-        self.spells_btn.clicked.connect(lambda: self._show_spells())
-
-        self.cm_btn = QPushButton("🧙  Character Builder")
-        self.cm_btn.setCursor(Qt.PointingHandCursor)
-        self.cm_btn.setToolTip("Build a 2e character step by step (house rules included)")
-        self.cm_btn.clicked.connect(lambda: self._show_charactermancer())
-
-        self.ask_btn = QPushButton("✦  Jarvis")
-        self.ask_btn.setCursor(Qt.PointingHandCursor)
-        self.ask_btn.setToolTip("Ask a 2e rules question in plain English (local AI assistant)")
-        self.ask_btn.clicked.connect(lambda: self._show_ask())
+        # Screen destinations (DM Screen, Actions, Spells, Character Creation /
+        # Builder, Jarvis) live on the left icon rail — see _build_rail().
 
         nl.addWidget(self.back_btn)
         nl.addWidget(self.fwd_btn)
@@ -770,12 +771,6 @@ class MainWindow(QMainWindow):
         nl.addWidget(self.newtab_btn)
         nl.addWidget(self.calc_btn)
         nl.addStretch()
-        nl.addWidget(self.ask_btn)
-        nl.addWidget(self.cm_btn)
-        nl.addWidget(self.spells_btn)
-        nl.addWidget(self.chargen_btn)
-        nl.addWidget(self.actions_btn)
-        nl.addWidget(self.dmscreen_btn)
         rl.addWidget(nav_bar)
 
         # Find-on-page bar (hidden until Ctrl+F)
@@ -830,6 +825,21 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([340, 860])
 
+        # ── Left icon rail + everything else ───────────────────────────
+        # A slim vertical rail of screen/tool destinations sits at the window's
+        # left edge, so the nav bar keeps only browser/tab controls.
+        container = QWidget()
+        cl = QHBoxLayout(container)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        cl.addWidget(self._build_rail())
+        cl.addWidget(splitter, 1)
+        self.setCentralWidget(container)
+
+        # The book browser starts hidden — it appears only when the rail's Books
+        # icon is clicked, so reference/tool pages get the full content width.
+        self._sidebar.setVisible(False)
+
         # Status bar
         self.status = QStatusBar()
         self.status.setSizeGripEnabled(False)
@@ -838,6 +848,60 @@ class MainWindow(QMainWindow):
                 "PyQtWebEngine not found — install with:  pip install PyQtWebEngine"
             )
         self.setStatusBar(self.status)
+
+    def _build_rail(self) -> QWidget:
+        """Slim vertical rail of screen/tool destinations at the window's left edge.
+        Replaces the row of destination buttons that used to crowd the nav bar;
+        hovering an icon shows its full label as a tooltip."""
+        rail = QWidget()
+        rail.setObjectName("railBar")
+        rail.setFixedWidth(52)
+        rail.setStyleSheet(RAIL_STYLE)
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(2)
+
+        def rail_btn(icon, tip, slot, name=None):
+            b = QPushButton(icon)
+            if name:
+                b.setObjectName(name)
+            b.setFixedSize(52, 44)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda: slot())
+            return b
+
+        layout.addWidget(rail_btn("⌂", "Home", self._show_splash, name="railHome"))
+        layout.addWidget(rail_btn("📚", "Browse Books", self._toggle_sidebar, name="railBooks"))
+        layout.addSpacing(12)
+        # Quick references
+        layout.addWidget(rail_btn("⚔", "DM Screen", self._show_dmscreen))
+        layout.addWidget(rail_btn("⚡", "Actions", self._show_actions))
+        layout.addWidget(rail_btn("📖", "Spells", self._show_spells))
+        layout.addSpacing(14)
+        # Build a character
+        layout.addWidget(rail_btn("✦", "Character Creation", self._show_chargen))
+        layout.addWidget(rail_btn("🧙", "Character Builder", self._show_charactermancer))
+        layout.addSpacing(14)
+        # Assistant
+        layout.addWidget(rail_btn("💬", "Jarvis", self._show_ask))
+        layout.addStretch()
+        return rail
+
+    # ── Book-browser sidebar (toggled from the rail) ─────────────────────────
+
+    def _show_sidebar(self):
+        self._sidebar.setVisible(True)
+        self.tabs.setCurrentIndex(0)          # the Browse tab
+
+    def _hide_sidebar(self):
+        self._sidebar.setVisible(False)
+
+    def _toggle_sidebar(self):
+        if self._sidebar.isVisible():
+            self._hide_sidebar()
+        else:
+            self._show_sidebar()
 
     # ── Keyboard shortcuts ──────────────────────────────────────────────────
 
@@ -884,7 +948,7 @@ class MainWindow(QMainWindow):
             self._content_tabs.setCurrentIndex(idx)
 
     def _focus_search(self):
-        self.tabs.setCurrentIndex(0)
+        self._show_sidebar()               # search lives in the book browser
         self.search_box.setFocus()
         self.search_box.selectAll()
 
@@ -1131,10 +1195,17 @@ class MainWindow(QMainWindow):
     def _on_jarvis_page(self) -> bool:
         return self._nav.current() == "ask"
 
+    # Built-in reference/tool screens that take the full content width; opening
+    # one hides the book browser. Book pages (toc:/page urls) leave it as-is.
+    _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions", "chargen",
+                          "spells", "charactermancer", "ask"}
+
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
+        if dest in self._FULLWIDTH_SCREENS or dest.startswith("proficiencies"):
+            self._hide_sidebar()
         if add_to_history:
             self._nav.push(dest)
         self._update_nav_buttons()
@@ -1716,6 +1787,9 @@ class MainWindow(QMainWindow):
             if 0 <= active < self._content_tabs.count():
                 self._content_tabs.setCurrentIndex(active)
         self._apply_zoom_all()
+        # QSplitter re-shows its panes on first display, so force the book browser
+        # hidden once the initial show has happened (it opens via the Books icon).
+        QTimer.singleShot(0, self._hide_sidebar)
         if self._settings.value("calcOpen", False, type=bool):
             self._toggle_calc()             # reopen the calculator where it was
 
