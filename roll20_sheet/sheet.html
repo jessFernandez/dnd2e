@@ -1,0 +1,3638 @@
+<div class="nsheet">
+
+	<input type="hidden" name="attr_settingPartyGlobal" class="settingPartyGlobal" value="0" />
+	<input type="hidden" name="attr_settingThiefGlobal" class="settingThiefGlobal" value="0" />
+	<input type="hidden" name="attr_settingSpellGlobal" class="settingSpellGlobal" value="0" />
+	<input type="hidden" name="attr_settingNewSaveGlobal" class="settingNewSaveGlobal" value="0" />
+	<input type="hidden" name="attr_settingMP" class="settingMP" value="0" />
+	<input type="hidden" name="attr_settingPerceptionGlobal" class="settingPerceptionGlobal" value="1" />
+	<input type="hidden" name="attr_enclevel" class="enc" value="0" />
+	<input type="hidden" name="attr_hpexpand" class="hpexpand" value="0" />
+	<input type="radio" class="basic navbutton" name="attr_tab" value="1" checked="checked" /><label class="nav">Basic</label>
+	<input type="radio" class="combat navbutton" name="attr_tab" value="2" /><label class="nav">Combat</label>
+	<input type="radio" class="gear navbutton" name="attr_tab" value="3" /><label class="nav">Gear</label>
+	<input type="radio" class="skills navbutton" name="attr_tab" value="4" /><label class="nav">Skills</label>
+	<input type="radio" class="thief navbutton" name="attr_tab" value="7" /><label class="nav thief">Thief</label>
+	<input type="radio" class="spell navbutton" name="attr_tab" value="9" /><label class="nav spell">Spells</label>
+	<input type="radio" class="mods navbutton" name="attr_tab" value="5" /><label class="nav">Modifiers</label>
+	<input type="radio" class="party navbutton" name="attr_tab" value="8" /><label class="nav party">Party</label>
+	<input type="radio" class="settings navbutton" name="attr_tab" value="6" /><label class="nav settings">Settings</label>
+	<div class="encglobal">
+		<div class="encbase enclight encmedium encheavy encsevere">Encumberance</div>
+		<span class="encbase">Base</span>
+		<span class="enclight">Light</span>
+		<span class="encmedium">Medium</span>
+		<span class="encheavy">Heavy</span>
+		<span class="encsevere">Severe</span>
+	</div>
+
+
+<!-- BASIC TAB -->
+	<div class="tab basic">
+
+		<table class="basicinfo">
+			<tr>
+				<td>Player</td><td><input type="text" name="attr_player_name" /></td>
+			</tr>
+			<tr>
+				<td>Character</td><td><input type="text" name="attr_character_name" /></td>
+			</tr>
+			<tr>
+				<td>Alignment</td><td><input type="text" name="attr_alignment" /></td>
+			</tr>
+			<tr>
+				<td>Languages</td><td><input type="text" name="attr_languages" /></td>
+			</tr>
+		</table>
+
+		<table class="basicinfo">
+			<tr>
+				<td>Height</td><td><input type="text" name="attr_height" /></td>
+				<td>Weight</td><td><input type="text" name="attr_weightchar" value="0" class="dependent" /></td>
+				<td>Size</td><td><input type="text" name="attr_size" /></td>
+			</tr>
+			<tr>
+				<td>Race</td><td><input type="text" name="attr_race" /></td>
+				<td>Classes</td><td colspan="3"><input type="text" name="attr_classes" /></td>
+			</tr>
+			<tr>
+				<td>XP</td><td><input type="text" name="attr_xp" /></td>
+				<td>Sex</td><td><input type="text" name="attr_sex" /></td>
+				<td>Age</td><td><input type="text" name="attr_age" /></td>
+			</tr>
+			<tr>
+				<td>Level</td><td><input type="text" name="attr_level" value="0" class="dependent" /></td>
+				<td>Speed</td><td><input type="text" name="attr_speed" value="0" class="dependent" /></td>
+				<td>Handed</td><td><input type="text" name="attr_handed" /></td>
+			</tr>
+		</table>
+
+		<hr />
+
+		<table class="stats">
+			<tr>
+				<td><button type="roll" value="/me makes a Str check
+/r 1d20+@{strength}">Str</button></td><td colspan="1"><input type="text" name="attr_strength" value="0" tabindex="1" /></td>
+				<td colspan="2"><span>Melee Attack Adjust</span><input type="number" step="any" name="attr_attackbonusstr" value="0" /></td>
+				<td colspan="2"><span>Melee Damage Adjust</span><input type="number" step="any" name="attr_damagebonusstr" value="0" /></td>
+				<td colspan="2"><span>Weight Allowance</span><input type="number" step="any" name="attr_weightallow" value="0" /></td>
+				<td colspan="2"><span>Max Press</span><input type="number" step="any" name="attr_maxpress" value="0" /></td>
+				<td colspan="2"><span>Open Doors</span><input type="number" step="any" name="attr_opendoors" value="0" /></td>
+				<td colspan="2"><span>Bend Bars</span><input type="number" step="any" name="attr_bendbars" value="0" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/me makes a Dex check
+/r 1d20+@{dexterity}">Dex</button></td><td colspan="1"><input type="text" name="attr_dexterity" value="0" tabindex="2" /></td>
+				<td colspan="6"><span>Missile Hit Adjust <span class="perceptionAlt">/ Reaction Adjust</span></span><input type="number" step="any" name="attr_attackbonusdex" value="0" /></td>
+				<td colspan="6"><span>Defensive Adjustment</span><input type="number" step="any" name="attr_acbonusdex" value="0" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/me makes a Con check
+/r 1d20+@{constitution}">Con</button></td><td colspan="1"><input type="text" name="attr_constitution" value="0" tabindex="3" /></td>
+				<td colspan="3"><span>HP Adjust</span><input type="number" step="any" name="attr_hpbonuscon" value="0" /></td>
+				<td colspan="3"><span>System Shock</span><input type="number" step="any" name="attr_systemshock" value="0" /></td>
+				<td colspan="3"><span>Poison Save</span><input type="number" step="any" name="attr_savebonuscon" value="0" /></td>
+				<td colspan="3"><span>Regeneration</span><input type="text" name="attr_regenerationcon" value="None" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/me makes a Int check
+/r 1d20+@{intelligence}">Int</button></td><td colspan="1"><input type="text" name="attr_intelligence" value="0" tabindex="4" /></td>
+				<td colspan="3"><span>Languages</span><input type="number" step="any" name="attr_languagesmax" value="0" /></td>
+				<td colspan="3"><span>Max Spell Level</span><input type="number" step="any" name="attr_spelllevelmax" value="0" /></td>
+				<td colspan="3"><span>Chance to Learn Spell</span><input type="number" step="any" name="attr_spelllear" value="0" /></td>
+				<td colspan="3"><span>Max Spells per Level</span><input type="number" step="any" name="attr_spellnumbermax" value="0" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/me makes a Wil check
+/r 1d20+@{willpower}">Wil</button></td><td colspan="1"><input type="text" name="attr_willpower" value="0" tabindex="5" /></td>
+				<td colspan="3"><span>Mental Defense Adjust</span><input type="number" step="any" name="attr_savebonuswisdom" value="0" /></td>
+				<td colspan="6"><span>Bonus Spells</span><input type="text" name="attr_spellsclericbonus" value="None" /></td>
+				<td colspan="3"><span>Spell Failure</span><input type="number" step="any" name="attr_spellclericfail" value="0" /></td>
+			</tr>
+			<tr class="perceptionAltBot">
+				<td><button type="roll" value="/me makes a Chr check
+/r 1d20+@{charisma}">Chr</button></td><td colspan="1"><input type="text" name="attr_charisma" value="0" tabindex="6" /></td>
+				<td colspan="4"><span>Henchmen</span><input type="number" step="any" name="attr_henchmenmax" value="0" /></td>
+				<td colspan="4"><span>Loyalty Base</span><input type="number" step="any" name="attr_loyaltybase" value="0" /></td>
+				<td colspan="4"><span>Reaction Adjust</span><input type="number" step="any" name="attr_reactionadjust" value="0" /></td>
+			</tr>
+			<tr class="perception">
+				<td><button type="roll" value="/me makes a Pcp check
+/r 1d20+@{perception}">Pcp</button></td><td colspan="1"><input type="text" name="attr_perception" value="0" tabindex="7" /></td>
+				<td colspan="2"><span>Surprise Adjust</span><input type="number" step="any" name="attr_surprisebonuspcp" value="0" /></td>
+				<td colspan="10"><span>Illusion Immunity</span><input type="text" name="attr_illusionimmunity" value="None" /></td>
+			</tr>
+		</table>
+
+		<hr />
+
+		<textarea class="notescampaign" name="attr_notescampaign" value="Additional Notes"></textarea>
+		<textarea class="noteschar" name="attr_noteschar" value="Character Notes"></textarea>
+	</div>
+
+<!-- COMBAT TAB -->
+	<div class="tab combat">
+		<div class="simple clearfix">
+			<table class="hpmpac tagg">
+				<tr>
+					<th colspan="2">HP
+						<label class="hpexpand expand-on">><input type="radio" name="attr_hpexpanded" value="1" /></label>
+					</th>
+					<td class="hpexpanded"><label class="hpexpand expand-off"><<input type="radio" name="attr_hpexpanded" value="0" /></label>Wounds</td>
+				</tr>
+				<tr>
+					<td><input type="text" name="attr_hp" value="0" /></td>
+					<td><input type="text" name="attr_hp_max" value="0" /></td>
+					<td class="hpexpanded">
+						<input type="number" name="attr_hpe1" value="0" />
+						<input type="number" name="attr_hpe2" value="0" />
+						<input type="number" name="attr_hpe3" value="0" />
+						<input type="number" name="attr_hpe4" value="0" />
+						<input type="number" name="attr_hpe5" value="0" />
+						<input type="number" name="attr_hpe6" value="0" />
+						<input type="number" name="attr_hpe7" value="0" />
+						<input type="number" name="attr_hpe8" value="0" />
+						<input type="number" name="attr_hpe9" value="0" />
+						<input type="number" name="attr_hpe10" value="0" />
+					</td>
+				</tr>
+				<tr>
+					<td>Current</td>
+					<td>Max</td>
+					<td class="hpexpanded"><button type="action" name="act_heal" class="healme">Heal 1</button></td>
+				</tr>
+			</table>
+
+			<table class="hpmpac tagb">
+				<tr>
+					<th colspan="4">Armor Class</th>
+				</tr>
+				<tr>
+					<td><input type="hidden" name="attr_actotal" value="0" />
+						<span name="attr_actotal"></span>
+					</td>
+					<td><input type="hidden" name="attr_acback" value="0" />
+						<span name="attr_acback"></span>
+					</td>
+					<td><input type="hidden" name="attr_actouch" value="0" />
+						<span name="attr_actouch"></span>
+					</td>
+					<td><input type="hidden" name="attr_acsurprise" value="0" />
+						<span name="attr_acsurprise"></span>
+					</td>
+				</tr>
+				<tr>
+					<td>Total</td>
+					<td>Back</td>
+					<td>Touch</td>
+					<td class="condensed">Surprised</td>
+				</tr>
+			</table>
+
+			<table class="hpmpac tagr">
+				<tr>
+					<th colspan="4">Basic Attacks</th>
+				</tr>
+				<tr>
+					<td>
+						<input type="hidden" name="attr_attackmelee" />
+						<span name="attr_attackmelee"></span>
+					</td>
+					<td>
+						<input type="hidden" name="attr_attackmissile" />
+						<span name="attr_attackmissile"></span>
+					</td>
+					<td>
+						<input type="hidden" name="attr_attackthrow" />
+						<span name="attr_attackthrow"></span>
+					</td>
+				</tr>
+				<tr>
+					<td><button type='roll' value='/me makes a basic melee attack
+/roll 1d20+@{attackmelee}' name='roll_basicmelee'>Melee</button></td>
+					<td><button type='roll' value='/me makes a basic missile attack
+/roll 1d20+@{attackmissile}' name='roll_basicmissile'>Missile</button></td>
+					<td><button type='roll' value='/me makes a basic thrown attack
+/roll 1d20+@{attackthrow}' name='roll_basicthrow'>Thrown</button></td>
+				</tr>
+			</table>
+
+			<table class="hpmpac tagg mpblock">
+				<tr>
+					<th colspan="2">MP</th>
+				</tr>
+				<tr>
+					<td><input type="text" name="attr_mp" /></td>
+					<td><input type="text" name="attr_mp_max" /></td>
+				</tr>
+				<tr>
+					<td>Current</td>
+					<td>Max</td>
+				</tr>
+			</table>
+
+		</div>
+
+		<hr />
+
+		<table class="savemods tagy">
+			<tr>
+				<th colspan="2">Saving Throws</th>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/roll 1d20>@{saveppd}"></button>Paralyze / Poison / Death</td><td><input type="text" name="attr_saveppd" value="16" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/roll 1d20>@{saversw}"></button>Rods / Staffs / Wands</td><td><input type="text" name="attr_saversw" value="18" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/roll 1d20>@{savepp}"></button>Petrification / Polymorph</td><td><input type="text" name="attr_savepp" value="17" /></td>
+			</tr>
+			<tr>
+				<td><button type="roll" value="/roll 1d20>@{savebw}"></button>Breath Weapon</td><td><input type="text" name="attr_savebw" value="20" /></td>
+			</tr>
+			<tr class="saveNewAltBot">
+				<td><button type="roll" value="/roll 1d20>@{saves}"></button>Spell</td><td><input type="text" name="attr_saves" value="19" /></td>
+			</tr>
+			<tr class="saveNew">
+				<td><button type="roll" value="/roll 1d20+@{saveo}+?{Opposed by|Strength,@{strength}|Dexterity,@{dexterity}|Constitution,@{constitution}|Intelligence,@{intelligence}|Willpower,@{willpower}|Charisma,@{charisma}|Perception,@{perception}}"></button>New Save vs. Spell</td><td><input type="text" name="attr_saveo" value="@{level}*2" disabled="true" /></td>
+			</tr>
+		</table>
+
+		<table class="savemods tagy">
+			<tr>
+				<td><select name="attr_savearacial">
+					<option value="0" checked="true">Race</option>
+					<option value="1">Dwarf</option>
+					<option value="2">Gnome</option>
+					<option value="0">Other</option>
+					</select>
+				</td>
+				<th colspan="4">Save Modifiers</th>
+			</tr>
+			<tr class="smalllabel">
+				<td>Source <input type="text" style="visibility: hidden; width: 1px;" /></td><td>Magic</td><td>Poison</td><td>Mind</td><td>All</td>
+			</tr>
+			<tr>
+				<td>Racial</td>
+				<td><input type="text" value="floor(@{constitution}/3.5)*floor(@{savearacial}/2)" name="attr_saveracialma" disabled="true" /></td>
+				<td><input type="text" value="floor(@{constitution}/3.5)*ceil(@{savearacial}/2)" name="attr_saveracialp" disabled="true" /></td>
+				<td><input type="text" value="floor(@{constitution}/3.5)*floor(@{savearacial}/2)" name="attr_saveracialmi" disabled="true" /></td>
+				<td><input type="text" value="0" disabled="true" /></td>
+			</tr>
+			<tr>
+				<td>Stats</td>
+				<td><input type="text" value="0" disabled="true" /></td>
+				<td><span name="attr_savebonuscon"></span></td>
+				<td><span name="attr_savebonuswisdom"></span></td>
+				<td><input type="text" value="0" disabled="true" /></td>
+			</tr>
+			<tr>
+				<td><input type="text" value="Other Source" name="attr_saveother1" /></td>
+				<td><input type="text" value="0" name="attr_savemaother1" /></td>
+				<td><input type="text" value="0" name="attr_savepother1" /></td>
+				<td><input type="text" value="0" name="attr_savemiother1" /></td>
+				<td><input type="text" value="0" name="attr_saveaother1" /></td>
+			</tr>
+			<tr>
+				<td><input type="text" value="Other Source" name="attr_saveother2" /></td>
+				<td><input type="text" value="0" name="attr_savemaother2" /></td>
+				<td><input type="text" value="0" name="attr_savepother2" /></td>
+				<td><input type="text" value="0" name="attr_savemiother2" /></td>
+				<td><input type="text" value="0" name="attr_saveaother2" /></td>
+			</tr>
+			<tr>
+				<td>Total</td>
+				<td><input type="text" name="attr_savemagic" value="@{saveracialma}+@{savemaother1}+@{savemaother2}" disabled="true" /></td>
+				<td><input type="text" name="attr_savepoison" value="@{saveracialp}+@{savebonuscon}+@{savepother1}+@{savepother2}" disabled="true" /></td>
+				<td><input type="text" name="attr_savemind" value="@{saveracialmi}+@{savebonuswisdom}+@{savemiother1}+@{savemiother2}" disabled="true" /></td>
+				<td><input type="text" name="attr_saveall" value="@{saveaother1}+@{saveaother2}" disabled="true" /></td>
+			</tr>
+		</table>
+
+		<table class="savemods tagb">
+			<tr>
+				<th colspan="2">AC Modifiers</th>
+			</tr>
+			<tr>
+				<td>Natural</td><td><input type="text" name="attr_acbase" value="10"/></td>
+			</tr>
+			<tr>
+				<td>Dexterity</td><td><input type="hidden" name="attr_acequipmentdex" value="0" /><input type="text" name="attr_acdex" value="@{acbonusdex}+@{acequipmentdex}" disabled="true" /></td>
+			</tr>
+			<tr>
+				<td>Armor</td><td><input type="text" name="attr_acarmor" value="0" /></td>
+			</tr>
+			<tr>
+				<td>Shield</td><td><input type="text" name="attr_acshield" value="0" /></td>
+			</tr>
+			<tr>
+				<td>Magic</td><td><input type="text" name="attr_acmagic" value="0" /></td>
+			</tr>
+			<tr>
+				<td>Enc</td><td><input type="hidden" name="attr_acenc" value="0" /><span name="attr_acenc" ></span></td>
+			</tr>
+		</table>
+
+		<table class="savemods tagr">
+			<tr>
+				<th colspan="4">
+					<div class="left"><input type='text' name="attr_attackbase" value="0" /><span>From Level</span></div>
+				Hit Adjust
+					<div class="right"><span>From Enc</span><input type="hidden" name="attr_attackenc" value="0"/><input type="text" disabled="true" value="@{attackenc}" name="attr_attackenchold" /></div>
+				</th>
+			</tr>
+			<tr class="smalllabel">
+				<td>Source <input type="text" style="visibility: hidden; width: 1px;" /></td>
+				<td>Melee</td>
+				<td>Missile</td>
+				<td>Thrown</td>
+			</tr>
+			<tr>
+				<td>Stats</td>
+				<td><span name="attr_attackbonusstr"></span></td>
+				<td><span name="attr_attackbonusdex"></span></td>
+				<td><input type="hidden" name="attr_attackbonusstrdex" value="0"><span name="attr_attackbonusstrdex"></span></td>
+			</tr>
+			<tr>
+				<td><input type="text" value="Other Source" name="attr_attackother1" /></td>
+				<td><input type="text" value="0" name="attr_attackmeother1" /></td>
+				<td><input type="text" value="0" name="attr_attackmiother1" /></td>
+				<td><input type="text" value="0" name="attr_attackthother1" /></td>
+				<td><input type="checkbox" value="1" name="attr_attackother1on" /></td>
+			</tr>
+			<tr>
+				<td><input type="text" value="Other Source" name="attr_attackother2" /></td>
+				<td><input type="text" value="0" name="attr_attackmeother2" /></td>
+				<td><input type="text" value="0" name="attr_attackmiother2" /></td>
+				<td><input type="text" value="0" name="attr_attackthother2" /></td>
+				<td><input type="checkbox" value="1" name="attr_attackother2on" /></td>
+			</tr>
+			<tr>
+				<td><input type="text" value="Other Source" name="attr_attackother3" /></td>
+				<td><input type="text" value="0" name="attr_attackmeother3" /></td>
+				<td><input type="text" value="0" name="attr_attackmiother3" /></td>
+				<td><input type="text" value="0" name="attr_attackthother3" /></td>
+				<td><input type="checkbox" value="1" name="attr_attackother3on" /></td>
+			</tr>
+
+		</table>
+
+		<div class="weaponnotes">
+			<span>Melee</span>
+			<span>Missile</span>
+			<span>Thrown</span>
+		</div>
+
+		<hr />
+
+		<table class="weaponsheader repeathead tagr">
+			<tr>
+				<td>Weapon</td>
+				<td># Atks</td>
+				<td>To Hit</td>
+				<td>Damage</td>
+				<td>To Dam</td>
+				<td>Range</td>
+				<td>Type</td>
+				<td>Speed</td>
+				<td>Initi</td>
+			</tr>
+		</table>
+		<div class="weapons repeat">
+			<fieldset class="repeating_weapons">
+				<div class="weaponsrepeat">
+					<input type="text" name="attr_wname" /><input type="number" step="any" name="attr_watks" /><input type="number" step="any" name="attr_whit" value="0" /><input type="text" name="attr_wdambase" /><input type="number" step="any" name="attr_wdambonus" value="0" /><input type="text" name="attr_wrange" /><input type="text" name="attr_wtype" /><input type="number" step="any" name="attr_wspeed" /><button type="roll" value="/me rolls for initiative with @{wname}: [[1d10+@{wspeed}&{tracker}]]"></button><input type="radio" name="attr_wmode" value="@{attackmelee}" checked="checked" /><input type="radio" name="attr_wmode" value="@{attackmissile}" /><input type="radio" name="attr_wmode"  value="@{attackthrow}" /><button class="buttonattack" type="roll" value="/me attacks with @{wname}
+/roll 1d20+@{whit}+@{wmode}">Atk</button><button class="buttonattack" type="roll" value="/roll @{wdambase}+@{wdambonus} for damage">Dam</button>
+				</div>
+			</fieldset>
+		</div>
+
+		<hr />
+
+		<table class="armorheader repeathead tagr">
+			<tr>
+				<td>Armor &amp; AC Type</td>
+				<td>Armor</td>
+				<td>Magic</td>
+				<td>Dex</td>
+				<td>Equiped</td>
+			</tr>
+		</table>
+		<div class="armor repeat">
+			<fieldset class="repeating_armor">
+				<div class="armorrepeat">
+					<input type="text" name="attr_aname" /><input type="number" step="any" name="attr_aac" /><input type="number" step="any" name="attr_amagic" /><input type="number" step="any" name="attr_adex" /><input type="checkbox" name="attr_aequipped" value="1" />
+				</div>
+			</fieldset>
+		</div>
+
+
+	</div>
+
+<!-- GEAR TAB -->
+	<div class="tab gear">
+
+		<div class="simple clearfix">
+			<div class="wealth">
+				<table class="hpmpac tagr">
+					<tr>
+						<th colspan="2">Personal Wealth</th>
+						<th colspan="2">&nbsp;</th>
+						<td>Weight</td>
+						<td><input type="hidden" name="attr_weightpurse" value="0" /><span name="attr_weightpurse"></span></td>
+					</tr>
+					<tr>
+						<td><input type="text" value="0" name="attr_wealthcp" /></td>
+						<td><input type="text" value="0" name="attr_wealthsp" /></td>
+						<td><input type="text" value="0" name="attr_wealthip" /></td>
+						<td><input type="text" value="0" name="attr_wealthgp" /></td>
+						<td><input type="text" value="0" name="attr_wealthpp" /></td>
+						<td><input type="text" value="0" name="attr_wealthmp" /></td>
+					</tr>
+					<tr>
+						<td>Copper</td>
+						<td>Silver</td>
+						<td>Iron</td>
+						<td>Gold</td>
+						<td>Platinum</td>
+						<td>Mithril</td>
+					</tr>
+				</table>
+
+
+				<table class="hpmpac tagy">
+					<tr>
+						<th colspan="2">Wealth in Hoard</th>
+						<th colspan="2">&nbsp;</th>
+						<td>Weight</td>
+						<td><input type="hidden" name="attr_weighthoard" value="0" /><span name="attr_weighthoard"></span></td>
+					</tr>
+					<tr>
+						<td><input type="text" value="0" name="attr_wealthhcp" /></td>
+						<td><input type="text" value="0" name="attr_wealthhsp" /></td>
+						<td><input type="text" value="0" name="attr_wealthhip" /></td>
+						<td><input type="text" value="0" name="attr_wealthhgp" /></td>
+						<td><input type="text" value="0" name="attr_wealthhpp" /></td>
+						<td><input type="text" value="0" name="attr_wealthhmp" /></td>
+					</tr>
+					<tr>
+						<td>Copper</td>
+						<td>Silver</td>
+						<td>Iron</td>
+						<td>Gold</td>
+						<td>Platinum</td>
+						<td>Mithril</td>
+					</tr>
+				</table>
+			</div>
+
+			<table class="encumberance">
+				<tr>
+					<th colspan="3">Weights</th>
+				</tr>
+				<tr>
+					<td>&nbsp;</td>
+					<td>Weight</td>
+					<td>Sum</td>
+				</tr>
+				<tr class="tagr">
+					<td>Purse</td>
+					<td><span name="attr_weightpurse"></span></td>
+					<td>&nbsp;</td>
+				</tr>
+				<tr class="tagg">
+					<td>Equipped</td>
+					<td><span name="attr_gear1weighttotal"></span></td>
+					<td><input type="text" name="attr_gearequipped" value="(@{gear1weighttotal}+@{weightpurse})" disabled="true" /></td>
+				</tr>
+				<tr class="tagb">
+					<td>Bag</td>
+					<td><span name="attr_gear2weighttotal"></span></td>
+					<td><input type="hidden" name="attr_weightcarried" value="0" /><span name="attr_weightcarried"></span></td>
+					<td><input type="checkbox" name="attr_bagon" value="1" checked /></td>
+				</tr>
+				<tr>
+					<td>Character</td>
+					<td><span name="attr_weightchar"></span></td>
+					<td><input type="text" value="(@{weightcarried}+@{weightchar})" disabled="true" name="attr_weighttotalchar"/></td>
+				</tr>
+			</table>
+
+			<table class="encumberance">
+				<tr>
+					<th colspan="3">Encumberance</th>
+				</tr>
+				<tr>
+					<td>&nbsp;</td>
+					<td>Weight</td>
+					<td>M. Speed</td>
+				</tr>
+				<tr>
+					<td class="encbase">Base</td>
+					<td><input type="text" name="attr_encbase" value="0" class="dependent" /></td>
+					<td><input type="text" name="attr_speedbase" value="@{speed}" disabled="true" /></td>
+				</tr>
+				<tr>
+					<td class="enclight">Light</td>
+					<td><input type="text" name="attr_enclight" value="0" class="dependent" /></td>
+					<td><input type="text" name="attr_speedlight" value="(@{speed}*2/3)" disabled="true" /></td>
+				</tr>
+				<tr>
+					<td class="encmedium">Medium</td>
+					<td><input type="text" name="attr_encmedium" value="0" class="dependent" /></td>
+					<td><input type="text" name="attr_speedmedium" value="(@{speed}/2)" disabled="true" /></td>
+				</tr>
+				<tr>
+					<td class="encheavy">Heavy</td>
+					<td><input type="text" name="attr_encheavy" value="0" class="dependent" /></td>
+					<td><input type="text" name="attr_speedheavy" value="(@{speed}/3)" disabled="true" /></td>
+				</tr>
+				<tr>
+					<td class="encsevere">Severe</td>
+					<td><input type="text" name="attr_encsevere" value="0" class="dependent" /></td>
+					<td><input type="text" name="attr_speedheavy" value="1" disabled="true" /></td>
+				</tr>
+			</table>
+		</div>
+
+		<hr />
+
+		<input type="radio" class="gear1 navbutton" name="attr_gtab" value="1" checked="checked" /><label class="nav">On Person</label>
+		<input type="radio" class="gear2 navbutton" name="attr_gtab" value="2" /><label class="nav">In Pack</label>
+		<input type="radio" class="gear3 navbutton" name="attr_gtab" value="3" /><label class="nav">Animal</label>
+		<input type="radio" class="gear4 navbutton" name="attr_gtab" value="4" /><label class="nav"><span name="attr_gear4name"></span></label>
+
+		<div class="gear1 subtab">
+			<div class="repeatwrap">
+				<table class="equipmentheader repeathead tagg">
+					<tr>
+						<td>#</td>
+						<th>Equipment on Person <input type="number" step="any" name="attr_gear1weighttotal" value="0" /></th>
+						<td>Wgt.</td>
+						<td>Total</td>
+						<td>Value</td>
+						<td>Total</td>
+					</tr>
+				</table>
+				<div class="repeat">
+					<fieldset class="repeating_gear1">
+						<div class="equipment">
+							<input type="number" step="any" name="attr_g1quantity" /><input type="text" name="attr_g1name" /><input type="number" step="any" name="attr_g1weight" class="tagb" /><input type="number" step="any" name="attr_g1weighttotal" class="tagb" /><input type="number" step="any" name="attr_g1cost" class="tagg" /><input type="number" step="any" name="attr_g1costtotal" class="tagg" />
+						</div>
+					</fieldset>
+				</div>
+			</div>
+		</div>
+
+		<div class="gear2 subtab">
+			<div class="repeatwrap">
+				<table class="equipmentheader repeathead tagb">
+					<tr>
+						<td>#</td>
+						<th>Equipment in Bag <input type="number" step="any" name="attr_gear2weighttotal" value="0" /></th>
+						<td>Wgt.</td>
+						<td>Total</td>
+						<td>Cost</td>
+						<td>Total</td>
+					</tr>
+				</table>
+				<div class="repeat">
+					<fieldset class="repeating_gear2">
+						<div class="equipment">
+							<input type="number" step="any" name="attr_g2quantity" /><input type="text" name="attr_g2name" /><input type="number" step="any" name="attr_g2weight" class="tagb" /><input type="number" step="any" name="attr_g2weighttotal" class="tagb" /><input type="number" step="any" name="attr_g2cost" class="tagg" /><input type="number" step="any" name="attr_g2costtotal" class="tagg" />
+						</div>
+					</fieldset>
+				</div>
+			</div>
+		</div>
+
+		<div class="gear3 subtab">
+			<div class="repeatwrap">
+				<table class="equipmentheader repeathead">
+					<tr>
+						<td>#</td>
+						<th>Equipment on Animal<input type="number" step="any" name="attr_gear3weighttotal" value="0" /></th>
+						<td>Wgt.</td>
+						<td>Total</td>
+						<td>Cost</td>
+						<td>Total</td>
+					</tr>
+				</table>
+				<div class="equipment repeat">
+					<fieldset class="repeating_gear3">
+						<div class="equipment">
+							<input type="number" step="any" name="attr_g3quantity" /><input type="text" name="attr_g3name" /><input type="number" step="any" name="attr_g3weight" class="tagb" /><input type="number" step="any" name="attr_g3weighttotal" class="tagb" /><input type="number" step="any" name="attr_g3cost" class="tagg" /><input type="number" step="any" name="attr_g3costtotal" class="tagg" />
+						</div>
+					</fieldset>
+				</div>
+			</div>
+			<div class="animal taggr"> <!-- Pack Animal Statblock  Name type hp ac notes  -->
+				<div class="animalname">Pack Animal</div>
+				<textarea name="attr_animalnotes">Notes about your pack animal</textarea>
+				<label>Name</label>
+				<input type="text" name="attr_animalname" />
+				<label>Type</label>
+				<input type="text" name="attr_animaltype" />
+				<label>HP</label>
+				<input type="text" name="attr_animalhp" />
+				<label>AC</label>
+				<input type="text" name="attr_animalac" />
+			</div>
+		</div>
+
+		<div class="gear4 subtab">
+			<div class="repeatwrap">
+				<table class="equipmentheader repeathead">
+					<tr>
+						<td>#</td>
+						<th><input type="number" step="any" name="attr_gear4weighttotal" value="0" /><input type="text" name="attr_gear4name" value="Other" /></th>
+						<td>Wgt.</td>
+						<td>Total</td>
+						<td>Cost</td>
+						<td>Total</td>
+					</tr>
+				</table>
+				<div class="equipment repeat">
+					<fieldset class="repeating_gear4">
+						<div class="equipment">
+							<input type="number" step="any" name="attr_g4quantity" /><input type="text" name="attr_g4name" /><input type="number" step="any" name="attr_g4weight" class="tagb" /><input type="number" step="any" name="attr_g4weighttotal" class="tagb" /><input type="number" step="any" name="attr_g4cost" class="tagg" /><input type="number" step="any" name="attr_g4costtotal" class="tagg" />
+						</div>
+					</fieldset>
+				</div>
+			</div>
+		</div>
+
+		<hr />
+
+	</div>
+
+<!-- PROFICIENCIES TAB -->
+	<div class="tab skills">
+		<div class="repeatwrap">
+			<table class="nwpheader repeathead">
+				<tr>
+					<td>Roll</td>
+					<td>Non Weapon Proficiencies</td>
+					<td>Stat</td>
+					<td>Base</td>
+					<td>Adj.</td>
+					<td>Total</td>
+				</tr>
+			</table>
+			<div class="nwp repeat">
+				<fieldset class="repeating_nwp">
+					<div class="nwprepeat">
+						<button type="roll" value="/me makes a @{nwpname} check: [[1d20+@{nwpattr}+@{nwpbase}+@{nwpadj}]]"></button><input type="text" name="attr_nwpname" /><select name="attr_nwpattr">
+							<option value="@{strength}">Str</option>
+							<option value="@{dexterity}">Dex</option>
+							<option value="@{constitution}">Con</option>
+							<option value="@{intelligence}">Int</option>
+							<option value="@{willpower}">Wil</option>
+							<option value="@{charisma}">Chr</option>
+							<option value="@{perception}">Pcp</option>
+						</select><input type="number" step="any" name="attr_nwpbase" value="0" /><input type="number" step="any" name="attr_nwpadj" value="0" /><input type="number" name="attr_nwptotal" value="@{nwpattr}+@{nwpbase}+@{nwpadj}" disabled="true" />
+					</div>
+				</fieldset>
+			</div>
+		</div>
+
+		<div class="repeatwrap">
+			<table class="wpsheader repeathead">
+				<tr>
+					<td>Weapon Proficiencies</td>
+					<td>Slots</td>
+				</tr>
+			</table>
+			<div class="wps repeat">
+				<fieldset class="repeating_wps">
+					<div class="wpsrepeat">
+						<input type="text" name="attr_wpsname" /><input type="number" step="any" name="attr_wpsslots" value="0" />
+					</div>
+				</fieldset>
+			</div>
+		</div>
+	</div>
+
+<!-- SPELLS TAB -->
+	<div class="tab spellInfo">
+		<div class="simple clearfix">
+			<div class="spellCol1">
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr>
+							<td>Casts</td>
+							<td>1st Level Spell Slots <input type="text" name="attr_spells1st" value="0" /></td>
+							<td>Initi</td>
+							<td>Edit</td>
+						</tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells1">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="1" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull">
+										<label>Name:</label><input type="text" name="attr_spellName" value="" />
+									</div>
+									<div class="spellFull">
+										<label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option>
+											<option value="alteration">Alteration</option>
+											<option value="conjuration">Conjuration</option>
+											<option value="divination">Divination</option>
+											<option value="enchantment">Enchantment</option>
+											<option value="evocation">Evocation</option>
+											<option value="illusion">Illusion</option>
+											<option value="necromancy">Necromancy</option>
+										</select>
+									</div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>3rd Level Spell Slots <input type="text" name="attr_spells3rd" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells3">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="3" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>5th Level Spell Slots <input type="text" name="attr_spells5th" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells5">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="5" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>7th Level Spell Slots <input type="text" name="attr_spells7th" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells7">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="7" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>9th Level Spell Slots <input type="text" name="attr_spells9th" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells9">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="9" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+			</div>
+			<div class="spellCol2">
+				<table class="hpmpac tagg mpblock">
+					<tr>
+						<th>MP</th>
+						<td><input type="text" name="attr_mp"></td>
+						<th>/</th>
+						<td><input type="text" name="attr_mp_max"></td>
+					</tr>
+				</table>
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>2nd Level Spell Slots <input type="text" name="attr_spells2nd" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells2">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="2" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>4th Level Spell Slots <input type="text" name="attr_spells4st" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells4">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="4" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>6th Level Spell Slots <input type="text" name="attr_spells6th" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells6">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="6" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+
+				<div class="repeatwrap">
+					<table class="spellheader repeathead tagr">
+						<tr><td>Casts</td><td>8th Level Spell Slots <input type="text" name="attr_spells8th" value="0" /></td><td>Initi</td><td>Edit</td></tr>
+					</table>
+					<div class="spells repeat">
+						<fieldset class="repeating_spells8">
+							<div class="spellsrepeat">
+								<input type="hidden" name="attr_spellLevel" value="8" />
+								<input type="hidden" class="spellVerbalHidden" name="attr_spellVerbal" />
+								<input type="hidden" class="spellSomaticHidden" name="attr_spellSomatic" />
+								<input type="hidden" class="spellMaterialHidden" name="attr_spellMaterial" />
+								<input type="hidden" name="attr_rollcontent" value="
+								&{template:spellcard} {{school=@{spellSchool}}} @{spellVerbal} @{spellSomatic} @{spellMaterial} {{level=@{spellLevel}}} {{name=@{spellName}}} {{range=@{spellRange}}} {{ct=@{spellCastingTime}}} {{save=@{spellSave}}} {{aoe=@{spellAoe}}} {{duration=@{spellDuration}}} {{damage=@{spellDamage}}} {{mat1=@{spellMat1}}} {{mat2=@{spellMat2}}} {{mat3=@{spellMat3}}} {{mat4=@{spellMat4}}} {{description=@{spellDescription}}}
+								"/>
+								<input type="checkbox" name="attr_detailsFlag" class="detailsFlag" checked />
+								<span class="detailsFlagP">+</span>
+								<span class="detailsFlagM">-</span>
+								<div class="spellhead">
+									<input type="number" step="any" name="attr_spellmems" />
+									<button class="spellcast" type="roll" name="roll_spell" value="@{rollcontent}"><span name="attr_spellName" class="button"></span></button><span class="compReadout spellVerbal">V</span><span class="compReadout spellSomatic">S</span><span class="compReadout spellMaterial">M</span><button class="initi" type="roll" value="/me rolls for initiative with @{spellName}: [[1d10+@{spellCastingTime}&{tracker}]]"></button>
+								</div>
+								<div class="spellDetails clearfix">
+									<div class="spellFull"><label>Name:</label><input type="text" name="attr_spellName" value="" /></div>
+									<div class="spellFull"><label>Class:</label><select name="attr_spellSchool">
+											<option value="abjuration">Abjuration</option><option value="alteration">Alteration</option><option value="conjuration">Conjuration</option><option value="divination">Divination</option><option value="enchantment">Enchantment</option><option value="evocation">Evocation</option><option value="illusion">Illusion</option><option value="necromancy">Necromancy</option>
+										</select></div>
+									<div class="spellComponents spellFull">
+										Components: V<input type="checkbox" name="attr_spellVerbal" value="{{v=1}}" /> S<input type="checkbox" name="attr_spellSomatic" value="{{s=1}}" /> M<input type="checkbox" name="attr_spellMaterial" class="spellMaterial" value="{{m=1}}" />
+										<div class="spellMaterials clearfix">
+											<div class="spellFull">Material Components</div>
+											<div class="spellHalf">1 <input type="text" name="attr_spellMat1" value="" /></div>
+											<div class="spellHalf">2 <input type="text" name="attr_spellMat2" value="" /></div>
+											<div class="spellHalf">3 <input type="text" name="attr_spellMat3" value="" /></div>
+											<div class="spellHalf">4 <input type="text" name="attr_spellMat4" value="" /></div>
+										</div>
+									</div>
+									<div class="spellHalf"><label>Range:</label><input type="text" name="attr_spellRange" value="" /></div>
+									<div class="spellHalf"><label>AoE:</label><input type="text" name="attr_spellAoe" value="" /></div>
+									<div class="spellHalf"><label>C.T.:</label><input type="text" name="attr_spellCastingTime" value="" /></div>
+									<div class="spellHalf"><label>Duration:</label><input type="text" name="attr_spellDuration" value="" /></div>
+									<div class="spellHalf"><label>Save:</label><input type="text" name="attr_spellSave" value="" /></div>
+									<div class="spellHalf"><label>Damage:</label><input type="text" name="attr_spellDamage" value="" /></div>
+									<div class="spellFull">Description<textarea name="attr_spellDescription"></textarea></div>
+									<div class="spellHalf"><label>JSON:</label><input type="text" name="attr_spellJSON" value="" /></div>
+								</div>
+							</div>
+						</fieldset>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+<!-- MODIFIERS TAB (reference tables) -->
+	<div class="tab mods">
+
+		<table>
+			<tr><th colspan="2">Surprise Modifiers</th></tr>
+			<tr class="moddesc"><td colspan="2">Oppose pcp, win to spot, fail and be surprised</td></tr>
+			<tr class="modlabel"><td>Situation</td><td>Adj.</td></tr>
+			<tr class="dark modsection"><td colspan="2">Movement Status</td></tr>
+			<tr><td>Difficult terrain</td><td>-3</td></tr>
+			<tr><td>Moving quickly</td><td>-5</td></tr>
+			<tr><td>Moving cautiously</td><td>+5</td></tr>
+			<tr class="light modsection"><td colspan="2">Visibility</td></tr>
+			<tr><td>Extreamly still conditions</td><td>+4</td></tr>
+			<tr><td>In poor light or rain</td><td>-2</td></tr>
+			<tr><td>Heavy fog</td><td>-4</td></tr>
+			<tr><td>In darkness</td><td>-4</td></tr>
+			<tr class="dark modsection"><td colspan="2">Misc</td></tr>
+			<tr><td>Every 5 enemies</td><td>+1</td></tr>
+			<tr><td>vs. camouflaged</td><td>-2 - -6</td></tr>
+			<tr><td>vs. distinctive odor</td><td>+4</td></tr>
+			<tr><td>vs. silenced</td><td>-4</td></tr>
+			<tr><td>vs. invisible</td><td>&frac12; pcp</td></tr>
+		</table>
+
+		<table>
+			<tr><th colspan="2">Initiative Modifiers</th></tr>
+			<tr class="modlabel"><td>Action</td><td>Adj.</td></tr>
+			<tr class="modsection dark"><td colspan="2">Flat Mods</td></tr>
+			<tr><td>Misc. magic item</td><td>+3</td></tr>
+			<tr><td>Potion</td><td>+5</td></tr>
+			<tr><td>Rings and rods</td><td>+1</td></tr>
+			<tr><td>Staffs and wands</td><td>+2</td></tr>
+			<tr class="modsection light"><td colspan="2">Minimum Initative</td></tr>
+			<tr><td>Size: Tiny</td><td>-3</td></tr>
+			<tr><td>Size: Small</td><td>+0</td></tr>
+			<tr><td>Size: Medium</td><td>+3</td></tr>
+			<tr><td>Size: Large</td><td>+6</td></tr>
+			<tr><td>Size: Huge</td><td>+9</td></tr>
+			<tr><td>Size: Gargantuan</td><td>+12</td></tr>
+			<tr class="modsection dark"><td colspan="2">Minimum Exceptions</td></tr>
+			<tr><td>Innate spell ability</td><td>+3</td></tr>
+			<tr><td>Spell</td><td>See spell</td></tr>
+		</table>
+
+		<table>
+			<tr class="tagr"><th colspan="2">Attack Modifiers</th></tr>
+			<tr class="modlabel"><td>Situation</td><td>Adj.</td></tr>
+			<tr class="modsection dark"><td colspan="2">Positional</td></tr>
+			<tr><td>Flank attack</td><td>+1</td></tr>
+			<tr><td>Back attack</td><td>+2</td></tr>
+			<tr class="modsection light"><td colspan="2">Environment</td></tr>
+			<tr><td>Low light</td><td>-1</td></tr>
+			<tr><td>Starlight</td><td>-3</td></tr>
+			<tr><td>No light / Invisible</td><td>-4</td></tr>
+			<tr><td>Drunk / Intoxicated</td><td>-1 - -4</td></tr>
+			<tr><td>Target sleeping or held</td><td>Auto</td></tr>
+			<tr class="modsection dark"><td colspan="2">Melee</td></tr>
+			<tr><td>Charging</td><td>+2</td></tr>
+			<tr><td>High Ground</td><td>+1</td></tr>
+			<tr><td>Target sitting or kneeling</td><td>+2</td></tr>
+			<tr><td>Target prone</td><td>+5</td></tr>
+			<tr class="modsection light"><td colspan="2">Missile</td></tr>
+			<tr><td>Target sitting or kneeling</td><td>-2</td></tr>
+			<tr><td>Target prone</td><td>-4</td></tr>
+			<tr><td>Medium Range</td><td>-2</td></tr>
+			<tr><td>Long Range</td><td>-5</td></tr>
+		</table>
+
+		<table>
+			<tr class="tagb"><th colspan="2">AC Modifiers</th></tr>
+			<tr class="modlabel"><td>Situation</td><td>Adj.</td></tr>
+			<tr class="modsection dark"><td colspan="2">Situational</td></tr>
+			<tr><td>Charged this round</td><td>-1</td></tr>
+			<tr><td>Surprised</td><td>-1</td></tr>
+			<tr><td>Rooted</td><td class="strike">Dex</td></tr>
+			<tr><td>Casting</td><td class="strike">Shield/Dex</td></tr>
+			<tr class="modsection light"><td colspan="2">Positional</td></tr>
+			<tr><td>Back Attack</td><td class="strike">Shield/Dex</td></tr>
+			<tr><td>Surprised</td><td>-1</td></tr>
+			<tr class="modsection dark"><td colspan="2">Environmental</td></tr>
+			<tr><td>Low light</td><td>-1</td></tr>
+			<tr><td>Starlight</td><td>-3</td></tr>
+			<tr><td>Total darkenss</td><td>-4</td></tr>
+		</table>
+
+		<table>
+			<tr class="tagb"><th colspan="3">Cover &amp; Concealment</th></tr>
+			<tr class="modlabel"><td>Target is</td><td>Cover</td><td>Concealment</td></tr>
+			<tr class="dark"><td>25%</td><td>+2 AC</td><td>+1 AC</td></tr>
+			<tr><td>50%</td><td>+4 AC</td><td>+2 AC</td></tr>
+			<tr class="light"><td>75%</td><td>+7 AC</td><td>+3 AC</td></tr>
+			<tr><td>90%</td><td>+10 AC</td><td>+4 AC</td></tr>
+		</table>
+
+		<hr />
+
+	</div>
+
+<!-- SETTINGS TAB -->
+	<div class="tab settings">
+
+		<input type="checkbox"class="settingParty" name="attr_settingParty" value="1" /> Party Sheet<br />
+		<input type="checkbox" class="settingThief" name="attr_settingThief" value="1" /> Thief Page<br />
+		<input type="checkbox" class="settingSpell" name="attr_settingSpell" value="1" /> Spells Page<br />
+		<input type="checkbox" class="settingNewSave" name="attr_settingNewSave" value="1" /> Add New Save<br />
+		<input type="checkbox" class="settingMP" name="attr_settingMP" value="1" /> Show MP Boxes<br />
+		<input type="checkbox" class="settingPerception" name="attr_settingPerception" value="1" checked /> Add Perception Stat<br />
+
+		<!-- ===== BULK IMPORT (from the app's "Export to Roll20") ===== -->
+		<hr />
+		<b>Import from the Character Builder</b><br />
+		<span style="font-size:11px;color:#555">Paste the JSON from the app's Review &rarr; “Export to Roll20”, then click Import. Do it on a freshly-created character (it adds Weapons / Proficiencies / Gear / Spell rows).</span><br />
+		<textarea name="attr_importjson" style="width:400px;min-height:90px" placeholder="Paste exported JSON here…"></textarea><br />
+		<button type="action" name="act_importall">Import character</button>
+		<span name="attr_importstatus" style="margin-left:8px;color:#276">&nbsp;</span>
+		<hr />
+
+		<p>Pink boxes like this: <span name="" class="button">&nbsp;</span> can be clicked to be rolled. Context on the page will tell you what the roll does.</p>
+
+
+	</div>
+
+<!-- THIEF TAB -->
+	<div class="tab thiefInfo">
+		<input type="radio" class="thiefType" name="attr_thiefType" value="0" /> 2e RAW
+		<input type="radio" class="thiefType" name="attr_thiefType" value="1" /> 2.neal
+		<br />
+		<table class="thief2e">
+			<tr>
+				<th>Skill</th><th>Base</th><th>Adjust</th><th>Armor</th><th>Points</th><th>Current</th><th>Roll</th>
+			</tr>
+			<tr>
+				<td>Pick Pokcets</td>
+				<td><input type="text" name="attr_thiefOPPB" value="15" /></td>
+				<td><input type="text" name="attr_thiefOPPA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOPPAr" value="5" /></td>
+				<td><input type="text" name="attr_thiefOPPP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOPPC" value="@{thiefOPPB}+@{thiefOPPA}+@{thiefOPPAr}+@{thiefOPPP}" disabled="true"/></td>
+				<td><button type="roll" value="/me attempts to pick pockets
+/roll 1d100<[[@{thiefOPPC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Open Locks</td>
+				<td><input type="text" name="attr_thiefOOLB" value="10" /></td>
+				<td><input type="text" name="attr_thiefOOLA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOOLAr" value="0" /></td>
+				<td><input type="text" name="attr_thiefOOLP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOOLC" value="@{thiefOOLB}+@{thiefOOLA}+@{thiefOOLAr}+@{thiefOOLP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to open locks
+/roll 1d100<[[@{thiefOOLC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Find / Remove Traps</td>
+				<td><input type="text" name="attr_thiefOFRTB" value="5" /></td>
+				<td><input type="text" name="attr_thiefOFRTA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOFRTAr" value="0" /></td>
+				<td><input type="text" name="attr_thiefOFRTP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOFRTC" value="@{thiefOFRTB}+@{thiefOFRTA}+@{thiefOFRTAr}+@{thiefOFRTP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to find / remove traps
+/roll 1d100<[[@{thiefOFRTC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Move Silently</td>
+				<td><input type="text" name="attr_thiefOMSB" value="10" /></td>
+				<td><input type="text" name="attr_thiefOMSA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOMSAr" value="10" /></td>
+				<td><input type="text" name="attr_thiefOMSP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOMSC" value="@{thiefOMSB}+@{thiefOMSA}+@{thiefOMSAr}+@{thiefOMSP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to move silently
+/roll 1d100<[[@{thiefOMSC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Hide in Shadows</td>
+				<td><input type="text" name="attr_thiefOHSB" value="5" /></td>
+				<td><input type="text" name="attr_thiefOHSA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOHSAr" value="5" /></td>
+				<td><input type="text" name="attr_thiefOHSP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOHSC" value="@{thiefOHSB}+@{thiefOHSA}+@{thiefOHSAr}+@{thiefOHSP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attemps to hide in shadows
+/roll 1d100<[[@{thiefOHSC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Detect Noise</td>
+				<td><input type="text" name="attr_thiefODNB" value="15" /></td>
+				<td><input type="text" name="attr_thiefODNA" value="0" /></td>
+				<td><input type="text" name="attr_thiefODNAr" value="0"  /></td>
+				<td><input type="text" name="attr_thiefODNP" value="0" /></td>
+				<td><input type="text" name="attr_thiefODNC" value="@{thiefODNB}+@{thiefODNA}+@{thiefODNAr}+@{thiefODNP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to detect nosie
+/roll 1d100<[[@{thiefODNC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Climb Walls</td>
+				<td><input type="text" name="attr_thiefOCWB" value="60" /></td>
+				<td><input type="text" name="attr_thiefOCWA" value="0" /></td>
+				<td><input type="text" name="attr_thiefOCWAr" value="10" /></td>
+				<td><input type="text" name="attr_thiefOCWP" value="0" /></td>
+				<td><input type="text" name="attr_thiefOCWC" value="@{thiefOCWB}+@{thiefOCWA}+@{thiefOCWAr}+@{thiefOCWP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to climb walls
+/roll 1d100<[[@{thiefOCWC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Read Languages</td>
+				<td><input type="text" name="attr_thiefORLB" value="0" /></td>
+				<td><input type="text" name="attr_thiefORLA" value="0" /></td>
+				<td><input type="text" name="attr_thiefORLAr" value="0" /></td>
+				<td><input type="text" name="attr_thiefORLP" value="0" /></td>
+				<td><input type="text" name="attr_thiefORLC" value="@{thiefORLB}+@{thiefORLA}+@{thiefORLAr}+@{thiefORLP}" disabled="true" /></td>
+				<td><button type="roll" value="/me attempts to read languages
+/roll 1d100<[[@{thiefORLC}]]"></button></td>
+			</tr>
+			<tr>
+				<td>Armor Equiped</td>
+				<td colspan="6">
+					<select name="attr_thiefArmor">
+						<option value="0">None</option>
+						<option value="1">Light</option>
+						<option value="2">Heavy</option>
+					</select>
+				</td>
+			</tr>
+		</table>
+
+		<table class="thief2n">
+			<tr>
+				<th>Skill</th><th>Base</th><th>1st Level</th><th>Current</th><th>Roll</th>
+			</tr>
+			<tr>
+				<td>Pick Pockets</td>
+				<td><input type="text" name="attr_thiefPPB" value="floor(@{Dexterity}/3)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefPP1" value="0" /></td>
+				<td><input type="text" name="attr_thiefPP" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefPP}"></button></td>
+			</tr>
+			<tr>
+				<td>Pick Locks</td>
+				<td><input type="text" name="attr_thiefPLB" value="floor(@{Dexterity}/2)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefPL1" value="0" /></td>
+				<td><input type="text" name="attr_thiefPL" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefPL}"></button></td>
+			</tr>
+			<tr>
+				<td>Move Silently</td>
+				<td><input type="text" name="attr_thiefMSB" value="floor(@{Dexterity}/2)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefMS1" value="0" /></td>
+				<td><input type="text" name="attr_thiefMS" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefMS}"></button></td>
+			</tr>
+			<tr>
+				<td>Hide</td>
+				<td><input type="text" name="attr_thiefHB" value="floor((@{Dexterity}+@{Perception})/3)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefH1" value="0" /></td>
+				<td><input type="text" name="attr_thiefH" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefH}"></button></td>
+			</tr>
+			<tr>
+				<td>Eavesdrop</td>
+				<td><input type="text" name="attr_thiefEDB" value="floor(@{Perception}/2)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefED1" value="0" /></td>
+				<td><input type="text" name="attr_thiefED" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefED}"></button></td>
+			</tr>
+			<tr>
+				<td>Climb</td>
+				<td><input type="text" name="attr_thiefCB" value="floor((@{Dexterity}+@{Strength})/3)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefC1" value="0" /></td>
+				<td><input type="text" name="attr_thiefC" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefC}"></button></td>
+			</tr>
+			<tr>
+				<td>Disguise</td>
+				<td><input type="text" name="attr_thiefDB" value="@{Charisma}"  disabled="true" /></td>
+				<td><input type="text" name="attr_thiefD1" value="0" /></td>
+				<td><input type="text" name="attr_thiefD" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefD}"></button></td>
+			</tr>
+			<tr>
+				<td>Forgery</td>
+				<td><input type="text" name="attr_thiefFB" value="floor(@{Dexterity}/2)"  disabled="true" /></td>
+				<td><input type="text" name="attr_thiefF1" value="0" /></td>
+				<td><input type="text" name="attr_thiefF" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefF}"></button></td>
+			</tr>
+			<tr>
+				<td>Gauge</td>
+				<td><input type="text" name="attr_thiefGB" value="floor(@{Perception}/3*2)" disabled="true" /></td>
+				<td><input type="text" name="attr_thiefG1" value="0" /></td>
+				<td><input type="text" name="attr_thiefG" value="0" /></td>
+				<td><button type="roll" value="/roll 1d20+@{thiefG}"></button></td>
+			</tr>
+			<tr>
+				<td>Total Points</td>
+				<td><input type="text" name="attr_thiefPointsMax" value="0" /></td>
+				<td>Spent Points</td>
+				<td><input type="text" name="attr_thiefPointsSpent" value="0" /></td>
+				<td>&nbsp;</td>
+			</tr>
+		</table>
+
+	</div>
+
+<!-- PARTY TAB -->
+	<div class="tab partyInfo">
+		<input type="text" name="attr_partyNamePC1" value="Character 1" />
+		<input type="text" name="attr_partyNamePC2" value="Character 2" />
+		<input type="text" name="attr_partyNamePC3" value="Character 3" />
+		<input type="text" name="attr_partyNamePC4" value="Character 4" />
+		<input type="text" name="attr_partyNamePC5" value="Character 5" />
+		<input type="text" name="attr_partyNamePC6" value="Character 6" />
+
+		Speed
+
+	</div>
+
+<!-- ROLLTEMPLATES -->
+<rolltemplate class="sheet-rolltemplate-spellcard">
+	<div class="template-header {{school}}">
+		<div class="level">{{level}}</div>
+		<div class="components">
+			 {{#s}}<span class="somatic">S</span>{{/s}}
+			 {{#m}}<span class="material">M</span>{{/m}}
+			 {{#v}}<span class="verbal">V</span>{{/v}}
+		</div>
+		<div class="name">{{name}}</div>
+	</div>
+	<div class="body">
+		<div class="half">
+			<label>Range</label><span>{{range}}</span>
+			<label>Casting Time</label><span>{{ct}}</span>
+			<label>Save</label><span>{{save}}</span>
+		</div>
+		<div class="half">
+			<label>AoE</label><span>{{aoe}}</span>
+			<label>Duration</label><span>{{duration}}</span>
+			<label>Damage</label><span>{{damage}}</span>
+		</div>
+		{{#m}}
+		<div class="full">
+			<label>Materials</label><span>
+				{{#mat1}}{{mat1}}{{/mat1}}
+				{{#mat2}}{{mat2}}{{/mat2}}
+				{{#mat3}}{{mat3}}{{/mat3}}
+				{{#mat4}}{{mat4}}{{/mat4}}</span>
+		</div>
+		{{/m}}
+		<div class="description">
+			<div class="description-content">
+				<p>{{description}}</p>
+			</div>
+		</div>
+		<div class="full bot">
+			<label>School</label><span>{{school}}</span>
+		</div>
+	</div>
+</rolltemplate>
+
+<!-- ============================ SHEET WORKERS ============================ -->
+<script type="text/worker">
+
+/* ---- BEGIN: TheAaronSheet.js ---- */
+// Github:   https://github.com/shdwjk/TheAaronSheet/blob/master/TheAaronSheet.js
+// By:       The Aaron, Arcane Scriptomancer
+// Contact:  https://app.roll20.net/users/104025/the-aaron
+
+var TAS = TAS || (function(){
+    'use strict';
+
+    var version = '0.2.5',
+        lastUpdate = 1504710542,
+
+        loggingSettings = {
+            debug: {
+                key:     'debug',
+                title:   'DEBUG',
+                color: {
+                    bgLabel: '#7732A2',
+                    label:   '#F2EF40',
+                    bgText:  '#FFFEB7',
+                    text:    '#7732A2'
+                }
+            },
+            error: {
+                key:     'error',
+                title:   'Error',
+                color: {
+                    bgLabel: '#C11713',
+                    label:   'white',
+                    bgText:  '#C11713',
+                    text:    'white'
+                }
+            },
+            warn: {
+                key:     'warn',
+                title:   'Warning',
+                color: {
+                    bgLabel: '#F29140',
+                    label:   'white',
+                    bgText:  '#FFD8B7',
+                    text:    'black'
+                }
+            },
+            info: {
+                key:     'info',
+                title:   'Info',
+                color: {
+                    bgLabel: '#413FA9',
+                    label:   'white',
+                    bgText:  '#B3B2EB',
+                    text:    'black'
+                }
+            },
+            notice: {
+                key:     'notice',
+                title:   'Notice',
+                color: {
+                    bgLabel: '#33C133',
+                    label:   'white',
+                    bgText:  '#ADF1AD',
+                    text:    'black'
+                }
+            },
+            log: {
+                key:     'log',
+                title:   'Log',
+                color: {
+                    bgLabel: '#f2f240',
+                    label:   'black',
+                    bgText:  '#ffff90',
+                    text:    'black'
+                }
+            },
+            callstack: {
+                key:     'TAS',
+                title:   'function',
+                color: {
+                    bgLabel: '#413FA9',
+                    label:   'white',
+                    bgText:  '#B3B2EB',
+                    text:    'black'
+                }
+            },
+            callstack_async: {
+                key:     'TAS',
+                title:   'ASYNC CALL',
+                color: {
+                    bgLabel: '#413FA9',
+                    label:   'white',
+                    bgText:  '#413FA9',
+                    text:    'white'
+                }
+            },
+            TAS: {
+                key:     'TAS',
+                title:   'TAS',
+                color: {
+                    bgLabel: 'grey',
+                    label:   'black;background:linear-gradient(#304352,#d7d2cc,#d7d2cc,#d7d2cc,#304352)',
+                    bgText:  'grey',
+                    text:    'black;background:linear-gradient(#304352,#d7d2cc,#d7d2cc,#d7d2cc,#304352)'
+                }
+            }
+        },
+
+
+        config = {
+            debugMode: false,
+            logging: {
+                log: true,
+                notice: true,
+                info: true,
+                warn: true,
+                error: true,
+                debug: false
+            }
+        },
+
+        callstackRegistry = [],
+        queuedUpdates = {}, //< Used for delaying saves till the last moment.
+
+    complexType = function(o){
+        switch(typeof o){
+            case 'string':
+                return 'string';
+            case 'boolean':
+                return 'boolean';
+            case 'number':
+                return (_.isNaN(o) ? 'NaN' : (o.toString().match(/\./) ? 'decimal' : 'integer'));
+            case 'function':
+                return 'function: '+(o.name ? o.name+'()' : '(anonymous)');
+            case 'object':
+                return (_.isArray(o) ? 'array' : (_.isArguments(o) ? 'arguments' : ( _.isNull(o) ? 'null' : 'object')));
+            default:
+                return typeof o;
+        }
+    },
+
+    dataLogger = function(primaryLogger,secondaryLogger,data){
+        _.each(data,function(m){
+            var type = complexType(m);
+            switch(type){
+                case 'string':
+                    primaryLogger(m);
+                    break;
+                case 'undefined':
+                case 'null':
+                case 'NaN':
+                    primaryLogger('['+type+']');
+                    break;
+                case 'number':
+                case 'not a number':
+                case 'integer':
+                case 'decimal':
+                case 'boolean':
+                    primaryLogger('['+type+']: '+m);
+                    break;
+                default:
+                    primaryLogger('['+type+']:=========================================');
+                    secondaryLogger(m);
+                    primaryLogger('=========================================================');
+                    break;
+            }
+        });
+    },
+
+
+    colorLog = function(options){
+        var coloredLoggerFunction,
+            key = options.key,
+            label = options.title || 'TAS',
+            lBGColor = (options.color && options.color.bgLabel) || 'blue',
+            lTxtColor = (options.color && options.color.label) || 'white',
+            mBGColor = (options.color && options.color.bgText) || 'blue',
+            mTxtColor = (options.color && options.color.text) || 'white';
+
+        coloredLoggerFunction = function(message){
+            /* eslint-disable no-console */
+            console.log(
+                '%c '+label+': %c '+message + ' ',
+                'background-color: '+lBGColor+';color: '+lTxtColor+'; font-weight:bold;',
+                'background-color: '+mBGColor+';color: '+mTxtColor+';'
+            );
+            /* eslint-enable no-console */
+        };
+        return function(){
+            if('TAS'===key || config.logging[key]){
+                /* eslint-disable no-console */
+               dataLogger(coloredLoggerFunction,function(m){console.log(m);},_.toArray(arguments));
+                /* eslint-enable no-console */
+            }
+        };
+    },
+
+    logDebug  = colorLog(loggingSettings.debug),
+    logError  = colorLog(loggingSettings.error),
+    logWarn   = colorLog(loggingSettings.warn),
+    logInfo   = colorLog(loggingSettings.info),
+    logNotice = colorLog(loggingSettings.notice),
+    logLog    = colorLog(loggingSettings.log),
+    log       = colorLog(loggingSettings.TAS),
+    logCS     = colorLog(loggingSettings.callstack),
+    logCSA    = colorLog(loggingSettings.callstack_async),
+
+    registerCallstack = function(callstack,label){
+        var idx=_.findIndex(callstackRegistry,function(o){
+            return (_.difference(o.stack,callstack).length === _.difference(callstack,o.stack).length) &&
+                _.difference(o.stack,callstack).length === 0 &&
+                o.label === label;
+        });
+        if(-1 === idx){
+            idx=callstackRegistry.length;
+            callstackRegistry.push({
+                stack: callstack,
+                label: label
+            });
+        }
+        return idx;
+    },
+
+    setConfigOption = function(options){
+        var newconf =_.defaults(options,config);
+        newconf.logging=_.defaults(
+            (options && options.logging)||{},
+            config.logging
+        );
+        config=newconf;
+    },
+
+    isDebugMode = function(){
+        return config.debugMode;
+    },
+
+    debugMode = function(){
+        config.logging.debug=true;
+        config.debugMode = true;
+    },
+
+    getCallstack = function(){
+        var e = new Error('dummy'),
+            stack = _.map(_.rest(e.stack.replace(/^[^(]+?[\n$]/gm, '')
+            .replace(/^\s+at\s+/gm, '')
+            .replace(/^Object.<anonymous>\s*\(/gm, '{anonymous}()@')
+            .split('\n')),function(l){
+                return l.replace(/\s+.*$/,'');
+            });
+        return stack;
+    },
+    logCallstackSub = function(cs){
+        var matches, csa;
+        _.find(cs,function(line){
+            matches = line.match(/TAS_CALLSTACK_(\d+)/);
+            if(matches){
+               csa=callstackRegistry[matches[1]];
+               logCSA( '===================='+(csa.label ? '> '+csa.label+' <' : '')+'====================');
+               logCallstackSub(csa.stack);
+               return true;
+            }
+            logCS(line);
+            return false;
+        });
+    },
+    logCallstack = function(){
+        var cs;
+        if(config.debugMode){
+            cs = getCallstack();
+            cs.shift();
+            log('==============================> CALLSTACK <==============================');
+            logCallstackSub(cs);
+            log('=========================================================================');
+        }
+    },
+
+
+    wrapCallback = function (label, callback, context){
+        var callstack;
+        if('function' === typeof label){
+            context=callback;
+            callback=label;
+            label=undefined;
+        }
+        if(!config.debugMode){
+            return (function(cb,ctx){
+                return function(){
+                    cb.apply(ctx||{},arguments);
+                };
+            }(callback,context));
+        }
+
+        callstack = getCallstack();
+        callstack.shift();
+
+        return (function(cb,ctx,cs,lbl){
+            var ctxref=registerCallstack(cs,lbl);
+
+            /*jshint -W054 */
+            return new Function('cb','ctx','TASlog',
+                "return function TAS_CALLSTACK_"+ctxref+"(){"+
+                    "var start,end;"+
+                    "TASlog('Entering: '+(cb.name||'(anonymous function)'));"+
+                    "start=_.now();"+
+                    "cb.apply(ctx||{},arguments);"+
+                    "end=_.now();"+
+                    "TASlog('Exiting: '+(cb.name||'(anonymous function)')+' :: '+(end-start)+'ms elapsed');"+
+                "};")(cb,ctx,log);
+            /*jshint +W054 */
+        }(callback,context,callstack,label));
+    },
+
+
+    prepareUpdate = function( attribute, value ){
+        queuedUpdates[attribute]=value;
+    },
+
+    applyQueuedUpdates = function() {
+      setAttrs(queuedUpdates);
+      queuedUpdates = {};
+    },
+
+    namesFromArgs = function(args,base){
+        return _.chain(args)
+            .reduce(function(memo,attr){
+                if('string' === typeof attr) {
+                    memo.push(attr);
+                } else if(_.isArray(args) || _.isArguments(args)){
+                    memo = namesFromArgs(attr,memo);
+                }
+                return memo;
+            },(_.isArray(base) && base) || [])
+            .uniq()
+            .value();
+    },
+
+    addId = function(obj,value){
+        Object.defineProperty(obj,'id',{
+            value: value,
+            writable: false,
+            enumerable: false
+        });
+    },
+
+    addProp = function(obj,prop,value,fullname){
+        (function(){
+            var pname=(_.contains(['S','F','I','D'],prop) ? '_'+prop : prop),
+                full_pname = fullname || prop,
+                pvalue=value;
+
+            _.each(['S','I','F'],function(p){
+                if( !_.has(obj,p)){
+                    Object.defineProperty(obj, p, {
+                        value: {},
+                        enumerable: false,
+                        readonly: true
+                    });
+                }
+            });
+            if( !_.has(obj,'D')){
+                Object.defineProperty(obj, 'D', {
+                    value: _.reduce(_.range(10),function(m,d){
+                            Object.defineProperty(m, d, {
+                                value: {},
+                                enumerable: true,
+                                readonly: true
+                            });
+                            return m;
+                        },{}),
+                    enumerable: false,
+                    readonly: true
+                });
+            }
+
+
+            // Raw value
+            Object.defineProperty(obj, pname, {
+                enumerable: true,
+                set: function(v){
+                    if(v!==pvalue) {
+                        pvalue=v;
+                        prepareUpdate(full_pname,v);
+                    }
+                },
+                get: function(){
+                    return pvalue;
+                }
+            });
+
+            // string value
+            Object.defineProperty(obj.S, pname, {
+                enumerable: true,
+                set: function(v){
+                    var val=v.toString();
+                    if(val !== pvalue) {
+                        pvalue=val;
+                        prepareUpdate(full_pname,val);
+                    }
+                },
+                get: function(){
+                    return pvalue.toString();
+                }
+            });
+
+            // int value
+            Object.defineProperty(obj.I, pname, {
+                enumerable: true,
+                set: function(v){
+                    var val=parseInt(v,10) || 0;
+                    if(val !== pvalue){
+                        pvalue=val;
+                        prepareUpdate(full_pname,val);
+                    }
+                },
+                get: function(){
+                    return parseInt(pvalue,10) || 0;
+                }
+            });
+
+            // float value
+            Object.defineProperty(obj.F, pname, {
+                enumerable: true,
+                set: function(v){
+                    var val=parseFloat(v) || 0;
+                    if(val !== pvalue) {
+                        pvalue=val;
+                        prepareUpdate(full_pname,val);
+                    }
+                },
+                get: function(){
+                    return parseFloat(pvalue) || 0;
+                }
+            });
+            _.each(_.range(10),function(d){
+                Object.defineProperty(obj.D[d], pname, {
+                    enumerable: true,
+                    set: function(v){
+                        var val=(parseFloat(v) || 0).toFixed(d);
+                        if(val !== pvalue){
+                            pvalue=val;
+                            prepareUpdate(full_pname,val);
+                        }
+                    },
+                    get: function(){
+                        return (parseFloat(pvalue) || 0).toFixed(d);
+                    }
+                });
+            });
+
+        }());
+    },
+
+    repeating = function( section ) {
+        return (function(s){
+            var sectionName = s,
+                attrNames = [],
+                fieldNames = [],
+                operations = [],
+                after = [],
+
+            repAttrs = function TAS_Repeating_Attrs(){
+                attrNames = namesFromArgs(arguments,attrNames);
+                return this;
+            },
+            repFields = function TAS_Repeating_Fields(){
+                fieldNames = namesFromArgs(arguments,fieldNames);
+                return this;
+            },
+            repReduce = function TAS_Repeating_Reduce(func, initial, final, context) {
+                operations.push({
+                    type: 'reduce',
+                    func: (func && _.isFunction(func) && func) || _.noop,
+                    memo: (_.isUndefined(initial) && 0) || initial,
+                    final: (final && _.isFunction(final) && final) || _.noop,
+                    context: context || {}
+                });
+                return this;
+            },
+            repMap = function TAS_Repeating_Map(func, final, context) {
+                operations.push({
+                    type: 'map',
+                    func: (func && _.isFunction(func) && func) || _.noop,
+                    final: (final && _.isFunction(final) && final) || _.noop,
+                    context: context || {}
+                });
+                return this;
+            },
+            repEach = function TAS_Repeating_Each(func, final, context) {
+                operations.push({
+                    type: 'each',
+                    func: (func && _.isFunction(func) && func) || _.noop,
+                    final: (final && _.isFunction(final) && final) || _.noop,
+                    context: context || {}
+                });
+                return this;
+            },
+            repTap = function TAS_Repeating_Tap(final, context) {
+                operations.push({
+                    type: 'tap',
+                    final: (final && _.isFunction(final) && final) || _.noop,
+                    context: context || {}
+                });
+                return this;
+            },
+            repAfter = function TAS_Repeating_After(callback,context) {
+                after.push({
+                    callback: (callback && _.isFunction(callback) && callback) || _.noop,
+                    context: context || {}
+                });
+                return this;
+            },
+            repExecute = function TAS_Repeating_Execute(callback,context){
+                var rowSet = {},
+                    attrSet = {},
+                    fieldIds = [],
+                    fullFieldNames = [];
+
+                repAfter(callback,context);
+
+                // call each operation per row.
+                // call each operation's final
+                getSectionIDs("repeating_"+sectionName,function(ids){
+                    fieldIds = ids;
+                    fullFieldNames = _.reduce(fieldIds,function(memo,id){
+                        return memo.concat(_.map(fieldNames,function(name){
+                            return 'repeating_'+sectionName+'_'+id+'_'+name;
+                        }));
+                    },[]);
+                    getAttrs( _.uniq(attrNames.concat(fullFieldNames)), function(values){
+                        _.each(attrNames,function(aname){
+                            if(values.hasOwnProperty(aname)){
+                                addProp(attrSet,aname,values[aname]);
+                            }
+                        });
+
+                        rowSet = _.reduce(fieldIds,function(memo,id){
+                            var r={};
+                            addId(r,id);
+                            _.each(fieldNames,function(name){
+                                var fn = 'repeating_'+sectionName+'_'+id+'_'+name;
+                                addProp(r,name,values[fn],fn);
+                            });
+
+                            memo[id]=r;
+
+                            return memo;
+                        },{});
+
+                        _.each(operations,function(op){
+                            var res;
+                            switch(op.type){
+                                case 'tap':
+                                    _.bind(op.final,op.context,rowSet,attrSet)();
+                                    break;
+
+                                case 'each':
+                                    _.each(rowSet,function(r){
+                                        _.bind(op.func,op.context,r,attrSet,r.id,rowSet)();
+                                    });
+                                    _.bind(op.final,op.context,rowSet,attrSet)();
+                                    break;
+
+                                case 'map':
+                                    res = _.map(rowSet,function(r){
+                                        return _.bind(op.func,op.context,r,attrSet,r.id,rowSet)();
+                                    });
+                                    _.bind(op.final,op.context,res,rowSet,attrSet)();
+                                    break;
+
+                                case 'reduce':
+                                    res = op.memo;
+                                    _.each(rowSet,function(r){
+                                        res = _.bind(op.func,op.context,res,r,attrSet,r.id,rowSet)();
+                                    });
+                                    _.bind(op.final,op.context,res,rowSet,attrSet)();
+                                    break;
+                            }
+                        });
+
+                        // finalize attrs
+                        applyQueuedUpdates();
+                        _.each(after,function(op){
+                            _.bind(op.callback,op.context)();
+                        });
+                    });
+                });
+            };
+
+            return {
+                attrs: repAttrs,
+                attr: repAttrs,
+
+                column: repFields,
+                columns: repFields,
+                field: repFields,
+                fields: repFields,
+
+                reduce: repReduce,
+                inject: repReduce,
+                foldl: repReduce,
+
+                map: repMap,
+                collect: repMap,
+
+                each: repEach,
+                forEach: repEach,
+
+                tap: repTap,
+                'do': repTap,
+
+                after: repAfter,
+                last: repAfter,
+                done: repAfter,
+
+                execute: repExecute,
+                go: repExecute,
+                run: repExecute
+            };
+        }(section));
+    },
+
+
+    repeatingSimpleSum = function(section, field, destination){
+        repeating(section)
+            .attr(destination)
+            .field(field)
+            .reduce(function(m,r){
+                return m + (r.F[field]);
+            },0,function(t,r,a){
+                a.S[destination]=t;
+            })
+            .execute();
+    };
+
+    /* eslint-disable no-console */
+    console.log('%c  The Aaron Sheet  v'+version+'  ','background: linear-gradient(to right,green,white,white,green); color:black;text-shadow: 0 0 8px white;');
+    console.log('%c  Last update: '+(new Date(lastUpdate*1000))+'  ','background: linear-gradient(to right,green,white,white,green); color:black;text-shadow: 0 0 8px white;');
+    /* eslint-enable no-console */
+
+
+    return {
+        /* Repeating Sections */
+        repeatingSimpleSum: repeatingSimpleSum,
+        repeating: repeating,
+
+        /* Configuration */
+        config: setConfigOption,
+
+        /* Debugging */
+        callback: wrapCallback,
+        callstack: logCallstack,
+        debugMode: debugMode,
+        isDebugMode: isDebugMode,
+        _fn: wrapCallback,
+
+        /* Logging */
+        debug: logDebug,
+        error: logError,
+        warn: logWarn,
+        info: logInfo,
+        notice: logNotice,
+        log: logLog
+    };
+}());
+
+/* ---- END: TheAaronSheet.js ---- */
+
+
+/*************************************
+    GEAR CALCULATIONS
+*************************************/
+on('change:repeating_gear1', function(){
+    TAS.repeating('gear1')
+        .attrs('gear1weighttotal')
+        .fields('g1weight', 'g1quantity', 'g1weighttotal', 'g1cost', 'g1costtotal')
+        .reduce(function(m,r){
+            m.g1weight+=(r.F.g1weight*r.F.g1quantity);
+            r.g1weighttotal=(r.F.g1weight*r.F.g1quantity);
+            r.g1costtotal=(r.F.g1cost*r.F.g1quantity);
+            return m;
+        },{g1weight:0},function(m,r,a){
+            a.D[2].gear1weighttotal=m.g1weight;
+        })
+        .execute();
+});
+
+on('change:repeating_gear2', function(){
+    TAS.repeating('gear2')
+        .attrs('gear2weighttotal', 'weightbag')
+        .fields('g2weight', 'g2quantity', 'g2weighttotal', 'g2cost', 'g2costtotal')
+        .reduce(function(m,r){
+            m.g2weight+=(r.F.g2weight*r.F.g2quantity);
+            r.g2weighttotal=(r.F.g2weight*r.F.g2quantity);
+            r.g2costtotal=(r.F.g2cost*r.F.g2quantity);
+            return m;
+        },{g2weight:0},function(m,r,a){
+            a.D[2].gear2weighttotal=m.g2weight;
+        })
+        .execute();
+});
+
+on('change:repeating_gear3', function(){
+    TAS.repeating('gear3')
+        .attrs('gear3weighttotal')
+        .fields('g3weight', 'g3quantity', 'g3weighttotal', 'g3cost', 'g3costtotal')
+        .reduce(function(m,r){
+            m.g3weight+=(r.F.g3weight*r.F.g3quantity);
+            r.g3weighttotal=(r.F.g3weight*r.F.g3quantity);
+            r.g3costtotal=(r.F.g3cost*r.F.g3quantity);
+            return m;
+        },{g3weight:0},function(m,r,a){
+            a.D[2].gear3weighttotal=m.g3weight;
+        })
+        .execute();
+});
+
+
+on('change:repeating_gear4', function(){
+    TAS.repeating('gear4')
+        .attrs('gear4weighttotal')
+        .fields('g4weight', 'g4quantity', 'g4weighttotal', 'g4cost', 'g4costtotal')
+        .reduce(function(m,r){
+            m.g4weight+=(r.F.g4weight*r.F.g4quantity);
+            r.g4weighttotal=(r.F.g4weight*r.F.g4quantity);
+            r.g4costtotal=(r.F.g4cost*r.F.g4quantity);
+            return m;
+        },{g4weight:0},function(m,r,a){
+            a.D[2].gear4weighttotal=m.g4weight;
+        })
+        .execute();
+});
+
+
+/*************************************
+    ARMOR
+*************************************/
+on('change:acbase change:acbonusdex change:acarmor change:acshield change:acmagic change:acequipmentdex change:acenc', function(){
+    getAttrs([
+        "acbase",
+        "acbonusdex",
+        "acequipmentdex",
+        "acarmor",
+        "acshield",
+        "acmagic",
+        "acenc"
+    ], function(v){
+        var total, back, touch, surprise;
+        var acba = parseFloat(v.acbase);
+        var acbo = parseFloat(v.acbonusdex) + parseFloat(v.acequipmentdex);
+        var acar = parseFloat(v.acarmor);
+        var acsh = parseFloat(v.acshield);
+        var acma = parseFloat(v.acmagic);
+        var acen = parseFloat(v.acenc);
+
+        total = acba + acar + acbo + acsh + acma + acen;
+        back = acba + acar + acma + acen;
+        touch = acba + acbo + acsh + acma + acen;
+        surprise = acba + acar + acsh + acma + acen -1;
+
+        setAttrs({
+            actotal: total,
+            acback: back,
+            actouch: touch,
+            acsurprise: surprise
+        });
+    });
+});
+
+on('change:repeating_armor', function(){
+    TAS.repeating('armor')
+        .attrs('acarmor', 'acmagic', 'acequipmentdex')
+        .fields('aac', 'amagic', 'adex', 'aequipped')
+        .reduce(function(m,r){
+            m.acarmor+=(r.F.aac*r.F.aequipped);
+            m.acmagic+=(r.F.amagic*r.F.aequipped);
+            m.acequipmentdex+=(r.F.adex*r.F.aequipped);
+            return m;
+        },{acarmor:0, acmagic:0, acequipmentdex:0},function(m,r,a){
+            a.D[0].acarmor=m.acarmor;
+            a.D[0].acmagic=m.acmagic;
+            a.D[0].acequipmentdex=m.acequipmentdex;
+        })
+        .execute();
+});
+
+
+/*************************************
+    BASIC ATTACKS
+*************************************/
+on('change:attackbase change:attackbonusstr change:attackbonusdex change:attackmeother1 change:attackmiother1 change:attackthother1 change:attackother1on change:attackmeother2 change:attackmiother2 change:attackthother2 change:attackother2on change:attackmeother3 change:attackmiother3 change:attackthother3 change:attackother3on change:attackenc', function(){
+    getAttrs([
+        "attackbase",
+        "attackbonusstr",
+        "attackbonusdex",
+        "attackmeother1",
+        "attackmiother1",
+        "attackthother1",
+        "attackother1on",
+        "attackmeother2",
+        "attackmiother2",
+        "attackthother2",
+        "attackother2on",
+        "attackmeother3",
+        "attackmiother3",
+        "attackthother3",
+        "attackother3on",
+        "attackenc"
+    ], function(v){
+        var melee, missile, thrown, strdex;
+        var base = parseFloat(v.attackbase);
+        var str = parseFloat(v.attackbonusstr);
+        var dex = parseFloat(v.attackbonusdex);
+        var me1 = parseFloat(v.attackmeother1);
+        var mi1 = parseFloat(v.attackmiother1);
+        var th1 = parseFloat(v.attackthother1);
+        var on1 = parseFloat(v.attackother1on);
+        var me2 = parseFloat(v.attackmeother2);
+        var mi2 = parseFloat(v.attackmiother2);
+        var th2 = parseFloat(v.attackthother2);
+        var on2 = parseFloat(v.attackother2on);
+        var me3 = parseFloat(v.attackmeother3);
+        var mi3 = parseFloat(v.attackmiother3);
+        var th3 = parseFloat(v.attackthother3);
+        var on3 = parseFloat(v.attackother3on);
+        var enc = parseFloat(v.attackenc);
+
+        melee = base + str + (me1 * on1) + (me2 * on2) + (me3 * on3) + enc;
+        missile = base + dex + (mi1 * on1) + (mi2 * on2) + (mi3 * on3) + enc;
+        thrown = base + str + dex + (th1 * on1) + (th2 * on2) + (th3 * on3) + enc;
+        strdex = str + dex;
+
+        setAttrs({
+            attackmelee: melee,
+            attackmissile: missile,
+            attackthrow: thrown,
+            attackbonusstrdex: strdex
+        });
+    });
+});
+
+
+/*************************************
+    PURSE
+*************************************/
+
+on('change:wealthcp change:wealthsp change:wealthip change:wealthgp change:wealthpp change:wealthmp', function(){
+    getAttrs([
+        "wealthcp",
+        "wealthsp",
+        "wealthip",
+        "wealthgp",
+        "wealthpp",
+        "wealthmp"
+    ], function(v){
+        var weight;
+        var cp = parseFloat(v.wealthcp);
+        var sp = parseFloat(v.wealthsp);
+        var ip = parseFloat(v.wealthip);
+        var gp = parseFloat(v.wealthgp);
+        var pp = parseFloat(v.wealthpp);
+        var mp = parseFloat(v.wealthmp);
+
+        weight = (cp + sp + ip + gp + pp + mp)/50;
+
+        setAttrs({
+            weightpurse: weight
+        });
+    });
+});
+
+on('change:wealthhcp change:wealthhsp change:wealthhip change:wealthhgp change:wealthhpp change:wealthhmp', function(){
+    getAttrs([
+        "wealthhcp",
+        "wealthhsp",
+        "wealthhip",
+        "wealthhgp",
+        "wealthhpp",
+        "wealthhmp"
+    ], function(v){
+        var weight;
+        var cp = parseFloat(v.wealthhcp);
+        var sp = parseFloat(v.wealthhsp);
+        var ip = parseFloat(v.wealthhip);
+        var gp = parseFloat(v.wealthhgp);
+        var pp = parseFloat(v.wealthhpp);
+        var mp = parseFloat(v.wealthhmp);
+
+        weight = (cp + sp + ip + gp + pp + mp)/50;
+
+        setAttrs({
+            weighthoard: weight
+        });
+    });
+});
+
+/*************************************
+    WEIGHTS
+*************************************/
+on('change:weightpurse change:gear1weighttotal change:gear2weighttotal change:bagon change:encbase change:enclight change:encmedium change:encheavy change:encsevere', function(){
+    getAttrs([
+        "weightpurse",
+        "gear1weighttotal",
+        "gear2weighttotal",
+        "bagon",
+        "encbase",
+        "enclight",
+        "encmedium",
+        "encheavy",
+        "encsevere"
+    ], function(v){
+        var weight, enc, ac, hit;
+        var purse = parseFloat(v.weightpurse);
+        var gear = parseFloat(v.gear1weighttotal);
+        var bag = parseFloat(v.gear2weighttotal);
+        var bagon = parseFloat(v.bagon);
+        var base = parseFloat(v.encbase);
+        var light = parseFloat(v.enclight);
+        var medium = parseFloat(v.encmedium);
+        var heavy = parseFloat(v.encheavy);
+        var severe = parseFloat(v.encsevere);
+
+        weight = Math.round((purse + gear + (bag * bagon))*100)/100;
+
+        if(weight<=base){
+            enc = 0;
+            hit = 0;
+            ac = 0;
+        }else if(weight<=light){
+            enc = 1;
+            hit = 0;
+            ac = 0;
+        }else if(weight<=medium){
+            enc = 2;
+            hit = -1;
+            ac = 0;
+        }else if(weight<=heavy){
+            enc = 3;
+            hit = -2;
+            ac = -1;
+        }else{
+            enc = 4;
+            hit = -4;
+            ac = -3;
+        }
+
+        setAttrs({
+            weightcarried: weight,
+            enclevel: enc,
+            attackenc: hit,
+            acenc: ac
+        });
+    });
+});
+
+/*************************************
+    HP BOX
+*************************************/
+on('change:hpexpanded', function(){
+    getAttrs([
+        "hpexpanded"
+    ], function(v){
+        setAttrs({
+            hpexpand: v.hpexpanded
+        });
+    });
+});
+
+/*************************************
+    HEAL 1 HP FUNCTION
+*************************************/
+on('change:hpe1 change:hpe2 change:hpe3 change:hpe4 change:hpe5 change:hpe6 change:hpe7 change:hpe8 change:hpe9 change:hpe10 clicked:heal', function(){
+    getAttrs([
+        "hpe1",
+        "hpe2",
+        "hpe3",
+        "hpe4",
+        "hpe5",
+        "hpe6",
+        "hpe7",
+        "hpe8",
+        "hpe9",
+        "hpe10",
+        "hp_max"
+    ], function(v){
+        var hp1 = parseInt(v.hpe1);
+        var hp2 = parseInt(v.hpe2);
+        var hp3 = parseInt(v.hpe3);
+        var hp4 = parseInt(v.hpe4);
+        var hp5 = parseInt(v.hpe5);
+        var hp6 = parseInt(v.hpe6);
+        var hp7 = parseInt(v.hpe7);
+        var hp8 = parseInt(v.hpe8);
+        var hp9 = parseInt(v.hpe9);
+        var hp10 = parseInt(v.hpe10);
+        var hpmax = parseInt(v.hp_max)
+        var curhp = hpmax-(hp1+hp2+hp3+hp4+hp5+hp6+hp7+hp8+hp9+hp10);
+        setAttrs({
+            hp: curhp
+        });
+    });
+});
+
+on('clicked:heal', function(){
+    getAttrs([
+        "hpe1",
+        "hpe2",
+        "hpe3",
+        "hpe4",
+        "hpe5",
+        "hpe6",
+        "hpe7",
+        "hpe8",
+        "hpe9",
+        "hpe10",
+        "hp_max"
+    ], function(v){
+        var hp1 = Math.max(0,parseInt(v.hpe1)-1);
+        var hp2 = Math.max(0,parseInt(v.hpe2)-1);
+        var hp3 = Math.max(0,parseInt(v.hpe3)-1);
+        var hp4 = Math.max(0,parseInt(v.hpe4)-1);
+        var hp5 = Math.max(0,parseInt(v.hpe5)-1);
+        var hp6 = Math.max(0,parseInt(v.hpe6)-1);
+        var hp7 = Math.max(0,parseInt(v.hpe7)-1);
+        var hp8 = Math.max(0,parseInt(v.hpe8)-1);
+        var hp9 = Math.max(0,parseInt(v.hpe9)-1);
+        var hp10 = Math.max(0,parseInt(v.hpe10)-1);
+        setAttrs({
+            hpe1: hp1,
+            hpe2: hp2,
+            hpe3: hp3,
+            hpe4: hp4,
+            hpe5: hp5,
+            hpe6: hp6,
+            hpe7: hp7,
+            hpe8: hp8,
+            hpe9: hp9,
+            hpe10: hp10
+        });
+    });
+});
+
+/*************************************
+    SETTINGS PAGE
+*************************************/
+
+/* Enable / Disable sheet */
+on('change:settingParty change:settingThief change:settingSpell change:settingNewSave change:settingPerception', function(){
+    getAttrs([
+        "settingParty",
+        "settingThief",
+        "settingSpell",
+        "settingNewSave",
+        "settingPerception",
+    ], function(v){
+        var party = parseInt(v.settingParty);
+        var thief = parseInt(v.settingThief);
+        var spell = parseInt(v.settingSpell);
+        var save = parseInt(v.settingNewSave);
+        var perception = parseInt(v.settingPerception);
+        setAttrs({
+            settingPartyGlobal: party,
+            settingThiefGlobal: thief,
+            settingSpellGlobal: spell,
+            settingNewSaveGlobal: save,
+            settingPerceptionGlobal: perception,
+        });
+    });
+});
+
+/*************************************
+    THIEF SKILLS
+*************************************/
+
+/* Skill updates */
+on('change:thiefPP change:thiefPL change:thiefMS change:thiefH change:thiefED change:thiefC change:thiefD change:thiefF change:thiefG change:thiefPP1 change:thiefPL1 change:thiefMS1 change:thiefH1 change:thiefED1 change:thiefC1 change:thiefD1 change:thiefF1 change:thiefG1', function(){
+    getAttrs([
+        "thiefPP",
+        "thiefPL",
+        "thiefMS",
+        "thiefH",
+        "thiefED",
+        "thiefC",
+        "thiefD",
+        "thiefF",
+        "thiefG",
+        "thiefPP1",
+        "thiefPL1",
+        "thiefMS1",
+        "thiefH1",
+        "thiefED1",
+        "thiefC1",
+        "thiefD1",
+        "thiefF1",
+        "thiefG1"
+    ], function(v){
+        var tPPc, tPLc, tMSc, tHc, tEDc, tCc, tDc, tFc, tGc, tPoints = 0;
+        var tPP = parseFloat(v.thiefPP);
+        var tPL = parseFloat(v.thiefPL);
+        var tMS = parseFloat(v.thiefMS);
+        var tH = parseFloat(v.thiefH);
+        var tED = parseFloat(v.thiefED);
+        var tC = parseFloat(v.thiefC);
+        var tD = parseFloat(v.thiefD);
+        var tF = parseFloat(v.thiefF);
+        var tG = parseFloat(v.thiefG);
+        var tPP1 = parseFloat(v.thiefPP1);
+        var tPL1 = parseFloat(v.thiefPL1);
+        var tMS1 = parseFloat(v.thiefMS1);
+        var tH1 = parseFloat(v.thiefH1);
+        var tED1 = parseFloat(v.thiefED1);
+        var tC1 = parseFloat(v.thiefC1);
+        var tD1 = parseFloat(v.thiefD1);
+        var tF1 = parseFloat(v.thiefF1);
+        var tG1 = parseFloat(v.thiefG1);
+
+       tPPc = (tPP1 + tPP + 1)/2*(tPP-tPP1);
+       tPLc = (tPL1 + tPL + 1)/2*(tPL-tPL1);
+       tMSc = (tMS1 + tMS + 1)/2*(tMS-tMS1);
+       tHc = (tH1 + tH + 1)/2*(tH-tH1);
+       tEDc = (tED1 + tED + 1)/2*(tED-tED1);
+       tCc = (tC1 + tC + 1)/2*(tC-tC1);
+       tDc = (tD1 + tD + 1)/2*(tD-tD1);
+       tFc = (tF1 + tF + 1)/2*(tF-tF1);
+       tGc = (tG1 + tG + 1)/2*(tG-tG1);
+
+       tPoints = tPPc + tPLc + tMSc + tHc + tEDc + tCc + tDc + tFc + tGc;
+
+        setAttrs({
+            thiefPointsSpent: tPoints,
+        });
+    });
+});
+
+
+/* OG Thief skills */
+on('change:thiefArmor', function(){
+    getAttrs(["thiefArmor"], function(v){
+        var pp, ol, frt, ms, hs, dn, cw = 0;
+        var armor = parseFloat(v.thiefArmor)
+        if(v.thiefArmor == 0){
+            pp = hs = 5;
+            ms = cw = 10;
+            ol = 0;
+            frt = 0;
+            dn = 0;
+        }else if(v.thiefArmor == 1){
+            pp = cw = -30;
+            ol = frt = dn = -10;
+            ms = hs = -20;
+        }else{
+            pp = cw = -60;
+            ol = frt = dn = -20;
+            ms = hs = -40;
+        }
+        setAttrs({
+            thiefOPPAr: pp,
+            thiefOOLAr: ol,
+            thiefOFRTAr: frt,
+            thiefOMSAr: ms,
+            thiefOHSAr: hs,
+            thiefODNAr: dn,
+            thiefOCWAr: cw
+        });
+    });
+});
+
+/*************************************
+    BASIC STATS AUTO FILL
+*************************************/
+
+/* Skill updates */
+on('change:strength', function(){
+    getAttrs([
+        "strength"
+    ], function(v){
+        var hit, damage, weight, press, doors, bars = 0;
+        var strength = parseFloat(v.strength);
+
+        if(strength < 2){
+            hit=    -5;
+            dam=    -4;
+            weight= 1; light = 1; med = 2; heavy = 2;
+            press=  3;
+            doors=  1;
+            bars=   0;
+        }else if(strength < 3){
+            hit=    -3;
+            dam=    -2;
+            weight= 1; light = 2; med = 3; heavy = 4;
+            press=  5;
+            doors=  1;
+            bars=   0;
+        }else if(strength < 4){
+            hit=    -3;
+            dam=    -1;
+            weight= 5; light = 6; med = 7; heavy = 9;
+            press=  10;
+            doors=  2;
+            bars=   0;
+        }else if(strength < 6){
+            hit=    -2;
+            dam=    -1;
+            weight= 10; light = 13; med = 16; heavy = 19;
+            press=  25;
+            doors=  3;
+            bars=   0;
+        }else if(strength < 8){
+            hit=    -1;
+            dam=    0;
+            weight= 20; light = 29; med = 38; heavy = 46;
+            press=  55;
+            doors=  4;
+            bars=   0;
+        }else if(strength < 10){
+            hit=    0;
+            dam=    0;
+            weight= 35; light = 50; med = 65; heavy = 80;
+            press=  90;
+            doors=  5;
+            bars=   1;
+        }else if(strength < 12){
+            hit=    0;
+            dam=    0;
+            weight= 40; light = 58; med = 76; heavy = 96;
+            press=  115;
+            doors=  6;
+            bars=   2;
+        }else if(strength < 14){
+            hit=    0;
+            dam=    0;
+            weight= 45; light = 69; med = 93; heavy = 117;
+            press=  140;
+            doors=  7;
+            bars=   4;
+        }else if(strength < 16){
+            hit=    0;
+            dam=    0;
+            weight= 55; light = 86; med = 115; heavy = 145;
+            press=  170;
+            doors=  8;
+            bars=   7;
+        }else if(strength < 17){
+            hit=    0;
+            dam=    +1;
+            weight= 70; light = 100; med = 130; heavy = 160;
+            press=  195;
+            doors=  9;
+            bars=   10;
+        }else if(strength < 18){
+            hit=    +1;
+            dam=    +1;
+            weight= 85; light = 121; med = 157; heavy = 193;
+            press=  220;
+            doors=  10;
+            bars=   13;
+        }else if(strength == 18){
+            hit=    +1;
+            dam=    +2;
+            weight= 110; light = 149; med = 188; heavy = 227;
+            press=  255;
+            doors=  11;
+            bars=   16;
+        }else if(strength > 18 && strength <= 18.50){
+            hit=    +1;
+            dam=    +3;
+            weight= 135; light = 174; med = 213; heavy = 252;
+            press=  280;
+            doors=  12;
+            bars=   20;
+        }else if(strength > 18.50 && strength <= 18.75){
+            hit=    +2;
+            dam=    +3;
+            weight= 160; light = 199; med = 238; heavy = 277;
+            press=  305;
+            doors=  13;
+            bars=   25;
+        }else if(strength > 18.75 && strength <= 18.90){
+            hit=    +2;
+            dam=    +4;
+            weight= 185; light = 2; med = 3; heavy = 4;
+            press=  330;
+            doors=  14;
+            bars=   30;
+        }else if(strength > 18.90 && strength <= 18.99){
+            hit=    +2;
+            dam=    +5;
+            weight= 235; light = 274; med = 213; heavy = 352;
+            press=  380;
+            doors=  15;
+            bars=   35;
+        }else if(strength > 18.99 && strength < 19){
+            hit=    +3;
+            dam=    +6;
+            weight= 335; light = 374; med = 413; heavy = 452;
+            press=  480;
+            doors=  16;
+            bars=   40;
+        }else if(strength == 19){
+            hit=    +3;
+            dam=    +7;
+            weight= 485; light = 524; med = 563; heavy = 601;
+            press=  640;
+            doors=  16;
+            bars=   50;
+        }else if(strength == 20){
+            hit=    +3;
+            dam=    +8;
+            weight= 535; light = 576; med = 618; heavy = 659;
+            press=  700;
+            doors=  17;
+            bars=   60;
+        }else if(strength == 21){
+            hit=    +4;
+            dam=    +9;
+            weight= 635; light = 679; med = 723; heavy = 766;
+            press=  810;
+            doors=  17;
+            bars=   70;
+        }else if(strength == 22){
+            hit=    +4;
+            dam=    +10;
+            weight= 785; light = 831; med = 877; heavy = 924;
+            press=  970;
+            doors=  18;
+            bars=   80;
+        }else if(strength == 23){
+            hit=    +5;
+            dam=    +11;
+            weight= 935; light = 984; med = 1033; heavy = 1181;
+            press=  1130;
+            doors=  18;
+            bars=   90;
+        }else if(strength == 24){
+            hit=    +6;
+            dam=    +12;
+            weight= 1235; light = 1286; med = 1337; heavy = 1389;
+            press=  1440;
+            doors=  19;
+            bars=   95;
+        }else if(strength >= 25){
+            hit=    +7;
+            dam=    +14;
+            weight= 1535; light = 1589; med = 1643; heavy = 1696;
+            press=  1750;
+            doors=  19;
+            bars=   99;
+        }
+
+        setAttrs({
+            attackbonusstr: hit,
+            damagebonusstr: dam,
+            weightallow: weight,
+            maxpress: press,
+            opendoors: doors,
+            bendbars: bars,
+            encbase: weight,
+            enclight: light,
+            encmedium: med,
+            encheavy: heavy,
+            encsevere: press
+        });
+    });
+});
+
+on('change:dexterity', function(){
+    getAttrs([
+        "dexterity"
+    ], function(v){
+        var attack, ac = 0;
+        var dexterity = parseFloat(v.dexterity);
+
+        if(dexterity < 2){
+            attack= -6;
+            ac=     -5;
+        }else if(dexterity < 3){
+            attack= -4;
+            ac=     -5;
+        }else if(dexterity < 4){
+            attack= -3;
+            ac=     -4;
+        }else if(dexterity < 5){
+            attack= -2;
+            ac=     -3;
+        }else if(dexterity < 6){
+            attack= -1;
+            ac=     -2;
+        }else if(dexterity < 7){
+            attack= 0;
+            ac=     -1;
+        }else if(dexterity < 15){
+            attack= 0;
+            ac=     0;
+        }else if(dexterity < 16){
+            attack= 0;
+            ac=     +1;
+        }else if(dexterity < 17){
+            attack= +1;
+            ac=     +2;
+        }else if(dexterity < 18){
+            attack= +2;
+            ac=     +3;
+        }else if(dexterity < 19){
+            attack= +2;
+            ac=     +4;
+        }else if(dexterity < 21){
+            attack= +3;
+            ac=     +4;
+        }else if(dexterity < 24){
+            attack= +4;
+            ac=     +5;
+        }else if(dexterity >= 24){
+            attack= +5;
+            ac=     +6;
+        }
+
+        setAttrs({
+            attackbonusdex: attack,
+            acbonusdex: ac
+        });
+    });
+});
+
+on('change:constitution', function(){
+    getAttrs([
+        "constitution"
+    ], function(v){
+        var hp, ss, ps, regen = 0;
+        var constitution = parseFloat(v.constitution);
+
+        if(constitution < 2){
+            hp=    -3;
+            ss=    25;
+            ps=    -2;
+            regen= "Nill";
+        }else if(constitution < 3){
+            hp=    -2;
+            ss=    30;
+            ps=    -1;
+            regen= "Nill";
+        }else if(constitution < 4){
+            hp=    -2;
+            ss=    35;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 5){
+            hp=    -1;
+            ss=    40;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 6){
+            hp=    -1;
+            ss=    45;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 7){
+            hp=    -1;
+            ss=    50;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 8){
+            hp=    0;
+            ss=    55;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 9){
+            hp=    0;
+            ss=    60;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 10){
+            hp=    0;
+            ss=    65;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 11){
+            hp=    0;
+            ss=    70;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 12){
+            hp=    0;
+            ss=    75;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 13){
+            hp=    0;
+            ss=    80;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 14){
+            hp=    0;
+            ss=    85;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 15){
+            hp=    0;
+            ss=    88;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 16){
+            hp=    +1 ;
+            ss=    90;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 17){
+            hp=    2;
+            ss=    95;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 18){
+            hp=    3;
+            ss=    97;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 19){
+            hp=    4;
+            ss=    99;
+            ps=    0;
+            regen= "Nill";
+        }else if(constitution < 20){
+            hp=    5;
+            ss=    99;
+            ps=    1;
+            regen=  "Nill";
+        }else if(constitution < 21){
+            hp=    5;
+            ss=    99;
+            ps=    1;
+            regen= "1/6 turns";
+        }else if(constitution < 22){
+            hp=    6;
+            ss=    99;
+            ps=    2;
+            regen= "1/5 turns";
+        }else if(constitution < 23){
+            hp=    6;
+            ss=    99;
+            ps=    2;
+            regen= "1/4 turns";
+        }else if(constitution < 24){
+            hp=    6;
+            ss=    99;
+            ps=    3;
+            regen= "1/3 turns";
+        }else if(constitution < 25){
+            hp=    7;
+            ss=    99;
+            ps=    3;
+            regen= "1/2 turns";
+        }else if(constitution >= 25){
+            hp=    7;
+            ss=    99;
+            ps=    4;
+            regen= "1/1 turns";
+        }
+
+        setAttrs({
+            hpbonuscon: hp,
+            systemshock: ss,
+            savebonuscon: ps,
+            regenerationcon: regen
+        });
+    });
+});
+
+on('change:intelligence', function(){
+    getAttrs([
+        "intelligence"
+    ], function(v){
+        var lang, level, learn, max = 0;
+        var intelligence = parseFloat(v.intelligence);
+
+        if(intelligence < 2){
+            lang=  0;
+            level= 0;
+            learn= 0;
+            max=   0;
+        }else if(intelligence < 9){
+            lang=  1;
+            level= 0;
+            learn= 0;
+            max=   0;
+        }else if(intelligence < 10){
+            lang=  2;
+            level= 4;
+            learn= 35;
+            max=   6;
+        }else if(intelligence < 11){
+            lang=  2;
+            level= 5;
+            learn= 40;
+            max=   7;
+        }else if(intelligence < 12){
+            lang=  2;
+            level= 5;
+            learn= 45;
+            max=   7;
+        }else if(intelligence < 13){
+            lang=  3;
+            level= 6;
+            learn= 50;
+            max=   7;
+        }else if(intelligence < 14){
+            lang=  3;
+            level= 6;
+            learn= 55;
+            max=   9;
+        }else if(intelligence < 15){
+            lang=  4;
+            level= 7;
+            learn= 60;
+            max=   9;
+        }else if(intelligence < 16){
+            lang=  4;
+            level= 7;
+            learn= 65;
+            max=   11;
+        }else if(intelligence < 17){
+            lang=  5;
+            level= 8;
+            learn= 70;
+            max=   11;
+        }else if(intelligence < 18){
+            lang=  6;
+            level= 8;
+            learn= 75;
+            max=   14;
+        }else if(intelligence < 19){
+            lang=  7;
+            level= 9;
+            learn= 85;
+            max=   18;
+        }else if(intelligence < 20){
+            lang=  8;
+            level= 9;
+            learn= 95;
+            max=   99;
+        }else if(intelligence < 21){
+            lang=  9;
+            level= 9;
+            learn= 96;
+            max=   99;
+        }else if(intelligence < 22){
+            lang=  10;
+            level= 9;
+            learn= 97;
+            max=   99;
+        }else if(intelligence < 23){
+            lang=  11;
+            level= 9;
+            learn= 98;
+            max=   99;
+        }else if(intelligence < 24){
+            lang=  12;
+            level= 9;
+            learn= 99;
+            max=   99;
+        }else if(intelligence < 25){
+            lang=  15;
+            level= 9;
+            learn= 100;
+            max=   99;
+        }else if(intelligence >= 25){
+            lang=  20;
+            level= 9;
+            learn= 100;
+            max=   99;
+        }
+
+        setAttrs({
+            languagesmax: lang,
+            spelllevelmax: level,
+            spelllear: learn,
+            spellnumbermax: max
+        });
+    });
+});
+
+on('change:willpower', function(){
+    getAttrs([
+        "willpower"
+    ], function(v){
+        var save, spells, fail = 0;
+        var willpower = parseFloat(v.willpower);
+
+        if(willpower < 2){
+            save=   -6;
+            spells= 0;
+            fail=   80;
+        }else if(willpower < 3){
+            save=   -4;
+            spells= 0;
+            fail=   60;
+        }else if(willpower < 4){
+            save=   -3;
+            spells= 0;
+            fail=   50;
+        }else if(willpower < 5){
+            save=   -2;
+            spells= 0;
+            fail=   45;
+        }else if(willpower < 6){
+            save=   -1;
+            spells= 0;
+            fail=   40;
+        }else if(willpower < 7){
+            save=   -1;
+            spells= 0;
+            fail=   35;
+        }else if(willpower < 8){
+            save=   -1;
+            spells= 0;
+            fail=   30;
+        }else if(willpower < 9){
+            save=   0;
+            spells= 0;
+            fail=   25;
+        }else if(willpower < 10){
+            save=   0;
+            spells= 0;
+            fail=   20;
+        }else if(willpower < 11){
+            save=   0;
+            spells= 0;
+            fail=   15;
+        }else if(willpower < 12){
+            save=   0;
+            spells= 0;
+            fail=   10;
+        }else if(willpower < 13){
+            save=   0;
+            spells= 0;
+            fail=   5;
+        }else if(willpower < 14){
+            save=   0;
+            spells= "1st x1";
+            fail=   0;
+        }else if(willpower < 15){
+            save=   0;
+            spells= "1st x2";
+            fail=   0;
+        }else if(willpower < 16){
+            save=   +1;
+            spells= "1st x2, 2nd x1";
+            fail=   0;
+        }else if(willpower < 17){
+            save=   +2;
+            spells= "1st x2, 2nd x2";
+            fail=   0;
+        }else if(willpower < 18){
+            save=   +3;
+            spells= "1st x2, 2nd x2, 3rd x1";
+            fail=   0;
+        }else if(willpower < 19){
+            save=   +4;
+            spells= "1st x2, 2nd x2, 3rd x1, 4th x1";
+            fail=   0;
+        }else if(willpower < 20){
+            save=   +4;
+            spells= "1st x3, 2nd x2, 3rd x2, 4th x1";
+            fail=   0;
+        }else if(willpower < 21){
+            save=   4;
+            spells= "1st x3, 2nd x3, 3rd x2, 4th x2";
+            fail=   0;
+        }else if(willpower < 22){
+            save=   4;
+            spells= "1st x3, 2nd x3, 3rd x3, 4th x2, 5th x1";
+            fail=   0;
+        }else if(willpower < 23){
+            save=   4;
+            spells= "1st x3, 2nd x3, 3rd x3, 4th x3, 5th x2";
+            fail=   0;
+        }else if(willpower < 24){
+            save=   4;
+            spells= "1st x4, 2nd x3, 3rd x3, 4th x3, 5th x2, 6th x1";
+            fail=   0;
+        }else if(willpower < 25){
+            save=   4;
+            spells= "1st x4, 2nd x3, 3rd x3, 4th x3, 5th x3, 6th x2";
+            fail=   0;
+        }else if(willpower >= 25){
+            save=   4;
+            spells= "1st x4, 2nd x3, 3rd x3, 4th x3, 5th x3, 6th x3, 7th x1";
+            fail=   0;
+        }
+
+        setAttrs({
+            savebonuswisdom: save,
+            spellsclericbonus: spells,
+            spellclericfail: fail
+        });
+    });
+});
+
+
+on('change:charisma', function(){
+    getAttrs([
+        "charisma"
+    ], function(v){
+        var hench, loyal, react = 0;
+        var charisma = parseFloat(v.charisma);
+
+        if(charisma < 2){
+            hench= 0;
+            loyal= -8;
+            react= -7;
+        }else if(charisma < 3){
+            hench= 1;
+            loyal= -7;
+            react= -6;
+        }else if(charisma < 4){
+            hench= 1;
+            loyal= -6;
+            react= -5;
+        }else if(charisma < 5){
+            hench= 1;
+            loyal= -5;
+            react= -4;
+        }else if(charisma < 6){
+            hench= 2;
+            loyal= -4;
+            react= -3;
+        }else if(charisma < 7){
+            hench= 2;
+            loyal= -3;
+            react= -2;
+        }else if(charisma < 8){
+            hench= 3;
+            loyal= -2;
+            react= -1;
+        }else if(charisma < 9){
+            hench= 3;
+            loyal= -1;
+            react= 0;
+        }else if(charisma < 12){
+            hench= 4;
+            loyal= 0;
+            react= 0;
+        }else if(charisma < 13){
+            hench= 5;
+            loyal= 0;
+            react= 0;
+        }else if(charisma < 14){
+            hench= 5;
+            loyal= 0;
+            react= 1;
+        }else if(charisma < 15){
+            hench= 6;
+            loyal= 1;
+            react= 2;
+        }else if(charisma < 16){
+            hench= 7;
+            loyal= 3;
+            react= 3;
+        }else if(charisma < 17){
+            hench= 8;
+            loyal= 4;
+            react= 5;
+        }else if(charisma < 18){
+            hench= 10;
+            loyal= 6;
+            react= 6;
+        }else if(charisma < 19){
+            hench= 15;
+            loyal= 8;
+            react= 7;
+        }else if(charisma < 20){
+            hench= 20;
+            loyal= 10;
+            react= 8;
+        }else if(charisma < 21){
+            hench= 25;
+            loyal= 12;
+            react= 9;
+        }else if(charisma < 22){
+            hench= 30;
+            loyal= 14;
+            react= 10;
+        }else if(charisma < 23){
+            hench= 35;
+            loyal= 16;
+            react= 11;
+        }else if(charisma < 24){
+            hench= 40;
+            loyal= 18;
+            react= 12;
+        }else if(charisma < 25){
+            hench= 45;
+            loyal= 20;
+            react= 13;
+        }else if(charisma >= 25){
+            hench= 50;
+            loyal= 20;
+            react= 14;
+        }
+
+        setAttrs({
+            henchmenmax: hench,
+            loyaltybase: loyal,
+            reactionadjust: react
+        });
+    });
+});
+
+
+on('change:perception', function(){
+    getAttrs([
+        "perception"
+    ], function(v){
+        var attack, ill = 0;
+        var perception = parseFloat(v.perception);
+
+        if(perception < 2){
+            attack= -6;
+            ill=     "None";
+        }else if(perception < 3){
+            attack= -4;
+            ill=     "None";
+        }else if(perception < 4){
+            attack= -3;
+            ill=     "None";
+        }else if(perception < 5){
+            attack= -2;
+            ill=     "None";
+        }else if(perception < 6){
+            attack= -1;
+            ill=     "None";
+        }else if(perception < 7){
+            attack= 0;
+            ill=     "None";
+        }else if(perception < 15){
+            attack= 0;
+            ill=     "None";
+        }else if(perception < 16){
+            attack= 0;
+            ill=     "None";
+        }else if(perception < 17){
+            attack= +1;
+            ill=     "None";
+        }else if(perception < 18){
+            attack= +2;
+            ill=     "None";
+        }else if(perception < 19){
+            attack= +2;
+            ill=     "None";
+        }else if(perception < 20){
+            attack= +3;
+            ill=     "1st Level";
+        }else if(perception < 21){
+            attack= +3;
+            ill=     "2nd Level";
+        }else if(perception < 22){
+            attack= +4;
+            ill=     "3rd Level";
+        }else if(perception < 23){
+            attack= +4;
+            ill=     "4th Level";
+        }else if(perception < 24){
+            attack= +4;
+            ill=     "5th Level";
+        }else if(perception < 25){
+            attack= +4;
+            ill=     "6th Level";
+        }else if(perception >= 25){
+            attack= +5;
+            ill=     "7th Level";
+        }
+
+        setAttrs({
+            surprisebonuspcp: attack,
+            illusionimmunity: ill
+        });
+    });
+});
+
+/***************************************
+    WHOLE-CHARACTER IMPORT (from the app's "Export to Roll20")
+***************************************/
+on("clicked:importall", function() {
+    getAttrs(["importjson"], function(v) {
+        var data;
+        try { data = JSON.parse(v.importjson || "{}"); }
+        catch (e) { setAttrs({ importstatus: "Invalid JSON - " + e }); return; }
+
+        var num = function(x, d) { var n = Number(x); return isNaN(n) ? (d || 0) : n; };
+
+        var str = num(data.strength, 10), exc = num(data.strength_exceptional, 0);
+        if (str === 18 && exc > 0) {
+            str = exc <= 50 ? 18.50 : exc <= 75 ? 18.75 : exc <= 90 ? 18.90 : exc <= 99 ? 18.99 : 18.999;
+        }
+
+        // 1) Scalars first, on their own, so ability scores never depend on the
+        //    repeating-row creation below (mixing the two in one setAttrs is flaky).
+        var scalars = {
+            character_name: data.character_name || "",
+            race: data.player_race || "",
+            classes: data.player_class || "",
+            level: num(data.player_level, 1),
+            alignment: data.alignment || "",
+            sex: data.gender || "",
+            strength: str,
+            dexterity: num(data.dexterity, 10),
+            constitution: num(data.constitution, 10),
+            intelligence: num(data.intelligence, 10),
+            willpower: num(data.willpower, 10),
+            charisma: num(data.charisma, 10),
+            perception: num(data.perception, 10),
+            hp: num(data.hp, 0),
+            hp_max: num(data.hp_max, 0),
+            attackbase: num(data.attack_base, 0),
+            acbase: num(data.armor_base, 10),
+            acarmor: num(data.armor_bonus, 0),
+            speed: num(data.move, 12),
+            saveppd: num(data.save_ppd, 20),
+            saversw: num(data.save_rsw, 20),
+            savepp: num(data.save_pp, 20),
+            savebw: num(data.save_bw, 20),
+            saves: num(data.save_spell, 20),
+            wealthgp: num(data.gp, 0),
+            wealthsp: num(data.sp, 0),
+            wealthcp: num(data.cp, 0),
+            importstatus: "Imported " + (data.character_name || "character") + " (Str " + str + ")"
+        };
+
+        // 2) Build the repeating rows separately.
+        var rows = {};
+        var addRows = function(list, section, mapper) {
+            (list || []).forEach(function(item) {
+                var id = generateRowID(), row = mapper(item);
+                Object.keys(row).forEach(function(k) {
+                    rows["repeating_" + section + "_" + id + "_" + k] = row[k];
+                });
+            });
+        };
+        addRows(data.weapons, "weapons", function(w) {
+            return { wname: w.name || "", watks: 1, whit: num(w.tohit, 0), wdambase: w.damage || "",
+                     wdambonus: num(w.dambonus, 0), wspeed: num(w.speed, 0),
+                     wtype: w.type || "", wrange: w.range || "" };
+        });
+        addRows(data.weapon_profs, "wps", function(name) {
+            return { wpsname: name || "", wpsslots: 1 };
+        });
+        addRows(data.nwp, "nwp", function(n) {
+            return { nwpname: n.name || "", nwpattr: "@{" + (n.stat || "strength") + "}",
+                     nwpbase: num(n.base, 0), nwpadj: 0 };
+        });
+        addRows(data.gear, "gear1", function(g) {
+            return { g1name: g.name || "", g1quantity: num(g.qty, 1),
+                     g1weight: num(g.weight, 0), g1cost: num(g.cost, 0) };
+        });
+        addRows(data.armor, "armor", function(a) {
+            return { aname: a.name || "", aac: num(a.aac, 0), amagic: num(a.amagic, 0),
+                     adex: num(a.adex, 0), aequipped: num(a.aequipped, 1) };
+        });
+        (data.spells || []).forEach(function(s) {
+            var id = generateRowID(), pfx = "repeating_spells" + (num(s.level, 1)) + "_" + id + "_";
+            rows[pfx + "spellName"] = s.name || "";
+            rows[pfx + "spellLevel"] = num(s.level, 1);
+            rows[pfx + "spellSchool"] = (s.school || "").toLowerCase();
+            rows[pfx + "spellRange"] = s.range || "";
+            rows[pfx + "spellCastingTime"] = num(s.castingTime, 0);
+            rows[pfx + "spellSave"] = s.save || "";
+            rows[pfx + "spellAoe"] = s.aoe || "";
+            rows[pfx + "spellDuration"] = s.duration || "";
+            rows[pfx + "spellDamage"] = s.damage || "";
+            rows[pfx + "spellDescription"] = s.description || "";
+            rows[pfx + "spellMat1"] = s.materials || "";
+            rows[pfx + "spellVerbal"] = s.verbal ? "{{v=1}}" : "";
+            rows[pfx + "spellSomatic"] = s.somatic ? "{{s=1}}" : "";
+            rows[pfx + "spellMaterial"] = s.material ? "{{m=1}}" : "";
+        });
+
+        // 3) Apply: scalars, then rows, then clear the paste box.
+        setAttrs(scalars, {}, function() {
+            setAttrs(rows, {}, function() {
+                setAttrs({ importjson: "" });
+            });
+        });
+    });
+});
+
+</script>
+
+</div>

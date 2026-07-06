@@ -149,3 +149,32 @@ def test_migrate_legacy_bookmarks(tmp_path):
     db.migrate_legacy_bookmarks(user, legacy)
     assert len(db.bookmark_urls(user)) == 2
     user.close(); legacy.close()
+
+
+# ── saved characters (temp DB) ────────────────────────────────────────────────
+
+def test_character_crud(tmp_path):
+    conn = db.connect(tmp_path / "user.db")
+    db.ensure_characters_schema(conn)
+    assert db.all_characters(conn) == []
+
+    cid = db.insert_character(conn, "Gornak", "Human", "Fighter", "Lawful Good", '{"name":"Gornak"}')
+    assert isinstance(cid, int)
+    rows = db.all_characters(conn)
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Gornak" and rows[0]["char_class"] == "Fighter"
+    assert db.get_character(conn, cid) == '{"name":"Gornak"}'
+
+    db.update_character(conn, cid, "Gornak the Bold", "Human", "Fighter", "Neutral Good", '{"v":2}')
+    rows = db.all_characters(conn)
+    assert rows[0]["name"] == "Gornak the Bold" and rows[0]["alignment"] == "Neutral Good"
+    assert db.get_character(conn, cid) == '{"v":2}'
+
+    # a second character, then delete the first
+    cid2 = db.insert_character(conn, "Mira", "Elf", "Mage", "True Neutral", "{}")
+    assert len(db.all_characters(conn)) == 2
+    db.delete_character(conn, cid)
+    remaining = db.all_characters(conn)
+    assert len(remaining) == 1 and remaining[0]["id"] == cid2
+    assert db.get_character(conn, cid) is None
+    conn.close()

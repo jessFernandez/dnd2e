@@ -1,0 +1,879 @@
+"""char_rules.py — the structured, computable AD&D 2e character-creation model.
+
+This is the foundation the charactermancer builds on. The rulebook is stored as
+HTML pages (great for browsing/Jarvis) but a character *builder* needs the finite
+chargen tables as data it can compute with: ability-score modifiers, racial
+requirements/adjustments/level-limits, class requirements and XP/THAC0/saving-throw
+progressions, and proficiency slots.
+
+Every number here was transcribed from the imported PHB/DMG tables (Tables 1–8,
+13, 14/20/23/25, 34, 53, 60 and DMG Table 7) — the same data the app already
+serves — so the model can't drift from the rulebook.
+
+Two design rules keep this a clean foundation:
+
+  * **Pure and Qt-free.** Like toc.py / navigation.py, this module is plain data +
+    functions, unit-tested without a running app.
+  * **House rules are a computable override layer, not prose.** The campaign's
+    ~15 chargen-relevant house rules live in `HOUSE_RULES` and are applied by the
+    same functions the standard rules use (pass `house_rules=False` for RAW).
+    The combat conversions (THAC0⇄attack-bonus, descending⇄ascending AC) are the
+    single source of truth that calculator.py now imports, so the builder and the
+    combat converter can't disagree.
+
+Adding data later (e.g. a large list of nonweapon proficiencies) is new rows in
+these structures, not new code.
+"""
+from dataclasses import dataclass
+
+import nonweapon_book as _book
+import equipment as _equipment
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Combat conversions — the campaign's core house rule (single source of truth).
+#  calculator.py imports these; do not duplicate them there.
+# ═══════════════════════════════════════════════════════════════════════════
+
+def thac0_to_bonus(thac0: int) -> int:
+    """House rule: THAC0 is removed; attack bonus = 20 − THAC0."""
+    return 20 - thac0
+
+
+def bonus_to_thac0(bonus: int) -> int:
+    return 20 - bonus
+
+
+def desc_to_asc(desc_ac: int) -> int:
+    """House rule: ascending AC = 20 − descending AC."""
+    return 20 - desc_ac
+
+
+def asc_to_desc(asc_ac: int) -> int:
+    return 20 - asc_ac
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Ability-score modifier tables (PHB Tables 1–6)
+#  Stored as (low, high, mods) bands matching the printed rows; look up by score.
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _band(rows, score):
+    for lo, hi, mods in rows:
+        if lo <= score <= hi:
+            return mods
+    raise ValueError(f"score {score} out of range 1–25")
+
+
+@dataclass(frozen=True)
+class StrengthMods:
+    hit: int          # attack (to-hit) adjustment
+    dmg: int          # damage adjustment
+    weight_allow: int # lb. carried before encumbrance
+    max_press: int    # lb.
+    open_doors: int   # x-in-20 chance
+    bend_bars: int    # % bend bars / lift gates
+
+
+# Table 1. Score 18 exceptional-Strength bands use "18/xx" string keys.
+_STRENGTH = {
+    1:  StrengthMods(-5, -4, 1, 3, 1, 0),
+    2:  StrengthMods(-3, -2, 1, 5, 1, 0),
+    3:  StrengthMods(-3, -1, 5, 10, 2, 0),
+    4:  StrengthMods(-2, -1, 10, 25, 3, 0),  5: StrengthMods(-2, -1, 10, 25, 3, 0),
+    6:  StrengthMods(-1, 0, 20, 55, 4, 0),   7: StrengthMods(-1, 0, 20, 55, 4, 0),
+    8:  StrengthMods(0, 0, 35, 90, 5, 1),    9: StrengthMods(0, 0, 35, 90, 5, 1),
+    10: StrengthMods(0, 0, 40, 115, 6, 2),  11: StrengthMods(0, 0, 40, 115, 6, 2),
+    12: StrengthMods(0, 0, 45, 140, 7, 4),  13: StrengthMods(0, 0, 45, 140, 7, 4),
+    14: StrengthMods(0, 0, 55, 170, 8, 7),  15: StrengthMods(0, 0, 55, 170, 8, 7),
+    16: StrengthMods(0, 1, 70, 195, 9, 10),
+    17: StrengthMods(1, 1, 85, 220, 10, 13),
+    18: StrengthMods(1, 2, 110, 255, 11, 16),
+    19: StrengthMods(3, 7, 485, 640, 16, 50),
+    20: StrengthMods(3, 8, 535, 700, 17, 60),
+    21: StrengthMods(4, 9, 635, 810, 17, 70),
+    22: StrengthMods(4, 10, 785, 970, 18, 80),
+    23: StrengthMods(5, 11, 935, 1130, 18, 90),
+    24: StrengthMods(6, 12, 1235, 1440, 19, 95),
+    25: StrengthMods(7, 14, 1535, 1750, 19, 99),
+}
+# Exceptional Strength (score exactly 18 with a d100 percentile roll).
+_STRENGTH_EXCEPTIONAL = {
+    "18/01-50": StrengthMods(1, 3, 135, 280, 12, 20),
+    "18/51-75": StrengthMods(2, 3, 160, 305, 13, 25),
+    "18/76-90": StrengthMods(2, 4, 185, 330, 14, 30),
+    "18/91-99": StrengthMods(2, 5, 235, 380, 15, 35),
+    "18/00":    StrengthMods(3, 6, 335, 480, 16, 40),
+}
+
+
+def strength_mods(score, exceptional=None) -> StrengthMods:
+    """Strength modifiers. For an 18 with exceptional Strength, pass a percentile
+    band key like "18/76-90" (or a 1–100 roll) as `exceptional`."""
+    if score == 18 and exceptional is not None:
+        return _STRENGTH_EXCEPTIONAL[exceptional_str_band(exceptional)]
+    return _STRENGTH[score]
+
+
+def exceptional_str_band(roll) -> str:
+    """Map a percentile roll (1–100, or 0/100 for 00) to its 18/xx band key."""
+    if isinstance(roll, str):
+        return roll
+    r = 100 if roll in (0, 100) else roll
+    if r <= 50:  return "18/01-50"
+    if r <= 75:  return "18/51-75"
+    if r <= 90:  return "18/76-90"
+    if r <= 99:  return "18/91-99"
+    return "18/00"
+
+
+@dataclass(frozen=True)
+class DexterityMods:
+    reaction: int       # surprise/reaction adjustment
+    missile: int        # missile attack adjustment
+    defensive_ac: int   # defensive AC adjustment (negative = better)
+
+
+_DEXTERITY = [
+    (1, 1, DexterityMods(-6, -6, 5)), (2, 2, DexterityMods(-4, -4, 5)),
+    (3, 3, DexterityMods(-3, -3, 4)), (4, 4, DexterityMods(-2, -2, 3)),
+    (5, 5, DexterityMods(-1, -1, 2)), (6, 6, DexterityMods(0, 0, 1)),
+    (7, 14, DexterityMods(0, 0, 0)),  (15, 15, DexterityMods(0, 0, -1)),
+    (16, 16, DexterityMods(1, 1, -2)), (17, 17, DexterityMods(2, 2, -3)),
+    (18, 18, DexterityMods(2, 2, -4)), (19, 20, DexterityMods(3, 3, -4)),
+    (21, 23, DexterityMods(4, 4, -5)), (24, 25, DexterityMods(5, 5, -6)),
+]
+
+
+def dexterity_mods(score) -> DexterityMods:
+    return _band(_DEXTERITY, score)
+
+
+@dataclass(frozen=True)
+class ConstitutionMods:
+    hp_adj: int          # per-Hit-Die HP adjustment (non-warrior cap of +2)
+    hp_adj_warrior: int  # warriors get the higher bonus at 17+
+    system_shock: int    # %
+    resurrection: int    # %
+    poison_save: int     # bonus to poison saves
+
+
+_CONSTITUTION = [
+    (1, 1, ConstitutionMods(-3, -3, 25, 30, -2)), (2, 2, ConstitutionMods(-2, -2, 30, 35, -1)),
+    (3, 3, ConstitutionMods(-2, -2, 35, 40, 0)),  (4, 4, ConstitutionMods(-1, -1, 40, 45, 0)),
+    (5, 5, ConstitutionMods(-1, -1, 45, 50, 0)),  (6, 6, ConstitutionMods(-1, -1, 50, 55, 0)),
+    (7, 7, ConstitutionMods(0, 0, 55, 60, 0)),    (8, 8, ConstitutionMods(0, 0, 60, 65, 0)),
+    (9, 9, ConstitutionMods(0, 0, 65, 70, 0)),    (10, 10, ConstitutionMods(0, 0, 70, 75, 0)),
+    (11, 11, ConstitutionMods(0, 0, 75, 80, 0)),  (12, 12, ConstitutionMods(0, 0, 80, 85, 0)),
+    (13, 13, ConstitutionMods(0, 0, 85, 90, 0)),  (14, 14, ConstitutionMods(0, 0, 88, 92, 0)),
+    (15, 15, ConstitutionMods(1, 1, 90, 94, 0)),  (16, 16, ConstitutionMods(2, 2, 95, 96, 0)),
+    (17, 17, ConstitutionMods(2, 3, 97, 98, 0)),  (18, 18, ConstitutionMods(2, 4, 99, 100, 0)),
+    (19, 19, ConstitutionMods(2, 5, 99, 100, 1)), (20, 20, ConstitutionMods(2, 5, 99, 100, 1)),
+    (21, 21, ConstitutionMods(2, 6, 99, 100, 2)), (22, 22, ConstitutionMods(2, 6, 99, 100, 2)),
+    (23, 23, ConstitutionMods(2, 6, 99, 100, 3)), (24, 24, ConstitutionMods(2, 7, 99, 100, 3)),
+    (25, 25, ConstitutionMods(2, 7, 100, 100, 4)),
+]
+
+
+def constitution_mods(score) -> ConstitutionMods:
+    return _band(_CONSTITUTION, score)
+
+
+@dataclass(frozen=True)
+class IntelligenceMods:
+    languages: int          # also bonus nonweapon proficiency slots (optional rule)
+    max_spell_level: int    # highest wizard spell level castable (0 = none)
+    learn_spell: int        # % chance to learn a spell (0 = n/a)
+    max_spells_per_level: int  # 999 = "All"
+
+
+_INTELLIGENCE = [
+    (1, 8, IntelligenceMods(1, 0, 0, 0)),   # 1 => can't speak; treat as 0/1 language
+    (9, 9, IntelligenceMods(2, 4, 35, 6)),  (10, 10, IntelligenceMods(2, 5, 40, 7)),
+    (11, 11, IntelligenceMods(2, 5, 45, 7)), (12, 12, IntelligenceMods(3, 6, 50, 7)),
+    (13, 13, IntelligenceMods(3, 6, 55, 9)), (14, 14, IntelligenceMods(4, 7, 60, 9)),
+    (15, 15, IntelligenceMods(4, 7, 65, 11)), (16, 16, IntelligenceMods(5, 8, 70, 11)),
+    (17, 17, IntelligenceMods(6, 8, 75, 14)), (18, 18, IntelligenceMods(7, 9, 85, 18)),
+    (19, 19, IntelligenceMods(8, 9, 95, 999)), (20, 20, IntelligenceMods(9, 9, 96, 999)),
+    (21, 21, IntelligenceMods(10, 9, 97, 999)), (22, 22, IntelligenceMods(11, 9, 98, 999)),
+    (23, 23, IntelligenceMods(12, 9, 99, 999)), (24, 24, IntelligenceMods(15, 9, 100, 999)),
+    (25, 25, IntelligenceMods(20, 9, 100, 999)),
+]
+
+
+def intelligence_mods(score) -> IntelligenceMods:
+    return _band(_INTELLIGENCE, score)
+
+
+@dataclass(frozen=True)
+class WisdomMods:
+    magic_defense: int      # saving-throw adjustment vs. mind-affecting magic
+    spell_failure: int      # % priest spell failure
+    _bonus_spell_increment: tuple = ()  # spell levels added AT this score (cumulative)
+
+
+# Table 5. The bonus-spell column is cumulative: a priest gets every increment
+# from Wis 13 up to their score. We store the per-score increment and sum it.
+_WISDOM = [
+    (1, 1, WisdomMods(-6, 80)), (2, 2, WisdomMods(-4, 60)), (3, 3, WisdomMods(-3, 50)),
+    (4, 4, WisdomMods(-2, 45)), (5, 5, WisdomMods(-1, 40)), (6, 6, WisdomMods(-1, 35)),
+    (7, 7, WisdomMods(-1, 30)), (8, 8, WisdomMods(0, 25)),  (9, 9, WisdomMods(0, 20)),
+    (10, 10, WisdomMods(0, 15)), (11, 11, WisdomMods(0, 10)), (12, 12, WisdomMods(0, 5)),
+    (13, 13, WisdomMods(0, 0, (1,))), (14, 14, WisdomMods(0, 0, (1,))),
+    (15, 15, WisdomMods(1, 0, (2,))), (16, 16, WisdomMods(2, 0, (2,))),
+    (17, 17, WisdomMods(3, 0, (3,))), (18, 18, WisdomMods(4, 0, (4,))),
+    (19, 19, WisdomMods(4, 0, (1, 3))), (20, 20, WisdomMods(4, 0, (2, 4))),
+    (21, 21, WisdomMods(4, 0, (3, 5))), (22, 22, WisdomMods(4, 0, (4, 5))),
+    (23, 23, WisdomMods(4, 0, (1, 6))), (24, 24, WisdomMods(4, 0, (5, 6))),
+    (25, 25, WisdomMods(4, 0, (6, 7))),
+]
+
+
+def wisdom_mods(score) -> WisdomMods:
+    return _band(_WISDOM, score)
+
+
+def priest_bonus_spells(wis) -> dict:
+    """Cumulative bonus priest spells by spell level, e.g. Wis 18 -> {1:2,2:2,3:1,4:1}."""
+    out: dict = {}
+    for lo, hi, mods in _WISDOM:
+        if lo > wis:
+            break
+        for lvl in mods._bonus_spell_increment:
+            out[lvl] = out.get(lvl, 0) + 1
+    return out
+
+
+@dataclass(frozen=True)
+class CharismaMods:
+    max_henchmen: int
+    loyalty_base: int
+    reaction: int
+
+
+_CHARISMA = [
+    (1, 1, CharismaMods(0, -8, -7)), (2, 2, CharismaMods(1, -7, -6)), (3, 3, CharismaMods(1, -6, -5)),
+    (4, 4, CharismaMods(1, -5, -4)), (5, 5, CharismaMods(2, -4, -3)), (6, 6, CharismaMods(2, -3, -2)),
+    (7, 7, CharismaMods(3, -2, -1)), (8, 8, CharismaMods(3, -1, 0)),  (9, 9, CharismaMods(4, 0, 0)),
+    (10, 10, CharismaMods(4, 0, 0)), (11, 11, CharismaMods(4, 0, 0)), (12, 12, CharismaMods(5, 0, 0)),
+    (13, 13, CharismaMods(5, 0, 1)), (14, 14, CharismaMods(6, 1, 2)), (15, 15, CharismaMods(7, 3, 3)),
+    (16, 16, CharismaMods(8, 4, 5)), (17, 17, CharismaMods(10, 6, 6)), (18, 18, CharismaMods(15, 8, 7)),
+    (19, 19, CharismaMods(20, 10, 8)), (20, 20, CharismaMods(25, 12, 9)), (21, 21, CharismaMods(30, 14, 10)),
+    (22, 22, CharismaMods(35, 16, 11)), (23, 23, CharismaMods(40, 18, 12)), (24, 24, CharismaMods(45, 20, 13)),
+    (25, 25, CharismaMods(50, 20, 14)),
+]
+
+
+def charisma_mods(score) -> CharismaMods:
+    return _band(_CHARISMA, score)
+
+
+ABILITIES = ("Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma")
+
+
+# ── Perception (house-rule 7th ability) ──────────────────────────────────────
+# The campaign adds Perception as its own score, which *takes over* two effects
+# from the standard abilities: the surprise/reaction adjustment (off Dexterity)
+# and illusion immunity (off Intelligence). It uses those same published value
+# columns, now indexed by the Perception score instead of Dex/Int. Races don't
+# adjust it and no class requires it, so it lives outside ABILITIES and only
+# applies when house rules are on.
+PERCEPTION = "Perception"
+
+# Illusion immunity by score (from the Intelligence table's immunity column):
+# only matters at 19+ (unreachable by a 4d6 roll, but modelled for magic boosts).
+_ILLUSION_IMMUNITY = {19: 1, 20: 2, 21: 3, 22: 4, 23: 5, 24: 6, 25: 7}
+
+
+@dataclass(frozen=True)
+class PerceptionMods:
+    surprise: int           # surprise / reaction adjustment (house rule: moved off Dexterity)
+    illusion_immunity: int  # spell level of illusions ignored (moved off Intelligence); 0 = none
+
+
+def perception_mods(score) -> PerceptionMods:
+    return PerceptionMods(surprise=dexterity_mods(score).reaction,
+                          illusion_immunity=_ILLUSION_IMMUNITY.get(score, 0))
+
+
+def house_abilities(house_rules: bool = True) -> tuple:
+    """The ability scores a character rolls: the standard six, plus Perception
+    when house rules are active."""
+    return ABILITIES + (PERCEPTION,) if house_rules else ABILITIES
+
+
+_ABILITY_FN = {
+    "Strength": strength_mods, "Dexterity": dexterity_mods, "Constitution": constitution_mods,
+    "Intelligence": intelligence_mods, "Wisdom": wisdom_mods, "Charisma": charisma_mods,
+    "Perception": perception_mods,
+}
+
+
+def ability_mods(ability: str, score):
+    """Modifier record for any ability by name (title-case), e.g. ability_mods('Wisdom', 16)."""
+    return _ABILITY_FN[ability](score)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Races (PHB Table 7 requirements, Table 8 adjustments, DMG Table 7 level limits)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass(frozen=True)
+class Race:
+    name: str
+    requirements: dict   # ability -> (min, max)
+    adjustments: dict    # ability -> +/- delta
+    level_limits: dict   # class name -> max level (None = unlimited)
+    infravision: int = 0 # feet
+    notes: tuple = ()
+
+
+# Humans have no ability min/max beyond class minimums, no adjustments, and can
+# be any class to unlimited level (handled by name in race_allows / max_level).
+RACES = {
+    "Human": Race(
+        "Human", requirements={}, adjustments={}, level_limits={},
+        notes=("Any class, no level limit.", "May be dual-classed."),
+    ),
+    "Dwarf": Race(
+        "Dwarf",
+        requirements={"Strength": (8, 18), "Dexterity": (3, 17), "Constitution": (11, 18),
+                      "Intelligence": (3, 18), "Wisdom": (3, 18), "Charisma": (3, 17)},
+        adjustments={"Constitution": 1, "Charisma": -1},
+        level_limits={"Cleric": 10, "Fighter": 15, "Thief": 12},
+        infravision=60,
+        notes=("+1 save/4 Con vs. magic & poison.", "Combat & reaction bonuses vs. giant-class.",
+               "+1 to hit orcs, half-orcs, goblins, hobgoblins."),
+    ),
+    "Elf": Race(
+        "Elf",
+        requirements={"Strength": (3, 18), "Dexterity": (6, 18), "Constitution": (7, 18),
+                      "Intelligence": (8, 18), "Wisdom": (3, 18), "Charisma": (8, 18)},
+        adjustments={"Dexterity": 1, "Constitution": -1},
+        level_limits={"Cleric": 12, "Fighter": 12, "Mage": 15, "Ranger": 15, "Thief": 12},
+        infravision=60,
+        notes=("90% resistant to sleep and charm.", "Secret/concealed door detection.",
+               "+1 to hit with bows (non-crossbow) and long/short swords."),
+    ),
+    "Gnome": Race(
+        "Gnome",
+        requirements={"Strength": (6, 18), "Dexterity": (3, 18), "Constitution": (8, 18),
+                      "Intelligence": (6, 18), "Wisdom": (3, 18), "Charisma": (3, 18)},
+        adjustments={"Intelligence": 1, "Wisdom": -1},
+        level_limits={"Cleric": 9, "Fighter": 11, "Illusionist": 15, "Thief": 13},
+        infravision=60,
+        notes=("+1 save/3.5 Con vs. magic.", "Combat & reaction bonuses vs. kobolds/goblins.",
+               "Detect certain stonework/depth."),
+    ),
+    "Half-Elf": Race(
+        "Half-Elf",
+        requirements={"Strength": (3, 18), "Dexterity": (6, 18), "Constitution": (6, 18),
+                      "Intelligence": (4, 18), "Wisdom": (3, 18), "Charisma": (3, 18)},
+        adjustments={},
+        level_limits={"Bard": None, "Cleric": 14, "Druid": 9, "Fighter": 14,
+                      "Mage": 12, "Ranger": 16, "Thief": 12},
+        infravision=60,
+        notes=("30% resistant to sleep and charm.", "Secret-door detection.", "May be multi-classed."),
+    ),
+    "Halfling": Race(
+        "Halfling",
+        requirements={"Strength": (7, 18), "Dexterity": (7, 18), "Constitution": (10, 18),
+                      "Intelligence": (6, 18), "Wisdom": (3, 17), "Charisma": (3, 18)},
+        adjustments={"Dexterity": 1, "Strength": -1},
+        level_limits={"Cleric": 8, "Fighter": 9, "Thief": 15},
+        infravision=30,
+        notes=("+1 save/3.5 Con vs. magic & poison.", "+1 to hit with slings and thrown weapons.",
+               "Fighters do not roll for exceptional Strength."),
+    ),
+}
+
+
+def race_allows(race: str, class_name: str) -> bool:
+    """Can a member of this race be this class at all?"""
+    r = RACES[race]
+    if r.name == "Human":
+        return True
+    return class_name in r.level_limits
+
+
+def max_level(race: str, class_name: str):
+    """Maximum attainable level for race/class; None means unlimited. Raises if disallowed."""
+    r = RACES[race]
+    if r.name == "Human":
+        return None
+    if class_name not in r.level_limits:
+        raise ValueError(f"{race} cannot be a {class_name}")
+    return r.level_limits[class_name]
+
+
+def apply_racial_adjustments(race: str, abilities: dict) -> dict:
+    """Return a new ability dict with the race's Table 8 adjustments applied."""
+    out = dict(abilities)
+    for ability, delta in RACES[race].adjustments.items():
+        if ability in out:
+            out[ability] = out[ability] + delta
+    return out
+
+
+def meets_racial_requirements(race: str, abilities: dict) -> list:
+    """Return a list of (ability, min, max, value) tuples that fail the race's
+    Table 7 range; empty list means the character qualifies for the race."""
+    fails = []
+    for ability, (lo, hi) in RACES[race].requirements.items():
+        val = abilities.get(ability)
+        if val is not None and not (lo <= val <= hi):
+            fails.append((ability, lo, hi, val))
+    return fails
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Classes (PHB Table 13 minimums, XP Tables 14/20/23/25, group data)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Group-level rules shared by every class in the group.
+#   hit_die         — HD type (standard rules)
+#   name_level      — level after which HD stop; fixed HP is added per level instead
+#   hp_after        — flat HP added each level past name level
+#   weapon_slots    — (initial, levels_per_extra, nonprof_penalty)
+#   nonweapon_slots — (initial, levels_per_extra)
+@dataclass(frozen=True)
+class ClassGroup:
+    name: str
+    hit_die: int
+    name_level: int
+    hp_after: int
+    weapon_slots: tuple
+    nonweapon_slots: tuple
+
+
+GROUPS = {
+    "Warrior": ClassGroup("Warrior", 10, 9, 3, (4, 3, -2), (3, 3)),
+    "Wizard":  ClassGroup("Wizard", 4, 10, 1, (1, 6, -5), (4, 3)),
+    "Priest":  ClassGroup("Priest", 8, 9, 2, (2, 4, -3), (4, 3)),
+    "Rogue":   ClassGroup("Rogue", 6, 10, 2, (2, 4, -3), (3, 4)),
+}
+
+
+# Experience-point thresholds, index 0 = level 1 (transcribed from the PHB).
+_XP = {
+    "Fighter":  [0, 2000, 4000, 8000, 16000, 32000, 64000, 125000, 250000, 500000,
+                 750000, 1000000, 1250000, 1500000, 1750000, 2000000, 2250000, 2500000, 2750000, 3000000],
+    "Ranger":   [0, 2250, 4500, 9000, 18000, 36000, 75000, 150000, 300000, 600000,
+                 900000, 1200000, 1500000, 1800000, 2100000, 2400000, 2700000, 3000000, 3300000, 3600000],
+    "Mage":     [0, 2500, 5000, 10000, 20000, 40000, 60000, 90000, 135000, 250000,
+                 375000, 750000, 1125000, 1500000, 1875000, 2250000, 2625000, 3000000, 3375000, 3750000],
+    "Cleric":   [0, 1500, 3000, 6000, 13000, 27500, 55000, 110000, 225000, 450000,
+                 675000, 900000, 1125000, 1350000, 1575000, 1800000, 2025000, 2250000, 2475000, 2700000],
+    "Druid":    [0, 2000, 4000, 7500, 12500, 20000, 35000, 60000, 90000, 125000,
+                 200000, 300000, 750000, 1500000, 3000000],  # 14 is the practical cap (hierophant beyond)
+    "Thief":    [0, 1250, 2500, 5000, 10000, 20000, 40000, 70000, 110000, 160000,
+                 220000, 440000, 660000, 880000, 1100000, 1320000, 1540000, 1760000, 1980000, 2200000],
+}
+# Classes that share another class's progression.
+_XP["Paladin"] = _XP["Ranger"]
+_XP["Bard"] = _XP["Thief"]
+_XP["Illusionist"] = _XP["Mage"]
+_XP["Specialist"] = _XP["Mage"]
+
+
+@dataclass(frozen=True)
+class CharClass:
+    name: str
+    group: str
+    minimums: dict          # ability -> minimum score (Table 13)
+    prime_requisites: tuple # 10%-XP-bonus abilities
+    allowed_alignments: tuple = ()  # () = any
+    optional: bool = False
+
+
+CLASSES = {
+    "Fighter":     CharClass("Fighter", "Warrior", {"Strength": 9}, ("Strength",)),
+    "Paladin":     CharClass("Paladin", "Warrior",
+                             {"Strength": 12, "Constitution": 9, "Wisdom": 13, "Charisma": 17},
+                             ("Strength", "Charisma"), ("Lawful Good",), optional=True),
+    "Ranger":      CharClass("Ranger", "Warrior",
+                             {"Strength": 13, "Dexterity": 13, "Constitution": 14, "Wisdom": 14},
+                             ("Strength", "Dexterity", "Wisdom"),
+                             ("Lawful Good", "Neutral Good", "Chaotic Good"), optional=True),
+    "Mage":        CharClass("Mage", "Wizard", {"Intelligence": 9}, ("Intelligence",)),
+    "Illusionist": CharClass("Illusionist", "Wizard", {"Intelligence": 9, "Dexterity": 16},
+                             ("Intelligence",), optional=True),
+    "Cleric":      CharClass("Cleric", "Priest", {"Wisdom": 9}, ("Wisdom",)),
+    "Druid":       CharClass("Druid", "Priest", {"Wisdom": 12, "Charisma": 15},
+                             ("Wisdom", "Charisma"), ("True Neutral",), optional=True),
+    "Thief":       CharClass("Thief", "Rogue", {"Dexterity": 9}, ("Dexterity",)),
+    "Bard":        CharClass("Bard", "Rogue", {"Dexterity": 12, "Intelligence": 13, "Charisma": 15},
+                             ("Dexterity", "Charisma"), optional=True),
+}
+
+
+def meets_class_minimums(class_name: str, abilities: dict) -> list:
+    """(ability, minimum, value) tuples the character fails; empty means qualified."""
+    fails = []
+    for ability, minimum in CLASSES[class_name].minimums.items():
+        val = abilities.get(ability)
+        if val is not None and val < minimum:
+            fails.append((ability, minimum, val))
+    return fails
+
+
+def xp_for_level(class_name: str, level: int) -> int:
+    table = _XP[CLASSES[class_name].name if class_name in CLASSES else class_name]
+    if not 1 <= level <= len(table):
+        raise ValueError(f"{class_name} has no tabulated level {level}")
+    return table[level - 1]
+
+
+def level_for_xp(class_name: str, xp: int) -> int:
+    table = _XP[class_name]
+    level = 1
+    for i, threshold in enumerate(table, 1):
+        if xp >= threshold:
+            level = i
+    return level
+
+
+# ── Hit points ────────────────────────────────────────────────────────────
+
+def hit_die(class_name: str, house_rules: bool = True) -> int:
+    """The HD size for a class, applying the Wizard-d6 / Rogue-d8 house rules."""
+    group = CLASSES[class_name].group
+    if house_rules and group in HOUSE_RULES.hit_die_override:
+        return HOUSE_RULES.hit_die_override[group]
+    return GROUPS[group].hit_die
+
+
+def con_hp_bonus(class_name: str, con: int) -> int:
+    """Per-HD Constitution HP bonus; warriors get the higher 17+/18+ values."""
+    mods = constitution_mods(con)
+    return mods.hp_adj_warrior if CLASSES[class_name].group == "Warrior" else mods.hp_adj
+
+
+def max_hp_at_first_level(class_name: str, con: int, house_rules: bool = True) -> int:
+    """Best-case level-1 HP: max on the hit die + the Con bonus (min 1)."""
+    return max(1, hit_die(class_name, house_rules) + con_hp_bonus(class_name, con))
+
+
+# ── THAC0 / attack bonus ────────────────────────────────────────────────────
+
+def _thac0_raw(group: str, level: int) -> int:
+    """Table-53 THAC0 by group and level (standard rules), verified against the PHB."""
+    if group == "Warrior":
+        step = level - 1
+    elif group == "Priest":
+        step = 2 * ((level - 1) // 3)
+    elif group == "Rogue":
+        step = (level - 1) // 2
+    elif group == "Wizard":
+        step = (level - 1) // 3
+    else:
+        raise ValueError(group)
+    return 20 - step
+
+
+def thac0(class_name: str, level: int, house_rules: bool = True) -> int:
+    """THAC0 for a class/level. House rule: rogues advance at the priest rate (⅔/level)."""
+    group = CLASSES[class_name].group
+    if house_rules and group == "Rogue" and HOUSE_RULES.rogue_attack_as_priest:
+        group = "Priest"
+    return _thac0_raw(group, level)
+
+
+def attack_bonus(class_name: str, level: int, house_rules: bool = True) -> int:
+    """House-rule attack bonus (20 − THAC0). With house_rules=False this is still
+    the derived bonus but off the standard THAC0 progression."""
+    return thac0_to_bonus(thac0(class_name, level, house_rules))
+
+
+# ── Saving throws (PHB Table 60) ────────────────────────────────────────────
+
+SAVE_CATEGORIES = ("Paralyzation/Poison/Death", "Rod/Staff/Wand",
+                   "Petrification/Polymorph", "Breath Weapon", "Spell")
+
+# Per group: (max_level_in_band, [five save numbers]).
+_SAVES = {
+    "Warrior": [(0, [16, 18, 17, 20, 19]), (2, [14, 16, 15, 17, 17]), (4, [13, 15, 14, 16, 16]),
+                (6, [11, 13, 12, 13, 14]), (8, [10, 12, 11, 12, 13]), (10, [8, 10, 9, 9, 11]),
+                (12, [7, 9, 8, 8, 10]), (14, [5, 7, 6, 5, 8]), (16, [4, 6, 5, 4, 7]),
+                (999, [3, 5, 4, 4, 6])],
+    "Priest":  [(3, [10, 14, 13, 16, 15]), (6, [9, 13, 12, 15, 14]), (9, [7, 11, 10, 13, 12]),
+                (12, [6, 10, 9, 12, 11]), (15, [5, 9, 8, 11, 10]), (18, [4, 8, 7, 10, 9]),
+                (999, [2, 6, 5, 8, 7])],
+    "Rogue":   [(4, [13, 14, 12, 16, 15]), (8, [12, 12, 11, 15, 13]), (12, [11, 10, 10, 14, 11]),
+                (16, [10, 8, 9, 13, 9]), (20, [9, 6, 8, 12, 7]), (999, [8, 4, 7, 11, 5])],
+    "Wizard":  [(5, [14, 11, 13, 15, 12]), (10, [13, 9, 11, 13, 10]), (15, [11, 7, 9, 11, 8]),
+                (20, [10, 5, 7, 9, 6]), (999, [8, 3, 5, 7, 4])],
+}
+
+
+def saving_throws(class_name: str, level: int) -> dict:
+    """{category: target number} for a class at a level (roll d20, meet or beat)."""
+    for max_lvl, values in _SAVES[CLASSES[class_name].group]:
+        if level <= max_lvl:
+            return dict(zip(SAVE_CATEGORIES, values))
+    raise ValueError(f"no save band for level {level}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Proficiencies (PHB Table 34 slots + an extensible nonweapon definition table)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def weapon_slots(class_name: str, level: int) -> int:
+    initial, per, _penalty = GROUPS[CLASSES[class_name].group].weapon_slots
+    return initial + (level - 1) // per
+
+
+def nonproficiency_penalty(class_name: str) -> int:
+    return GROUPS[CLASSES[class_name].group].weapon_slots[2]
+
+
+def nonweapon_slots(class_name: str, level: int, int_score: int = None,
+                    house_rules: bool = True) -> int:
+    """Initial + per-level nonweapon proficiency slots, plus (optional rule) the
+    bonus slots granted by Intelligence."""
+    initial, per = GROUPS[CLASSES[class_name].group].nonweapon_slots
+    slots = initial + (level - 1) // per
+    if int_score is not None:
+        slots += intelligence_mods(int_score).languages  # language column = bonus slots
+    return slots
+
+
+@dataclass(frozen=True)
+class Proficiency:
+    """One nonweapon proficiency, loaded as data from a sourcebook.
+
+    The campaign's full skill list lives in nonweapon_book.py (generated from the
+    sheet + rules doc by build_nwp_book.py). Adding or editing a skill is a change
+    to those source files and a regenerate — not new code here."""
+    name: str
+    ability: str            # relevant ability for the check; "" = no check (grants a special)
+    modifier: int = 0       # check modifier applied to the ability score
+    slots: int = 1          # slots required (may be 0)
+    classes: tuple = ()     # class GROUPS that may take it; () = every class
+    prereq: tuple = ()      # names of proficiencies that must be known first
+    source: str = ""        # the sourcebook this skill is published in
+    special: str = ""       # short non-check effect label (for the UI)
+    description: str = ""    # full rules text
+
+
+# The campaign's nonweapon-proficiency sourcebook (name/code) and its skills,
+# loaded from the generated data module.
+PROFICIENCY_BOOK = _book.BOOK_NAME
+PROFICIENCY_BOOK_CODE = _book.BOOK_CODE
+
+NONWEAPON_PROFICIENCIES = {
+    e["name"]: Proficiency(
+        name=e["name"], ability=e["ability"], modifier=e["modifier"],
+        slots=e["slots"], classes=tuple(e["classes"]), prereq=tuple(e["prereq"]),
+        source=PROFICIENCY_BOOK, special=e.get("special", ""),
+        description=e.get("description", ""),
+    )
+    for e in _book.ENTRIES
+}
+
+
+def _as_prof(prof):
+    return NONWEAPON_PROFICIENCIES[prof] if isinstance(prof, str) else prof
+
+
+def proficiency_available(prof, class_name: str) -> bool:
+    """Whether a class may take a proficiency. An empty `classes` means any class;
+    otherwise the class's group (Warrior/Rogue/Wizard/Priest) must be listed."""
+    p = _as_prof(prof)
+    return not p.classes or CLASSES[class_name].group in p.classes
+
+
+def proficiencies_for_class(class_name: str) -> list:
+    """Every nonweapon proficiency the class may take, in book order."""
+    return [p for p in NONWEAPON_PROFICIENCIES.values()
+            if proficiency_available(p, class_name)]
+
+
+def proficiency_prereqs_met(prof, known) -> bool:
+    """Whether every prerequisite proficiency of `prof` is present in `known`
+    (an iterable of proficiency names the character already has)."""
+    return all(req in known for req in _as_prof(prof).prereq)
+
+
+def proficiency_dependents(name: str, known) -> list:
+    """Known proficiencies that list `name` as a prerequisite — the skills that
+    would be stranded if `name` were removed."""
+    return [n for n in known if n in NONWEAPON_PROFICIENCIES
+            and name in NONWEAPON_PROFICIENCIES[n].prereq]
+
+
+def proficiency_check_target(house_rules: bool = True):
+    """Under the house rule the check is d20 + skill, needing 21 (return a target
+    int). Standard 2e rolls d20 and must land at or under the score (returns None,
+    meaning 'roll-under the ability score')."""
+    return HOUSE_RULES.proficiency_check_target if house_rules else None
+
+
+def proficiency_bonus_per_slot(house_rules: bool = True) -> int:
+    """Extra slots spent on one proficiency: +2 each (house) vs. +1 each (standard)."""
+    return HOUSE_RULES.proficiency_bonus_per_slot if house_rules else 1
+
+
+def weapon_slot_cost(weapon: str, house_rules: bool = True) -> int:
+    """Slots to become proficient with a weapon. House rules: crossbows are free,
+    bows cost 2. Everything else costs 1."""
+    if house_rules:
+        return HOUSE_RULES.weapon_slot_cost.get(weapon.lower(), 1)
+    return 1
+
+
+# A representative set of common PHB weapons for the weapon-proficiency picker.
+# Slot cost comes from weapon_slot_cost (so the house-rule crossbow/bow costs
+# apply automatically). More weapons drop in as extra rows.
+WEAPONS = (
+    "Long Sword", "Short Sword", "Broad Sword", "Bastard Sword", "Two-Handed Sword",
+    "Scimitar", "Dagger", "Mace", "Morning Star", "Warhammer", "Club", "Quarterstaff",
+    "Flail", "Battle Axe", "Hand Axe", "Spear", "Halberd", "Trident", "Sling", "Dart",
+    "Short Bow", "Long Bow", "Light Crossbow", "Heavy Crossbow",
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Equipment — starting money, Armor Class, encumbrance
+#  (Item data itself lives in equipment.py; these are the rules that use it.)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Starting money by class group, as (dice, sides, plus) in units of 10 gp — the
+# 2e PHB rolls (Warrior 5d4×10 gp, Wizard (1d4+1)×10, Priest 3d6×10, Rogue 2d6×10).
+# The campaign economy is copper-based (1 gp = 100 cp), so results convert to cp.
+STARTING_MONEY = {
+    "Warrior": (5, 4, 0),
+    "Wizard":  (1, 4, 1),
+    "Priest":  (3, 6, 0),
+    "Rogue":   (2, 6, 0),
+}
+CP_PER_GP = 100
+
+
+def roll_starting_money(class_name: str, rng=None) -> int:
+    """Roll a fresh starting purse for a class, returned in copper pieces (cp)."""
+    import random as _random
+    rng = rng or _random
+    dice, sides, plus = STARTING_MONEY[CLASSES[class_name].group]
+    gp = (sum(rng.randint(1, sides) for _ in range(dice)) + plus) * 10
+    return gp * CP_PER_GP
+
+
+def armor_class(worn_ac_bonus: int, dex_score: int = None, house_rules: bool = True) -> int:
+    """House-rule ascending AC: 10 (base) + worn armor bonuses + the Dexterity
+    defensive adjustment (dexterity_mods().defensive_ac is negative = better, so it
+    adds to an ascending score). Unarmored is 10 + Dex. asc_to_desc() converts it
+    to the descending equivalent for anything still using the old scale."""
+    dex_bonus = -dexterity_mods(dex_score).defensive_ac if dex_score is not None else 0
+    return 10 + worn_ac_bonus + dex_bonus
+
+
+# Encumbrance bands, as a fraction of the Strength weight allowance (PHB Table 47
+# style, simplified): at/under the allowance is unencumbered; beyond it up to the
+# maximum press is encumbered; past that is overloaded.
+def encumbrance_status(weight_lb: float, str_score: int) -> str:
+    mods = strength_mods(str_score)
+    if weight_lb <= mods.weight_allow:
+        return "Unencumbered"
+    if weight_lb <= mods.max_press:
+        return "Encumbered"
+    return "Overloaded"
+
+
+# The purchasable item catalog (generated in equipment.py), indexed for lookup.
+ITEMS = {i["name"]: i for i in _equipment.ITEMS}
+ITEM_CATEGORY_ORDER = _equipment.CATEGORY_ORDER
+
+
+def item(name: str):
+    """The catalog record for an item name, or None."""
+    return ITEMS.get(name)
+
+
+def items_in_category(category: str) -> list:
+    """Every catalog item in a category, in catalog order."""
+    return [i for i in _equipment.ITEMS if i["category"] == category]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  House rules — the computable override layer (campaign chargen rules)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass(frozen=True)
+class HouseRuleSet:
+    # Hit dice: wizards roll d6 (not d4), rogues roll d8 (not d6).
+    hit_die_override: dict
+    # Rogues gain attack bonuses at ⅔/level, same as priests.
+    rogue_attack_as_priest: bool
+    # Each extra proficiency slot adds +2 (not +1).
+    proficiency_bonus_per_slot: int
+    # Proficiency check: d20 + skill, success on 21+.
+    proficiency_check_target: int
+    # Weapon-slot costs that differ from the default of 1.
+    weapon_slot_cost: dict
+    # Rangers are automatically ambidextrous; ambidexterity costs 1 slot otherwise.
+    ranger_ambidextrous: bool
+    ambidexterity_slot_cost: int
+    # Aging: player places the penalties/bonuses; each entry is cumulative-per-level
+    # (physical_penalty, mental_bonus). Index 0 = age level 1.
+    aging_steps: tuple
+    # Perception: a new stat taking the surprise adj (Dex) and illusion immunity (Int).
+    perception_stat: bool
+
+
+HOUSE_RULES = HouseRuleSet(
+    hit_die_override={"Wizard": 6, "Rogue": 8},
+    rogue_attack_as_priest=True,
+    proficiency_bonus_per_slot=2,
+    proficiency_check_target=21,
+    weapon_slot_cost={"crossbow": 0, "light crossbow": 0, "heavy crossbow": 0,
+                      "bow": 2, "long bow": 2, "longbow": 2, "short bow": 2, "shortbow": 2},
+    ranger_ambidextrous=True,
+    ambidexterity_slot_cost=1,
+    aging_steps=((2, 1), (5, 1), (3, 2)),
+    perception_stat=True,
+)
+
+
+def aging_totals(age_level: int) -> tuple:
+    """Cumulative (physical_penalty, mental_bonus) at a given house-rule age level
+    (1–3). The player chooses which specific stats receive them."""
+    if not 1 <= age_level <= len(HOUSE_RULES.aging_steps):
+        raise ValueError("age_level must be 1–3")
+    pen = sum(step[0] for step in HOUSE_RULES.aging_steps[:age_level])
+    bonus = sum(step[1] for step in HOUSE_RULES.aging_steps[:age_level])
+    return pen, bonus
+
+
+def is_ambidextrous(race: str, class_name: str, handedness_roll: int = None,
+                    house_rules: bool = True) -> bool:
+    """Rangers are always ambidextrous; otherwise a d10 handedness roll of 10 grants it."""
+    if house_rules and class_name == "Ranger" and HOUSE_RULES.ranger_ambidextrous:
+        return True
+    return handedness_roll == 10
+
+
+def xp_bonus_qualifies(class_name: str, abilities: dict) -> bool:
+    """A character earns the +10% XP bonus when every prime requisite is 16+."""
+    return all(abilities.get(pr, 0) >= 16 for pr in CLASSES[class_name].prime_requisites)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Character-level convenience
+# ═══════════════════════════════════════════════════════════════════════════
+
+def eligible_classes(abilities: dict, race: str = None) -> list:
+    """Every class the given abilities (and optionally race) qualify for."""
+    out = []
+    for name in CLASSES:
+        if meets_class_minimums(name, abilities):
+            continue
+        if race is not None and not race_allows(race, name):
+            continue
+        out.append(name)
+    return out
+
+
+def eligible_races(abilities: dict) -> list:
+    """Every race whose Table 7 requirements the given abilities satisfy."""
+    return [name for name in RACES if not meets_racial_requirements(name, abilities)]

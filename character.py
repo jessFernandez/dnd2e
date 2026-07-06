@@ -1,0 +1,300 @@
+"""character.py — the in-progress character build (the charactermancer's state).
+
+A `Character` is the mutable object the multi-step builder fills in: ability
+scores, race, class, alignment, and (later steps) proficiencies and details.
+Every *derived* value — race-adjusted abilities, HP, THAC0, saving throws, slot
+budgets, and per-step validity — is computed by delegating to char_rules, so the
+rules live in exactly one place and the builder can't disagree with the rulebook.
+
+Pure and Qt-free: the controller (charactermancer.py) and UI sit on top of this,
+but all the logic is here and unit-tested without a running app.
+
+v1 scope: single-class characters, PHB core. Multi-/dual-class is phase 2 — the
+`char_class` field is intentionally a single value to keep that boundary clear.
+"""
+import random
+from dataclasses import dataclass, field
+
+import char_rules as cr
+
+# The nine alignments (used by the Alignment step; some classes restrict these).
+ALIGNMENTS = (
+    "Lawful Good", "Neutral Good", "Chaotic Good",
+    "Lawful Neutral", "True Neutral", "Chaotic Neutral",
+    "Lawful Evil", "Neutral Evil", "Chaotic Evil",
+)
+
+MIN_SCORE, MAX_SCORE = 3, 18   # rolled ability-score range at character creation
+
+
+# ── Ability-score rolling (4d6 drop lowest) ─────────────────────────────────
+
+def roll_4d6_drop_lowest(rng: random.Random = None) -> int:
+    """One ability score: roll 4d6, discard the lowest die, sum the rest (3–18)."""
+    rng = rng or random
+    dice = sorted(rng.randint(1, 6) for _ in range(4))
+    return sum(dice[1:])
+
+
+def roll_ability_pool(rng: random.Random = None) -> list:
+    """Six freshly rolled scores for the player to arrange across the abilities."""
+    return [roll_4d6_drop_lowest(rng) for _ in range(6)]
+
+
+# ── The character build ──────────────────────────────────────────────────────
+
+@dataclass
+class Character:
+    house_rules: bool = True
+    name: str = ""
+    gender: str = ""
+    # Assigned ability scores {ability: score}; empty until the player fills them.
+    abilities: dict = field(default_factory=dict)
+    # Freshly rolled values not yet assigned (the arrange pool); [] in manual mode.
+    rolled_pool: list = field(default_factory=list)
+    exceptional_str: int = None   # 1–100 percentile for a fighter's 18 Strength
+    race: str = None
+    char_class: str = None
+    alignment: str = None
+    # Details-step fields (populated later in the flow).
+    ambidextrous: bool = False
+    handedness_roll: int = None
+    age_level: int = 0            # house-rule aging: 0 = none, 1–3 (player-placed)
+    # Proficiencies (spent at the Proficiencies step).
+    weapon_profs: list = field(default_factory=list)      # weapon names
+    nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
+    bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
+    # Equipment (Equipment step) and known spells (Spells step).
+    money_cp: int = 0                                     # copper pieces on hand
+    inventory: dict = field(default_factory=dict)        # item name -> quantity
+    worn: list = field(default_factory=list)             # equipped armor item names (⊆ inventory)
+    spells: list = field(default_factory=list)           # chosen spell names
+
+    # ── ability scores ──────────────────────────────────────────────────────
+    def ability_names(self) -> list:
+        """The ability scores this character rolls — the standard six plus
+        Perception when house rules are on."""
+        return list(cr.house_abilities(self.house_rules))
+
+    def roll_pool(self, rng: random.Random = None) -> list:
+        """Roll one fresh score per ability (six, or seven with Perception)."""
+        self.rolled_pool = [roll_4d6_drop_lowest(rng) for _ in self.ability_names()]
+        return self.rolled_pool
+
+    def assign_ability(self, ability: str, score: int):
+        """Set one ability to a score (manual entry or arranging the pool)."""
+        if ability not in self.ability_names():
+            raise ValueError(f"unknown ability {ability!r}")
+        self.abilities[ability] = int(score)
+
+    def clear_abilities(self):
+        self.abilities = {}
+        self.exceptional_str = None
+
+    def has_all_abilities(self) -> bool:
+        return all(a in self.abilities for a in self.ability_names())
+
+    def invalid_abilities(self) -> list:
+        """(ability, score) pairs outside the legal 3–18 creation range."""
+        return [(a, s) for a, s in self.abilities.items()
+                if not (MIN_SCORE <= s <= MAX_SCORE)]
+
+    def abilities_valid(self) -> bool:
+        return self.has_all_abilities() and not self.invalid_abilities()
+
+    def final_abilities(self) -> dict:
+        """Ability scores with the chosen race's adjustments applied (Table 8)."""
+        if self.race:
+            return cr.apply_racial_adjustments(self.race, self.abilities)
+        return dict(self.abilities)
+
+    def rolls_exceptional_strength(self) -> bool:
+        """A fighter (warrior group) with an 18 Strength rolls exceptional Strength —
+        unless the race forbids it (halflings don't)."""
+        if not self.char_class or self.final_abilities().get("Strength") != 18:
+            return False
+        if cr.CLASSES[self.char_class].group != "Warrior":
+            return False
+        return self.race != "Halfling"
+
+    # ── race / class / alignment eligibility (delegates to char_rules) ───────
+    def eligible_races(self) -> list:
+        return cr.eligible_races(self.abilities) if self.has_all_abilities() else []
+
+    def eligible_classes(self) -> list:
+        if not self.has_all_abilities():
+            return []
+        return cr.eligible_classes(self.final_abilities(), race=self.race)
+
+    def eligible_alignments(self) -> list:
+        """Alignments allowed by the chosen class (all nine if unrestricted)."""
+        if not self.char_class:
+            return list(ALIGNMENTS)
+        allowed = cr.CLASSES[self.char_class].allowed_alignments
+        return list(allowed) if allowed else list(ALIGNMENTS)
+
+    # ── derived statistics ──────────────────────────────────────────────────
+    def max_level(self):
+        if self.race and self.char_class:
+            return cr.max_level(self.race, self.char_class)
+        return None
+
+    def max_hp(self, level: int = 1):
+        """Best-case HP at a level-1 build (max hit die + Con bonus)."""
+        if not (self.char_class and "Constitution" in self.final_abilities()):
+            return None
+        return cr.max_hp_at_first_level(
+            self.char_class, self.final_abilities()["Constitution"], self.house_rules)
+
+    def thac0(self, level: int = 1):
+        if not self.char_class:
+            return None
+        return cr.thac0(self.char_class, level, self.house_rules)
+
+    def attack_bonus(self, level: int = 1):
+        if not self.char_class:
+            return None
+        return cr.attack_bonus(self.char_class, level, self.house_rules)
+
+    def saving_throws(self, level: int = 1):
+        if not self.char_class:
+            return None
+        return cr.saving_throws(self.char_class, level)
+
+    def weapon_slots(self, level: int = 1):
+        return cr.weapon_slots(self.char_class, level) if self.char_class else None
+
+    def nonweapon_slots(self, level: int = 1):
+        if not self.char_class:
+            return None
+        int_score = self.final_abilities().get("Intelligence")
+        return cr.nonweapon_slots(self.char_class, level, int_score, self.house_rules)
+
+    def xp_bonus(self) -> bool:
+        """Whether this build earns the +10% prime-requisite XP bonus."""
+        if not self.char_class:
+            return False
+        return cr.xp_bonus_qualifies(self.char_class, self.final_abilities())
+
+    def hit_die(self):
+        return cr.hit_die(self.char_class, self.house_rules) if self.char_class else None
+
+    # ── house-rule Perception + aging ────────────────────────────────────────
+    def perception(self):
+        """The Perception score, or None (not set / house rules off)."""
+        return self.abilities.get(cr.PERCEPTION)
+
+    def perception_mods(self):
+        p = self.perception()
+        return cr.perception_mods(p) if p is not None else None
+
+    def aging_effects(self):
+        """(physical_penalty, mental_bonus) totals for the chosen age level, which
+        the player then places across their scores; None if no aging chosen."""
+        return cr.aging_totals(self.age_level) if self.age_level else None
+
+    # ── proficiency slot budgets ─────────────────────────────────────────────
+    def weapon_slots_total(self) -> int:
+        return cr.weapon_slots(self.char_class, 1) if self.char_class else 0
+
+    def weapon_slots_used(self) -> int:
+        used = sum(cr.weapon_slot_cost(w, self.house_rules) for w in self.weapon_profs)
+        if self.bought_ambidexterity:
+            used += cr.HOUSE_RULES.ambidexterity_slot_cost
+        return used
+
+    def weapon_slots_left(self) -> int:
+        return self.weapon_slots_total() - self.weapon_slots_used()
+
+    def nonweapon_slots_total(self) -> int:
+        if not self.char_class:
+            return 0
+        int_score = self.final_abilities().get("Intelligence")
+        return cr.nonweapon_slots(self.char_class, 1, int_score, self.house_rules)
+
+    def nonweapon_slots_used(self) -> int:
+        return sum(self.nonweapon_profs.values())
+
+    def nonweapon_slots_left(self) -> int:
+        return self.nonweapon_slots_total() - self.nonweapon_slots_used()
+
+    def can_buy_ambidexterity(self) -> bool:
+        """Warriors and rogues may buy ambidexterity for one weapon slot (house
+        rule) — unless they're already ambidextrous."""
+        if not self.house_rules or not self.char_class or self.ambidextrous:
+            return False
+        return cr.CLASSES[self.char_class].group in ("Warrior", "Rogue")
+
+    def proficiency_skill(self, name: str):
+        """The effective skill for a taken nonweapon proficiency's check: relevant
+        ability + the proficiency modifier + house-rule bonuses for extra slots.
+        None for proficiencies with no ability check (they grant a special ability)."""
+        p = cr.NONWEAPON_PROFICIENCIES.get(name)
+        invested = self.nonweapon_profs.get(name)
+        if not p or invested is None or not p.ability:
+            return None
+        score = self.final_abilities().get(p.ability)
+        if score is None:
+            return None
+        extra = max(0, invested - p.slots)
+        return score + p.modifier + extra * cr.proficiency_bonus_per_slot(self.house_rules)
+
+    # ── equipment & spells ───────────────────────────────────────────────────
+    def spellcasting_group(self):
+        """'wizard', 'priest', or None — which spell list this class draws on at
+        1st level. Warriors and rogues gain spells only at higher levels (if ever),
+        so they cast nothing at creation."""
+        if not self.char_class:
+            return None
+        group = cr.CLASSES[self.char_class].group
+        return {"Wizard": "wizard", "Priest": "priest"}.get(group)
+
+    def worn_ac_bonus(self) -> int:
+        return sum((cr.item(n) or {}).get("ac_bonus", 0) for n in self.worn)
+
+    def armor_class(self):
+        """Ascending AC from worn armor + Dexterity (None until Dex is set)."""
+        dex = self.final_abilities().get("Dexterity")
+        return cr.armor_class(self.worn_ac_bonus(), dex, self.house_rules)
+
+    def total_weight(self) -> float:
+        """Total carried weight (lb) across the inventory."""
+        total = 0.0
+        for name, qty in self.inventory.items():
+            it = cr.item(name)
+            if it and it.get("weight"):
+                total += it["weight"] * qty
+        return round(total, 2)
+
+    def encumbrance(self):
+        strv = self.final_abilities().get("Strength")
+        return cr.encumbrance_status(self.total_weight(), strv) if strv is not None else None
+
+    # ── serialization (for save/load and handing off a finished sheet) ───────
+    def to_dict(self) -> dict:
+        return {
+            "house_rules": self.house_rules, "name": self.name, "gender": self.gender,
+            "abilities": dict(self.abilities), "exceptional_str": self.exceptional_str,
+            "race": self.race, "char_class": self.char_class, "alignment": self.alignment,
+            "ambidextrous": self.ambidextrous, "handedness_roll": self.handedness_roll,
+            "age_level": self.age_level,
+            "weapon_profs": list(self.weapon_profs),
+            "nonweapon_profs": dict(self.nonweapon_profs),
+            "bought_ambidexterity": self.bought_ambidexterity,
+            "money_cp": self.money_cp,
+            "inventory": dict(self.inventory),
+            "worn": list(self.worn),
+            "spells": list(self.spells),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Character":
+        d = dict(data)
+        d["abilities"] = dict(d.get("abilities") or {})
+        d["weapon_profs"] = list(d.get("weapon_profs") or [])
+        d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
+        d["inventory"] = dict(d.get("inventory") or {})
+        d["worn"] = list(d.get("worn") or [])
+        d["spells"] = list(d.get("spells") or [])
+        return cls(**{k: v for k, v in d.items()
+                      if k in cls.__dataclass_fields__ and k != "rolled_pool"})

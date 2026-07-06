@@ -22,6 +22,11 @@ import toc
 import toc_html
 from navigation import History
 import askscreen_html
+import charactermancer_html
+import proficiencies_html
+import char_rules as cr
+from charactermancer import Charactermancer, STEPS
+from character import Character
 from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
 from calculator import HouseRuleCalculator
 
@@ -558,6 +563,9 @@ class MainWindow(QMainWindow):
         self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
         self._calc = None                   # floating house-rule calculator window
         self._spells_file = None            # cached temp file for the Spells screen
+        self._prof_file = None              # cached temp file for the Proficiencies book
+        self._all_spells = None             # lazily-loaded spell list for the builder
+        self._cm = None                     # in-progress Charactermancer build (window-level)
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -743,6 +751,11 @@ class MainWindow(QMainWindow):
         self.spells_btn.setToolTip("The 2e Spell Compendium — every wizard & priest spell")
         self.spells_btn.clicked.connect(lambda: self._show_spells())
 
+        self.cm_btn = QPushButton("🧙  Character Builder")
+        self.cm_btn.setCursor(Qt.PointingHandCursor)
+        self.cm_btn.setToolTip("Build a 2e character step by step (house rules included)")
+        self.cm_btn.clicked.connect(lambda: self._show_charactermancer())
+
         self.ask_btn = QPushButton("✦  Jarvis")
         self.ask_btn.setCursor(Qt.PointingHandCursor)
         self.ask_btn.setToolTip("Ask a 2e rules question in plain English (local AI assistant)")
@@ -758,6 +771,7 @@ class MainWindow(QMainWindow):
         nl.addWidget(self.calc_btn)
         nl.addStretch()
         nl.addWidget(self.ask_btn)
+        nl.addWidget(self.cm_btn)
         nl.addWidget(self.spells_btn)
         nl.addWidget(self.chargen_btn)
         nl.addWidget(self.actions_btn)
@@ -1004,6 +1018,29 @@ class MainWindow(QMainWindow):
 
             self.browse_tree.addTopLevelItem(book_item)
 
+        # ── The nonweapon-proficiency sourcebook (generated, not from the DB) ──
+        # A browsable book node whose chapters are A–Z and whose entries jump to
+        # each skill's anchor in the generated proficiencies page.
+        prof_item = QTreeWidgetItem([f"  {cr.PROFICIENCY_BOOK}"])
+        prof_item.setFont(0, QFont("Segoe UI", 12, QFont.Bold))
+        prof_item.setForeground(0, QColor(proficiencies_html.ACCENT))
+        prof_item.setData(0, Qt.UserRole, ("profbook", "proficiencies"))
+        for letter, profs in proficiencies_html.grouped().items():
+            letter_item = QTreeWidgetItem([f"  {letter}"])
+            letter_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+            letter_item.setForeground(0, QColor("#8a90a8"))
+            letter_item.setData(0, Qt.UserRole, ("profnav", "letter-" + letter))
+            for p in profs:
+                entry_item = QTreeWidgetItem([f"   {p.name}"])
+                entry_item.setFont(0, QFont("Segoe UI", 10))
+                entry_item.setForeground(0, QColor("#7a8098"))
+                entry_item.setData(0, Qt.UserRole,
+                                   ("profnav", "prof-" + proficiencies_html.slug(p.name)))
+                letter_item.addChild(entry_item)
+                total_entries += 1
+            prof_item.addChild(letter_item)
+        self.browse_tree.addTopLevelItem(prof_item)
+
         book_count = self.browse_tree.topLevelItemCount()
         self.status.showMessage(
             f"  {book_count} books  ·  {total_entries} entries"
@@ -1017,6 +1054,10 @@ class MainWindow(QMainWindow):
 
         if kind == "book":
             self._show_toc(value)
+        elif kind == "profbook":
+            self._navigate(value)                       # "proficiencies"
+        elif kind == "profnav" and value:
+            self._navigate("proficiencies#" + value)     # scroll to an anchor
         elif kind == "chapter" and value:
             self._load_page(value)
         elif kind == "entry" and value:
@@ -1075,6 +1116,10 @@ class MainWindow(QMainWindow):
         if url == "ask-stop":
             self._ask_stop()
             return
+        # Character-builder actions are applied in place (no history entry).
+        if url.startswith("cm/"):
+            self._cm_action(url[len("cm/"):])
+            return
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
@@ -1102,6 +1147,11 @@ class MainWindow(QMainWindow):
             return self._render_ask()
         if dest == "spells":
             return self._render_spells()
+        if dest == "charactermancer":
+            return self._render_charactermancer()
+        if dest == "proficiencies" or dest.startswith("proficiencies#"):
+            frag = dest.split("#", 1)[1] if "#" in dest else ""
+            return self._render_proficiencies(frag)
         if dest in self._screens:
             return self._render_screen(dest)
         return self._render_page(dest)
@@ -1137,6 +1187,127 @@ class MainWindow(QMainWindow):
         self.status.showMessage("  Spell Compendium  ·  Wizard & Priest, all levels")
         return True
 
+    def _render_proficiencies(self, fragment: str = "") -> bool:
+        """Render the nonweapon-proficiency sourcebook as a browsable page. Written
+        once to a temp file and loaded as a file:// URL so `#prof-<slug>` anchors
+        from the sidebar and the A–Z index scroll natively."""
+        if self._prof_file is None:
+            path = USER_DB_PATH.parent / "proficiencies_screen.html"
+            path.write_text(proficiencies_html.generate(), encoding="utf-8")
+            self._prof_file = path
+        url = QUrl.fromLocalFile(str(self._prof_file))
+        if fragment:
+            url.setFragment(fragment)
+        self.content._view.setUrl(url)
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Nonweapon Proficiencies")
+        self.status.showMessage(f"  {cr.PROFICIENCY_BOOK}  ·  Nonweapon Proficiencies")
+        return True
+
+    def _render_charactermancer(self) -> bool:
+        """Render the interactive character builder's current step. The build is
+        window-level state (self._cm) so leaving and returning keeps your progress."""
+        if self._cm is None:
+            self._cm = Charactermancer()
+        db.ensure_characters_schema(self.user_db)
+        saved = db.all_characters(self.user_db)
+        self._set_spell_catalog()
+        self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Character Builder")
+        self.status.showMessage(f"  Character Builder  ·  {self._cm.title}")
+        return True
+
+    def _set_spell_catalog(self):
+        """Load the level-1 spell list for the build's class onto the controller so
+        the Spells step can render and validate picks. Empty for non-casters."""
+        group = self._cm.character.spellcasting_group()
+        if not group:
+            self._cm.spell_catalog = []
+            return
+        if self._all_spells is None:
+            self._all_spells = db.all_spells(self.db)
+        self._cm.spell_catalog = [s for s in self._all_spells
+                                  if s.get("caster") == group and s.get("level") == 1]
+
+    def _cm_action(self, path: str):
+        """Apply a cm/ link action to the builder and re-render it in place. Save/
+        load/delete touch the user DB and so live here rather than in the pure
+        controller; everything else is delegated to Charactermancer.dispatch."""
+        if self._cm is None:
+            self._cm = Charactermancer()
+        self._set_spell_catalog()          # so addspell validates against the class
+        if path == "restart":
+            self._cm = Charactermancer()
+        elif path == "save":
+            self._cm_save()
+        elif path.startswith("load/"):
+            self._cm_load(path[len("load/"):])
+        elif path.startswith("delete/"):
+            self._cm_delete(path[len("delete/"):])
+        elif path == "roll20export":
+            self._cm_export_roll20()       # copies JSON to clipboard; keep the status note
+            return
+        else:
+            self._cm.dispatch(unquote(path))
+        self._render_charactermancer()
+
+    def _cm_export_roll20(self):
+        """Build the Roll20 import JSON for the current character, enrich its spells
+        from the spell DB, and copy it to the clipboard for pasting into the sheet."""
+        import roll20_export
+        from PyQt5.QtWidgets import QApplication
+        if self._all_spells is None:
+            self._all_spells = db.all_spells(self.db)
+        details = {s["name"]: {"level": s.get("level"), "school": s.get("school"),
+                               "range": s.get("range"), "casting_time": s.get("casting_time"),
+                               "duration": s.get("duration"), "aoe": s.get("aoe"),
+                               "save": s.get("save"), "damage": s.get("damage"),
+                               "materials": s.get("materials"), "components": s.get("components"),
+                               "description": s.get("description")}
+                   for s in self._all_spells}
+        data = roll20_export.character_to_roll20(self._cm.character, details)
+        QApplication.clipboard().setText(json.dumps(data, indent=2))
+        name = self._cm.character.name or "character"
+        self.status.showMessage(
+            f"  Roll20 JSON for {name} copied — paste into the sheet's Settings → Import box")
+
+    def _cm_save(self):
+        c = self._cm.character
+        db.ensure_characters_schema(self.user_db)
+        data = json.dumps(c.to_dict())
+        name = c.name or "Unnamed"
+        if self._cm.saved_id:
+            db.update_character(self.user_db, self._cm.saved_id,
+                                name, c.race, c.char_class, c.alignment, data)
+        else:
+            self._cm.saved_id = db.insert_character(
+                self.user_db, name, c.race, c.char_class, c.alignment, data)
+
+    def _cm_load(self, cid: str):
+        try:
+            cid = int(cid)
+        except ValueError:
+            return
+        raw = db.get_character(self.user_db, cid)
+        if not raw:
+            return
+        cm = Charactermancer(character=Character.from_dict(json.loads(raw)))
+        cm.saved_id = cid
+        cm.index = len(STEPS) - 1        # a saved build opens on its finished sheet
+        self._cm = cm
+
+    def _cm_delete(self, cid: str):
+        try:
+            cid = int(cid)
+        except ValueError:
+            return
+        db.delete_character(self.user_db, cid)
+        if self._cm and self._cm.saved_id == cid:
+            self._cm.saved_id = None
+
     def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])
         html     = self._generate_toc_html(book_code, chapters)
@@ -1152,6 +1323,7 @@ class MainWindow(QMainWindow):
     def _show_dmscreen(self): self._navigate("dmscreen")
     def _show_actions(self):  self._navigate("actions")
     def _show_spells(self):   self._navigate("spells")
+    def _show_charactermancer(self): self._navigate("charactermancer")
     def _show_chargen(self):  self._navigate("chargen")
     def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
@@ -1166,8 +1338,24 @@ class MainWindow(QMainWindow):
 
     def _ask_stop(self):
         w = getattr(self, "_ask_worker", None)
-        if w is not None and w.isRunning():
+        if w is None:
+            return
+        try:
+            running = w.isRunning()
+        except RuntimeError:
+            # The worker finished and Qt's deleteLater already destroyed the
+            # underlying C++ object; our Python reference is stale. Nothing to
+            # stop — just drop the dangling reference.
+            self._ask_worker = None
+            return
+        if running:
             w.cancel()
+
+    def _ask_worker_done(self, *_):
+        """Drop the finished worker so a later _ask_stop can't touch a deleted
+        C++ object (worker.deleteLater runs right after this)."""
+        if self.sender() is getattr(self, "_ask_worker", None):
+            self._ask_worker = None
 
     def _render_ask(self, force_setup: bool = False) -> bool:
         """Render the Jarvis page fresh (Ollama setup help, or an empty ask box)."""
@@ -1212,6 +1400,8 @@ class MainWindow(QMainWindow):
         worker.delta.connect(self._ask_delta)
         worker.finished.connect(self._ask_finished)
         worker.failed.connect(self._ask_failed)
+        worker.finished.connect(self._ask_worker_done)
+        worker.failed.connect(self._ask_worker_done)
         worker.finished.connect(worker.deleteLater)
         worker.failed.connect(worker.deleteLater)
         self._ask_worker = worker

@@ -200,3 +200,53 @@ def toggle_bookmark(conn, page_url: str) -> bool:
         return False
     add_bookmark(conn, page_url)
     return True
+
+
+# ── saved characters (charactermancer) ──────────────────────────────────────
+# Lives in the writable user DB (survives app updates), like bookmarks. The full
+# build is stored as a JSON blob (Character.to_dict); the loose columns are just
+# for listing/searching.
+
+def ensure_characters_schema(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS characters ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, race TEXT, "
+        "char_class TEXT, alignment TEXT, data TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    conn.commit()
+
+
+def insert_character(conn, name, race, char_class, alignment, data_json) -> int:
+    cur = conn.execute(
+        "INSERT INTO characters (name, race, char_class, alignment, data) "
+        "VALUES (?,?,?,?,?)", (name, race, char_class, alignment, data_json))
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_character(conn, char_id, name, race, char_class, alignment, data_json):
+    conn.execute(
+        "UPDATE characters SET name=?, race=?, char_class=?, alignment=?, data=?, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (name, race, char_class, alignment, data_json, char_id))
+    conn.commit()
+
+
+def all_characters(conn) -> list:
+    """Saved-character rows (id, name, race, char_class, alignment), most-recent first."""
+    return conn.execute(
+        "SELECT id, name, race, char_class, alignment FROM characters "
+        "ORDER BY updated_at DESC").fetchall()
+
+
+def get_character(conn, char_id):
+    """The stored JSON blob for one character, or None."""
+    row = conn.execute("SELECT data FROM characters WHERE id=?", (char_id,)).fetchone()
+    return row[0] if row else None
+
+
+def delete_character(conn, char_id):
+    conn.execute("DELETE FROM characters WHERE id=?", (char_id,))
+    conn.commit()

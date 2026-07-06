@@ -18,22 +18,12 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 
 
-# ── Pure conversion helpers (unit-tested in tests/test_calculator.py) ─────────
-
-def thac0_to_bonus(thac0: int) -> int:
-    return 20 - thac0
-
-
-def bonus_to_thac0(bonus: int) -> int:
-    return 20 - bonus
-
-
-def desc_to_asc(desc_ac: int) -> int:
-    return 20 - desc_ac
-
-
-def asc_to_desc(asc_ac: int) -> int:
-    return 20 - asc_ac
+# ── Pure conversion helpers ───────────────────────────────────────────────────
+# The THAC0⇄bonus and descending⇄ascending AC conversions are the campaign's core
+# combat house rule. They live in char_rules (the single source of truth the
+# charactermancer also uses) and are re-exported here so this converter and the
+# character builder can never disagree. (Unit-tested in tests/test_calculator.py.)
+from char_rules import thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc
 
 
 def to_hit_need(attack_bonus: int, target_asc_ac: int) -> int:
