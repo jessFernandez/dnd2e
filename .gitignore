@@ -8,10 +8,9 @@ dist/
 __pycache__/
 *.py[cod]
 
-# Scraper / utility scripts (not needed by end users)
+# Scraper / one-off utility scripts (not needed by end users)
 scraper.py
 fetch_economics.py
-build_economics.py
 cleanup_spells.py
 fix_chapter9.py
 check_chapters.py
