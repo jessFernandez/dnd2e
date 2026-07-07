@@ -8,8 +8,9 @@ import csv, io, re, sqlite3
 from html import escape
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "dnd2e.db"
-CSV_DIR = Path(__file__).parent / "economics_csv"
+ROOT = Path(__file__).resolve().parent.parent   # repo root (this script lives in scripts/)
+DB_PATH = ROOT / "dnd2e.db"
+CSV_DIR = ROOT / "economics_csv"
 
 BOOK_CODE = "ECO"
 BOOK_NAME = "Economics of the Realm"

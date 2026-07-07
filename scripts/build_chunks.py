@@ -8,13 +8,14 @@ Locks:", …) — or, for heading-less prose, each ~180-word sentence window —
 indexed on its own. Retrieval then scores the *passage*, and the matched passage
 becomes the excerpt the model sees (tighter than page-start truncation).
 
-Idempotent: drops and rebuilds chunks_fts. Run:  python build_chunks.py
+Idempotent: drops and rebuilds chunks_fts. Run:  python scripts/build_chunks.py
 """
 import re
 import sqlite3
 import sys
+from pathlib import Path
 
-DB = "dnd2e.db"
+DB = str(Path(__file__).resolve().parent.parent / "dnd2e.db")   # repo root (script lives in scripts/)
 TARGET_WORDS = 180      # flush a passage once it reaches ~this size
 MIN_WORDS    = 60       # merge anything smaller into a neighbour (avoid fragments)
 MAX_WORDS    = 300      # hard cap before a section is sentence-split

@@ -10,7 +10,7 @@ source files exported from Google Drive:
 This script joins them by proficiency name and writes `nonweapon_book.py`, the
 data module char_rules.py loads. Re-run it whenever either source file changes:
 
-    python build_nwp_book.py
+    python scripts/build_nwp_book.py
 
 Like build_spells.py / build_economics.py, it is a one-shot generator, not part
 of the running app.
@@ -19,10 +19,10 @@ import csv
 import re
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-CSV_PATH = HERE / "nonweapon_proficiencies.csv"
-DOC_PATH = HERE / "nonweapon_proficiencies.txt"
-OUT_PATH = HERE / "nonweapon_book.py"
+ROOT = Path(__file__).resolve().parent.parent   # repo root (this script lives in scripts/)
+CSV_PATH = ROOT / "nonweapon_proficiencies.csv"
+DOC_PATH = ROOT / "nonweapon_proficiencies.txt"
+OUT_PATH = ROOT / "nonweapon_book.py"
 
 # The in-world sourcebook these proficiencies are published in. Rename here to
 # re-brand the book everywhere (it is stored as each proficiency's `source`).
@@ -169,7 +169,7 @@ def emit(rows):
         "",
         f"The campaign's nonweapon-proficiency sourcebook, {BOOK_NAME!r}: the mechanical",
         "table joined to its prose rules text. char_rules.py loads ENTRIES into its",
-        "Proficiency model. Regenerate with `python build_nwp_book.py`.",
+        "Proficiency model. Regenerate with `python scripts/build_nwp_book.py`.",
         '"""',
         "",
         f"BOOK_NAME = {BOOK_NAME!r}",

@@ -2,7 +2,7 @@
 
 The campaign's purchasable goods (Economics of the Realm), joined into one
 structured catalog for the character builder. Prices are copper pieces (cp).
-Regenerate with `python build_items.py`.
+Regenerate with `python scripts/build_items.py`.
 """
 CP_PER_GP = 100
 CP_PER_SP = 10

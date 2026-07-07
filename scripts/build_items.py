@@ -8,7 +8,7 @@ columns the derived sheet needs: armor AC bonus, and weapon damage/speed/etc.
 Prices are in copper pieces (cp); 1 gp = 100 cp, 1 sp = 10 cp. Re-run whenever a
 source CSV changes:
 
-    python build_items.py
+    python scripts/build_items.py
 
 Like build_nwp_book.py / build_spells.py, this is a one-shot generator, not part
 of the running app.
@@ -17,9 +17,9 @@ import csv
 import re
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-CSV_DIR = HERE / "economics_csv"
-OUT = HERE / "equipment.py"
+ROOT = Path(__file__).resolve().parent.parent   # repo root (this script lives in scripts/)
+CSV_DIR = ROOT / "economics_csv"
+OUT = ROOT / "equipment.py"
 
 CP_PER_GP = 100
 CP_PER_SP = 10
@@ -123,7 +123,7 @@ def emit(items):
         "",
         "The campaign's purchasable goods (Economics of the Realm), joined into one",
         "structured catalog for the character builder. Prices are copper pieces (cp).",
-        "Regenerate with `python build_items.py`.",
+        "Regenerate with `python scripts/build_items.py`.",
         '"""',
         f"CP_PER_GP = {CP_PER_GP}",
         f"CP_PER_SP = {CP_PER_SP}",

@@ -6,8 +6,8 @@ renders. Each card carries caster (wizard/priest), level, school, components,
 the stat block (range / casting time / save / area / duration / damage /
 materials), the description, residue, and source.
 
-Run:  python build_spells.py               # fetch live and rebuild the table
-      python build_spells.py --file x.html # parse a saved copy instead
+Run:  python scripts/build_spells.py               # fetch live and rebuild the table
+      python scripts/build_spells.py --file x.html # parse a saved copy instead
 """
 import argparse
 import re
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 URL = "https://regalgoblins.com/spells.php"
-DB = Path(__file__).parent / "dnd2e.db"
+DB = Path(__file__).resolve().parent.parent / "dnd2e.db"   # repo root (script lives in scripts/)
 HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
