@@ -24,9 +24,10 @@ import askscreen_html
 import charactermancer_html
 import proficiencies_html
 import char_rules as cr
-from charactermancer import Charactermancer, STEPS
-from character import Character
-from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
+from charactermancer import Charactermancer
+from character_library import CharacterLibrary
+from rules_agent import AskWorker, ollama_status
+from ask_controller import Conversation, resolve_model, page_state
 from calculator import HouseRuleCalculator
 
 from PyQt5.QtWidgets import (
@@ -384,6 +385,7 @@ QWidget#findBar QPushButton:pressed { background: #c9a84c; color: #1a1c26; }
 
 class SearchWorker(QThread):
     results_ready = pyqtSignal(list)
+    failed        = pyqtSignal(str)   # a real error, distinct from a genuine zero-match
 
     def __init__(self, db_path: str, query: str):
         super().__init__()
@@ -396,8 +398,8 @@ class SearchWorker(QThread):
             rows = db.search_pages(conn, self.query)
             conn.close()
             self.results_ready.emit(rows)
-        except Exception:
-            self.results_ready.emit([])
+        except Exception as e:
+            self.failed.emit(str(e))
 
 
 # ── dnd:// link interception ──────────────────────────────────────────────────
@@ -585,12 +587,13 @@ class MainWindow(QMainWindow):
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
         self._zoom: float = float(self._settings.value("zoom", 1.0))
         self._ask_worker = None
-        self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
+        self._ask = Conversation()          # current Jarvis conversation + in-flight context
         self._calc = None                   # floating house-rule calculator window
         self._spells_file = None            # cached temp file for the Spells screen
         self._prof_file = None              # cached temp file for the Proficiencies book
         self._all_spells = None             # lazily-loaded spell list for the builder
         self._cm = None                     # in-progress Charactermancer build (window-level)
+        self._char_library = CharacterLibrary(self.user_db)   # save/load/delete for builds
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -1284,8 +1287,7 @@ class MainWindow(QMainWindow):
         window-level state (self._cm) so leaving and returning keeps your progress."""
         if self._cm is None:
             self._cm = Charactermancer()
-        db.ensure_characters_schema(self.user_db)
-        saved = db.all_characters(self.user_db)
+        saved = self._char_library.all()
         self._set_spell_catalog()
         self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
         self.current_page_url = None
@@ -1329,57 +1331,28 @@ class MainWindow(QMainWindow):
         self._render_charactermancer()
 
     def _cm_export_roll20(self):
-        """Build the Roll20 import JSON for the current character, enrich its spells
-        from the spell DB, and copy it to the clipboard for pasting into the sheet."""
-        import roll20_export
+        """Build the Roll20 import JSON for the current character (enriching its
+        spells from the spell DB) and copy it to the clipboard for pasting."""
         from PyQt5.QtWidgets import QApplication
         if self._all_spells is None:
             self._all_spells = db.all_spells(self.db)
-        details = {s["name"]: {"level": s.get("level"), "school": s.get("school"),
-                               "range": s.get("range"), "casting_time": s.get("casting_time"),
-                               "duration": s.get("duration"), "aoe": s.get("aoe"),
-                               "save": s.get("save"), "damage": s.get("damage"),
-                               "materials": s.get("materials"), "components": s.get("components"),
-                               "description": s.get("description")}
-                   for s in self._all_spells}
-        data = roll20_export.character_to_roll20(self._cm.character, details)
+        data = self._char_library.roll20_payload(self._cm, self._all_spells)
         QApplication.clipboard().setText(json.dumps(data, indent=2))
         name = self._cm.character.name or "character"
         self.status.showMessage(
             f"  Roll20 JSON for {name} copied — paste into the sheet's Settings → Import box")
 
     def _cm_save(self):
-        c = self._cm.character
-        db.ensure_characters_schema(self.user_db)
-        data = json.dumps(c.to_dict())
-        name = c.name or "Unnamed"
-        if self._cm.saved_id:
-            db.update_character(self.user_db, self._cm.saved_id,
-                                name, c.race, c.char_class, c.alignment, data)
-        else:
-            self._cm.saved_id = db.insert_character(
-                self.user_db, name, c.race, c.char_class, c.alignment, data)
+        self._cm.saved_id = self._char_library.save(self._cm)
 
     def _cm_load(self, cid: str):
-        try:
-            cid = int(cid)
-        except ValueError:
-            return
-        raw = db.get_character(self.user_db, cid)
-        if not raw:
-            return
-        cm = Charactermancer(character=Character.from_dict(json.loads(raw)))
-        cm.saved_id = cid
-        cm.index = len(STEPS) - 1        # a saved build opens on its finished sheet
-        self._cm = cm
+        cm = self._char_library.load(cid)
+        if cm is not None:
+            self._cm = cm
 
     def _cm_delete(self, cid: str):
-        try:
-            cid = int(cid)
-        except ValueError:
-            return
-        db.delete_character(self.user_db, cid)
-        if self._cm and self._cm.saved_id == cid:
+        deleted = self._char_library.delete(cid)
+        if deleted is not None and self._cm and self._cm.saved_id == deleted:
             self._cm.saved_id = None
 
     def _render_toc(self, book_code: str) -> bool:
@@ -1404,10 +1377,7 @@ class MainWindow(QMainWindow):
     # ── Ask the Rules (local Ollama model) ──────────────────────────────────
 
     def _ask_model(self, models=None) -> str:
-        chosen = (self._settings.value("askModel", "") or "").strip()
-        if models and chosen not in models:
-            chosen = pick_default_model(models)
-        return chosen or DEFAULT_MODEL
+        return resolve_model(self._settings.value("askModel", ""), models)
 
     def _ask_stop(self):
         w = getattr(self, "_ask_worker", None)
@@ -1433,10 +1403,10 @@ class MainWindow(QMainWindow):
     def _render_ask(self, force_setup: bool = False) -> bool:
         """Render the Jarvis page fresh (Ollama setup help, or an empty ask box)."""
         self._ask_stop()                    # stop any in-flight generation
-        self._ask_thread = []               # a fresh visit starts a new conversation
+        self._ask.reset()                   # a fresh visit starts a new conversation
         ok, models = ollama_status()
         model = self._ask_model(models)
-        state = "ready" if (ok and models) else "setup"
+        state = page_state(ok, models)
         self.content._view.setHtml(
             askscreen_html.generate(state, model=model, models=models, ollama_ok=ok)
         )
@@ -1454,15 +1424,10 @@ class MainWindow(QMainWindow):
             self._render_ask()          # fall back to the setup instructions
             return
 
-        thread = getattr(self, "_ask_thread", None)
-        if thread is None:
-            thread = self._ask_thread = []
+        thread = self._ask.pairs
         model = self._ask_model(models)
         view  = self.content._view      # answer renders onto the tab that asked
-        self._ask_view = view
-        self._ask_question_text = question
-        self._ask_model_id = model
-        self._ask_models = models
+        self._ask.begin(question, model, models, view)
         view.setHtml(askscreen_html.generate(
             "loading", model=model, models=models, question=question, thread=thread))
         self._set_tab_title("Jarvis")
@@ -1481,7 +1446,7 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _ask_status(self, msg: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         js = ("var s=document.getElementById('ask-status');"
@@ -1490,7 +1455,7 @@ class MainWindow(QMainWindow):
         view.page().runJavaScript(js)
 
     def _ask_delta(self, chunk: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         js = ("var s=document.getElementById('ask-stream');"
@@ -1500,25 +1465,25 @@ class MainWindow(QMainWindow):
         view.page().runJavaScript(js)
 
     def _ask_finished(self, answer_md: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
-        self._ask_thread.append((getattr(self, "_ask_question_text", ""), answer_md))
+        self._ask.record_answer(answer_md)
         view.setHtml(askscreen_html.generate(
-            "answer", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
-            models=getattr(self, "_ask_models", None), thread=self._ask_thread,
+            "answer", model=self._ask.model,
+            models=self._ask.models, thread=self._ask.pairs,
         ))
         self.status.showMessage("  Jarvis  ·  answer ready")
 
     def _ask_failed(self, error: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         view.setHtml(askscreen_html.generate(
-            "error", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
-            models=getattr(self, "_ask_models", None),
-            question=getattr(self, "_ask_question_text", ""),
-            error=error, thread=getattr(self, "_ask_thread", []),
+            "error", model=self._ask.model,
+            models=self._ask.models,
+            question=self._ask.question,
+            error=error, thread=self._ask.pairs,
         ))
         self.status.showMessage("  Jarvis  ·  error")
 
@@ -1678,6 +1643,7 @@ class MainWindow(QMainWindow):
 
         self._search_worker = SearchWorker(str(DB_PATH), query)
         self._search_worker.results_ready.connect(self._show_results)
+        self._search_worker.failed.connect(self._show_search_error)
         self._search_worker.start()
 
     def _show_results(self, rows):
@@ -1705,6 +1671,15 @@ class MainWindow(QMainWindow):
 
         self.tabs.setTabText(1, f"Results ({len(rows)})")
         self.status.showMessage(f"  Found {len(rows)} results")
+
+    def _show_search_error(self, message: str):
+        """A search that actually failed (bad DB, FTS syntax) — surfaced distinctly
+        from a genuine zero-match so the user isn't told 'no results' for an error."""
+        self.results_list.clear()
+        item = QListWidgetItem("  Search failed — try a simpler query.")
+        item.setForeground(QColor("#c07070"))
+        self.results_list.addItem(item)
+        self.status.showMessage(f"  Search failed: {message}")
 
     def _on_result_click(self, item: QListWidgetItem):
         url = item.data(Qt.UserRole)

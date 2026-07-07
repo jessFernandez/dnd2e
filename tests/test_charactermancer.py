@@ -389,12 +389,16 @@ def test_html_review_survives_incomplete_character():
 # ── save / load / delete wiring (temp in-memory user DB) ─────────────────────
 
 import db
+from character_library import CharacterLibrary
 
 
 def _win_with_db(cm, user_db=None):
     """A stand-in with the real MainWindow save/load/delete helpers bound to it,
-    so _cm_action exercises the actual DB wiring without a live window."""
-    win = SimpleNamespace(_cm=cm, user_db=user_db or db.connect(":memory:"),
+    so _cm_action exercises the actual DB wiring (via CharacterLibrary) without a
+    live window."""
+    user_db = user_db or db.connect(":memory:")
+    win = SimpleNamespace(_cm=cm, user_db=user_db,
+                          _char_library=CharacterLibrary(user_db),
                           _render_charactermancer=lambda: None,
                           _set_spell_catalog=lambda: None)
     win._cm_save = lambda: app.MainWindow._cm_save(win)
