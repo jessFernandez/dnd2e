@@ -356,7 +356,8 @@ def test_html_details_form_fields():
     cm.index = STEPS.index("details")
     html = cmh.generate(cm)
     assert "cmText('name'" in html and "cmText('gender'" in html
-    assert "dnd:///cm/handedness" in html and "Roll d10" in html
+    # Handedness moved to the Proficiencies step (it gates ambidexterity).
+    assert "dnd:///cm/handedness" not in html
 
 
 def test_html_review_renders_sheet_and_save():
@@ -633,6 +634,8 @@ def test_html_proficiencies_step_renders_with_house_rules():
     assert "crossbows are free" in html and "adds +2" in html
     assert "dnd:///cm/addweapon/Long Bow" in html
     assert "dnd:///cm/addprof/Swimming" in html
+    # Handedness roll now lives here (it affects which proficiencies you take).
+    assert "dnd:///cm/handedness" in html and "Roll d10" in html
 
 
 def test_html_review_lists_chosen_proficiencies():
@@ -697,3 +700,27 @@ def test_html_equipment_and_spells_steps_render():
     cm2.index = STEPS.index("spells")
     cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "description": "x"}]
     assert "dnd:///cm/addspell/Bless" in cmh.generate(cm2)
+
+
+def test_spell_pick_respects_level1_limit():
+    cm = _cleric_at_profs()                                # Wis 14 -> 3 spells
+    cm.index = STEPS.index("spells")
+    names = ["Bless", "Cure Light Wounds", "Sanctuary", "Command"]
+    cm.spell_catalog = [{"name": n, "school": "Combat"} for n in names]
+    for n in names:
+        cm.dispatch("addspell/" + n)
+    assert cm.character.spells == names[:3]                # capped at the 3-spell limit
+    cm.dispatch("rmspell/Bless")                           # free up a slot
+    cm.dispatch("addspell/Command")
+    assert "Command" in cm.character.spells and len(cm.character.spells) == 3
+
+
+def test_html_spells_shows_limit_and_collapsible_info():
+    cm = _cleric_at_profs()
+    cm.index = STEPS.index("spells")
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat",
+                         "description": "The caster raises morale for nearby allies."}]
+    cm.dispatch("addspell/Bless")
+    h = cmh.generate(cm)
+    assert "left" in h and "memorized" in h                # spell budget bar
+    assert "What it does" in h and "raises morale for nearby allies" in h   # collapsible

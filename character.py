@@ -249,6 +249,42 @@ class Character:
         group = cr.CLASSES[self.char_class].group
         return {"Wizard": "wizard", "Priest": "priest"}.get(group)
 
+    def spell_limit(self):
+        """How many spells may be chosen at 1st level. Wizards are capped by
+        Intelligence (max spells known per level; None means 'All', Int 19+);
+        priests by their 1st-level spell slots plus the Wisdom bonus. Returns None
+        when there's no cap (unlimited, or a non-caster class)."""
+        group = self.spellcasting_group()
+        if group == "wizard":
+            intel = self.final_abilities().get("Intelligence")
+            if intel is None:
+                return 0
+            cap = cr.intelligence_mods(intel).max_spells_per_level
+            return None if cap >= 999 else cap
+        if group == "priest":
+            wis = self.final_abilities().get("Wisdom")
+            if wis is None:
+                return 0
+            return cr.priest_spell_slots(1, wis).get(1, 0)
+        return None
+
+    def spells_left(self):
+        """Remaining spell picks, or None when uncapped (unlimited / non-caster)."""
+        limit = self.spell_limit()
+        if limit is None:
+            return None
+        return max(0, limit - len(self.spells))
+
+    def can_add_spell(self) -> bool:
+        """Whether another spell may be chosen (False once the limit is reached)."""
+        left = self.spells_left()
+        return left is None or left > 0
+
+    def movement(self) -> int:
+        """Base movement rate (PHB). Demihumans (dwarf/gnome/halfling) are 6, the
+        rest 12; defaults to 12 before a race is chosen."""
+        return cr.RACES[self.race].movement if self.race in cr.RACES else 12
+
     def worn_ac_bonus(self) -> int:
         return sum((cr.item(n) or {}).get("ac_bonus", 0) for n in self.worn)
 

@@ -55,6 +55,13 @@ def test_wisdom_priest_bonus_spells_are_cumulative():
     assert cr.wisdom_mods(3).magic_defense == -3
 
 
+def test_priest_spell_slots_level1_includes_only_castable_bonus():
+    assert cr.priest_spell_slots(1, 10) == {1: 1}      # base only, no bonus below Wis 13
+    assert cr.priest_spell_slots(1, 14) == {1: 3}      # 1 base + 2 bonus (Wis 13,14)
+    # a level-1 priest can't cast 2nd+ level spells, so those bonus spells don't apply
+    assert cr.priest_spell_slots(1, 18) == {1: 3}
+
+
 def test_charisma_henchmen_and_reaction():
     assert cr.charisma_mods(18).max_henchmen == 15
     assert cr.charisma_mods(18).loyalty_base == 8
@@ -103,6 +110,14 @@ def test_racial_requirements_pass_and_fail():
     low_con = dict(ok, Constitution=9)                 # dwarf needs Con ≥ 11
     fails = cr.meets_racial_requirements("Dwarf", low_con)
     assert fails == [("Constitution", 11, 18, 9)]
+
+
+def test_race_base_movement():
+    # PHB: humans/elves/half-elves move 12; dwarves/gnomes/halflings move 6.
+    assert cr.RACES["Human"].movement == 12 and cr.RACES["Elf"].movement == 12
+    assert cr.RACES["Half-Elf"].movement == 12
+    assert cr.RACES["Dwarf"].movement == 6 and cr.RACES["Gnome"].movement == 6
+    assert cr.RACES["Halfling"].movement == 6
 
 
 def test_race_class_permissions_and_level_limits():

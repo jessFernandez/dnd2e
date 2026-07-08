@@ -244,6 +244,27 @@ def priest_bonus_spells(wis) -> dict:
     return out
 
 
+# Priest spell slots by class level (PHB Table 24), per spell level. Only class
+# level 1 is tabulated today — the builder makes level-1 characters. The rest are
+# left for the leveling work (see docs/leveling-plan.md), which will extend this
+# the same way it extends the wizard progression.
+_PRIEST_SPELL_SLOTS = {
+    1: {1: 1},
+}
+
+
+def priest_spell_slots(level: int, wis) -> dict:
+    """Priest spells memorizable at a class level, per spell level, INCLUDING the
+    Wisdom bonus spells (Table 5). The base table decides which spell levels are
+    castable; the Wisdom bonus only augments those (a low-level priest gets no
+    bonus for spell levels too high to cast). E.g. level 1, Wis 16 -> {1: 3}."""
+    slots = dict(_PRIEST_SPELL_SLOTS.get(level, {}))
+    bonus = priest_bonus_spells(wis)
+    for spell_level in list(slots):
+        slots[spell_level] += bonus.get(spell_level, 0)
+    return slots
+
+
 @dataclass(frozen=True)
 class CharismaMods:
     max_henchmen: int
@@ -325,6 +346,7 @@ class Race:
     adjustments: dict    # ability -> +/- delta
     level_limits: dict   # class name -> max level (None = unlimited)
     infravision: int = 0 # feet
+    movement: int = 12   # base movement rate (PHB); demihumans are 6
     notes: tuple = ()
 
 
@@ -341,7 +363,7 @@ RACES = {
                       "Intelligence": (3, 18), "Wisdom": (3, 18), "Charisma": (3, 17)},
         adjustments={"Constitution": 1, "Charisma": -1},
         level_limits={"Cleric": 10, "Fighter": 15, "Thief": 12},
-        infravision=60,
+        infravision=60, movement=6,
         notes=("+1 save/4 Con vs. magic & poison.", "Combat & reaction bonuses vs. giant-class.",
                "+1 to hit orcs, half-orcs, goblins, hobgoblins."),
     ),
@@ -361,7 +383,7 @@ RACES = {
                       "Intelligence": (6, 18), "Wisdom": (3, 18), "Charisma": (3, 18)},
         adjustments={"Intelligence": 1, "Wisdom": -1},
         level_limits={"Cleric": 9, "Fighter": 11, "Illusionist": 15, "Thief": 13},
-        infravision=60,
+        infravision=60, movement=6,
         notes=("+1 save/3.5 Con vs. magic.", "Combat & reaction bonuses vs. kobolds/goblins.",
                "Detect certain stonework/depth."),
     ),
@@ -381,7 +403,7 @@ RACES = {
                       "Intelligence": (6, 18), "Wisdom": (3, 17), "Charisma": (3, 18)},
         adjustments={"Dexterity": 1, "Strength": -1},
         level_limits={"Cleric": 8, "Fighter": 9, "Thief": 15},
-        infravision=30,
+        infravision=30, movement=6,
         notes=("+1 save/3.5 Con vs. magic & poison.", "+1 to hit with slings and thrown weapons.",
                "Fighters do not roll for exceptional Strength."),
     ),

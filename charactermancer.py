@@ -285,7 +285,9 @@ class Charactermancer:
         return {s["name"] for s in self.spell_catalog}
 
     def add_spell(self, name: str):
-        if name in self._catalog_names() and name not in self.character.spells:
+        # Respect the level-1 spell limit (wizard: Int cap; priest: slots + Wis bonus).
+        if (name in self._catalog_names() and name not in self.character.spells
+                and self.character.can_add_spell()):
             self.character.spells.append(name)
 
     def remove_spell(self, name: str):

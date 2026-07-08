@@ -49,9 +49,11 @@ level 1 and must be threaded:
    because 2e HP is rolled per level.
 2. **Spellcaster spell-slot tables** — the biggest transcription gap:
    - Wizard **Table 21** (spells of each level by class level 1–20) — absent
-   - Priest **Table 24** (base priest spells by class level) — absent;
-     `priest_bonus_spells(wis)` only adds the Wisdom bonus *on top of* this
-     missing base
+   - Priest **Table 24** (base priest spells by class level) — **partially added**:
+     `char_rules.priest_spell_slots(level, wis)` + `_PRIEST_SPELL_SLOTS` now exist
+     but only **class level 1** is tabulated (added for the builder's level-1 spell
+     limit). Fill in levels 2–20 here. It already combines the base with
+     `priest_bonus_spells(wis)`, capping the bonus to castable spell levels.
    - Wizard highest castable level is currently gated only by Intelligence
      (`max_spell_level`), not by class level
    - The builder filters spells to `level == 1` today (`_set_spell_catalog`)

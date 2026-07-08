@@ -518,6 +518,13 @@ class ContentView(QWidget):
         "line-height:1.66!important;}"
         "p,li,td{line-height:1.66!important;}"
         "p{margin:0 0 12px!important;}"
+        # Float a table's header row so column labels stay visible while scrolling
+        # long price/stat tables (e.g. Economics → Weapons). border-collapse (above)
+        # drops sticky cell borders in this Chromium, so draw the divider with an
+        # inset box-shadow and paint the background so rows don't show through.
+        "thead th{position:sticky!important;top:0!important;"
+        "background-color:#2a2d36!important;"
+        "box-shadow:inset 0 -1px 0 #3a3e50!important;z-index:2!important;}"
     )
 
     _TOC_LINK_RE = re.compile(
