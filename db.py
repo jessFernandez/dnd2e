@@ -78,6 +78,21 @@ def toc_entries(conn, book_code: str):
     ).fetchall()
 
 
+def toc_tree(conn, book_code: str):
+    """Flat rows (id, parent_id, position, name, page_url) of the site's real nested
+    TOC tree for a book, for toc.build_tree to reconstruct. Folders have a NULL
+    page_url. Returns [] if the toc_tree table is absent (older DB) so the browse
+    sidebar can fall back to the flat toc_entries layout."""
+    try:
+        return conn.execute(
+            "SELECT id, parent_id, position, name, page_url FROM toc_tree "
+            "WHERE book_code = ? ORDER BY parent_id, position",
+            (book_code,),
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+
+
 def chapter_markers(conn, book_code: str):
     """(subtopic, page_url) rows that open a chapter/part/book/appendix."""
     return conn.execute(

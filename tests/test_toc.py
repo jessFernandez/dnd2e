@@ -58,3 +58,28 @@ def test_build_chapters_accepts_row_like_tuples():
     entries = [("b/1", "Foo-- Chapter 1 (X)"), ("b/2", "Bar (X)")]
     out = toc.build_chapters(iter(entries), iter([("Foo-- Chapter 1 (X)", "b/1")]))
     assert out[0]["entries"] == [("b/1", "Foo-- Chapter 1 (X)"), ("b/2", "Bar (X)")]
+
+
+# ── build_tree: the site's real nested TOC (from db.toc_tree) ─────────────────
+
+def test_build_tree_reconstructs_nesting_and_order():
+    # (id, parent_id, position, name, page_url)
+    rows = [
+        (0, None, 0, "Chapter 1", None),          # root folder
+        (1, 0, 1, "Warrior", "b/w.htm"),          # position 1
+        (2, 0, 0, "Overview", "b/o.htm"),         # position 0 -> comes first
+        (3, 1, 0, "Warrior Table", "b/wt.htm"),   # grandchild
+        (4, None, 1, "Chapter 2", None),          # second root
+    ]
+    tree = toc.build_tree(rows)
+    assert [n["name"] for n in tree] == ["Chapter 1", "Chapter 2"]   # roots ordered by position
+    ch1 = tree[0]
+    assert ch1["page_url"] is None                                   # folder
+    assert [n["name"] for n in ch1["children"]] == ["Overview", "Warrior"]  # sorted by position
+    warrior = ch1["children"][1]
+    assert warrior["page_url"] == "b/w.htm"
+    assert [n["name"] for n in warrior["children"]] == ["Warrior Table"]     # arbitrary depth
+
+
+def test_build_tree_empty_falls_through():
+    assert toc.build_tree([]) == []

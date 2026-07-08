@@ -3563,7 +3563,14 @@ on("clicked:importall", function() {
             hp_max: num(data.hp_max, 0),
             attackbase: num(data.attack_base, 0),
             acbase: num(data.armor_base, 10),
-            acarmor: num(data.armor_bonus, 0),
+            // AC from armor is NOT set to a real value here — it's computed. We only
+            // zero the three armor-derived fields so a re-import can't leave a stale
+            // value; importing the armor[] rows (below) fires change:repeating_armor,
+            // which sums the equipped pieces into acarmor/acmagic/acequipmentdex and
+            // recomputes actotal. Setting acarmor directly fought that worker.
+            acarmor: 0,
+            acmagic: 0,
+            acequipmentdex: 0,
             speed: num(data.move, 12),
             saveppd: num(data.save_ppd, 20),
             saversw: num(data.save_rsw, 20),

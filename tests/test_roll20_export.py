@@ -25,7 +25,9 @@ def test_export_core_mapping():
     c = _cleric()
     d = rx.character_to_roll20(c)
     assert d["willpower"] == 13                       # Wisdom exported as willpower
-    assert d["armor_base"] == 10 and d["armor_bonus"] == c.worn_ac_bonus()
+    # AC comes only from the Armor section (below); no direct armor_bonus scalar.
+    assert d["armor_base"] == 10 and "armor_bonus" not in d
+    assert d["move"] == 12                             # Human base movement
     assert d["attack_base"] == c.attack_bonus()
     assert (d["gp"], d["sp"], d["cp"]) == (34, 5, 6)  # 3456 cp split
     assert d["save_ppd"] == c.saving_throws()["Paralyzation/Poison/Death"]
@@ -61,6 +63,15 @@ def test_export_armor_and_spell_details():
     assert sp["description"].startswith("Bless")
     assert sp["save"] == "None" and sp["materials"] == "holy water"
     assert sp["verbal"] == 1 and sp["somatic"] == 1 and sp["material"] == 1
+
+
+def test_movement_by_race():
+    c = _cleric()
+    assert rx.character_to_roll20(c)["move"] == 12    # Human
+    c.race = "Dwarf"
+    assert rx.character_to_roll20(c)["move"] == 6      # demihuman
+    c.race = "Halfling"
+    assert rx.character_to_roll20(c)["move"] == 6
 
 
 def test_money_split_and_damage_norm():

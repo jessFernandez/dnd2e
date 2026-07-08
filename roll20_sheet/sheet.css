@@ -1608,3 +1608,21 @@ input.sheet-settingPerceptionGlobal[value="0"] ~ div.sheet-basic tr.sheet-percep
 .sheet-dependent[value="0"] {
     /* background: #afa; */
 }
+
+
+/* =============================================================================
+   Fill the sheet background (light theme kept, no re-theming).
+
+   The white was set only on the fixed 800px-wide .sheet-tab panels, so they were
+   only as wide/tall as their content and Roll20's dark page showed through below
+   and to the right. Painting the sheet ROOT white and giving it a tall floor
+   fills those gaps seamlessly with the tabs' own white.
+
+   NOTE: keep this file ASCII-only - a single non-ASCII byte (em dash, middle dot,
+   ellipsis) in a comment makes Roll20's legacy sanitizer reject the WHOLE sheet.
+   min-height is a floor for short tabs (e.g. Skills); tall tabs grow past it.
+   ============================================================================= */
+.sheet-nsheet {
+    background: white;
+    min-height: 1150px;
+}

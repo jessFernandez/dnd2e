@@ -50,6 +50,45 @@ def test_unknown_ability_rejected():
         ch.Character().assign_ability("Luck", 12)
 
 
+# ── movement + spell limits ──────────────────────────────────────────────────
+
+def test_movement_by_race():
+    assert _with().movement() == 12                       # no race yet -> default 12
+    c = _with(); c.race = "Human"
+    assert c.movement() == 12
+    c.race = "Dwarf"
+    assert c.movement() == 6
+
+
+def test_wizard_spell_limit_capped_by_intelligence():
+    c = _with(Intelligence=11); c.race, c.char_class = "Human", "Mage"
+    assert c.spellcasting_group() == "wizard"
+    assert c.spell_limit() == cr.intelligence_mods(11).max_spells_per_level  # 7
+    assert c.spells_left() == 7 and c.can_add_spell()
+    c.spells = list("abcdefg")                            # 7 chosen -> full
+    assert c.spells_left() == 0 and not c.can_add_spell()
+
+
+def test_wizard_high_intelligence_is_unlimited():
+    c = _with(Intelligence=19); c.race, c.char_class = "Human", "Mage"
+    assert c.spell_limit() is None and c.spells_left() is None
+    c.spells = list("abcdefghij")
+    assert c.can_add_spell()                              # no cap at Int 19+ ("All")
+
+
+def test_priest_spell_limit_from_wisdom_slots():
+    c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
+    assert c.spellcasting_group() == "priest"
+    assert c.spell_limit() == 3                           # 1 base + 2 Wis bonus
+    c.spells = ["x", "y", "z"]
+    assert c.spells_left() == 0 and not c.can_add_spell()
+
+
+def test_noncaster_has_no_spell_limit():
+    c = _with(); c.race, c.char_class = "Human", "Fighter"
+    assert c.spell_limit() is None and c.can_add_spell()
+
+
 def test_out_of_range_scores_flagged():
     c = _with(Strength=19, Charisma=2)
     assert c.has_all_abilities()

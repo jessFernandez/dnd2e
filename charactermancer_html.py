@@ -125,16 +125,13 @@ def _abilities_body(cm, saved=None) -> str:
         )
 
     load = _saved_list(saved, compact=True)
+    # The side rail (eligibility panel + references) is added by the shell; each
+    # body returns only its main-column content. See generate() / _side_rail.
     return (
-        '<div class="two-col">'
-        '<div class="col-main">'
         f'{toggle}{roll_area}'
         f'<div class="ab-grid">{rows}</div>'
         f'{_exstr_callout(cm)}'
         f'{load}'
-        '</div>'
-        f'<aside class="col-side">{_eligibility_panel(cm)}</aside>'
-        '</div>'
     )
 
 
@@ -304,12 +301,7 @@ def _race_card(cm, race) -> str:
 
 def _race_body(cm, saved=None) -> str:
     cards = "".join(_race_card(cm, r) for r in cr.RACES)
-    return (
-        '<div class="two-col">'
-        f'<div class="col-main"><div class="pick-grid">{cards}</div></div>'
-        f'<aside class="col-side">{_summary_panel(cm)}</aside>'
-        '</div>'
-    )
+    return f'<div class="pick-grid">{cards}</div>'
 
 
 # ── Class step ───────────────────────────────────────────────────────────────
@@ -356,12 +348,7 @@ def _class_card(cm, class_name) -> str:
 
 def _class_body(cm, saved=None) -> str:
     cards = "".join(_class_card(cm, k) for k in cr.CLASSES)
-    return (
-        '<div class="two-col">'
-        f'<div class="col-main"><div class="pick-grid">{cards}</div>{_exstr_callout(cm)}</div>'
-        f'<aside class="col-side">{_summary_panel(cm)}</aside>'
-        '</div>'
-    )
+    return f'<div class="pick-grid">{cards}</div>{_exstr_callout(cm)}'
 
 
 # ── Alignment step ───────────────────────────────────────────────────────────
@@ -397,17 +384,16 @@ def _alignment_body(cm, saved=None):
     if restricted:
         note = (f'<div class="hint">{c.char_class} is restricted to '
                 f'{", ".join(sorted(allowed))}.</div>')
-    return (
-        '<div class="two-col">'
-        f'<div class="col-main">{note}<div class="pick-grid">{cards}</div></div>'
-        f'<aside class="col-side">{_summary_panel(cm)}</aside>'
-        '</div>'
-    )
+    return f'{note}<div class="pick-grid">{cards}</div>'
 
 
 # ── Details step ─────────────────────────────────────────────────────────────
 
-def _details_body(cm, saved=None):
+def _handedness_field(cm) -> str:
+    """House-rule handedness roll (d10, 10 = ambidextrous). Rendered in the
+    Proficiencies step, not Details: ambidexterity affects which weapon
+    proficiencies you take (a natural 10 grants it free; otherwise warriors and
+    rogues may buy it for a slot)."""
     c = cm.character
     if c.handedness_roll is None and not c.ambidextrous:
         hand = '<span class="hint">Not yet rolled.</span>'
@@ -418,24 +404,26 @@ def _details_body(cm, saved=None):
     else:
         hand = (f'<span class="hand-res">Right-handed</span> '
                 f'<span class="hint">(rolled {c.handedness_roll})</span>')
+    return (
+        '<div class="field"><label>Handedness '
+        '<span class="hint">(house rule: d10, 10 = ambidextrous)</span></label>'
+        '<div class="hand-row"><a class="btn" href="dnd:///cm/handedness">🎲 Roll d10</a>'
+        f'{hand}</div></div>'
+    )
 
+
+def _details_body(cm, saved=None):
+    c = cm.character
     aging = _aging_field(cm) if c.house_rules else ""
 
     return (
-        '<div class="two-col">'
-        '<div class="col-main">'
         '<div class="field"><label>Name <span class="req">*</span></label>'
         f'<input class="tf" value="{_esc(c.name)}" placeholder="Character name" '
         'onchange="cmText(\'name\', this.value)" autocomplete="off"></div>'
         '<div class="field"><label>Gender</label>'
         f'<input class="tf" value="{_esc(c.gender)}" placeholder="(optional)" '
         'onchange="cmText(\'gender\', this.value)" autocomplete="off"></div>'
-        '<div class="field"><label>Handedness <span class="hint">(house rule: d10, 10 = ambidextrous)</span></label>'
-        f'<div class="hand-row"><a class="btn" href="dnd:///cm/handedness">🎲 Roll d10</a>{hand}</div></div>'
         f'{aging}'
-        '</div>'
-        f'<aside class="col-side">{_summary_panel(cm)}</aside>'
-        '</div>'
     )
 
 
@@ -633,7 +621,7 @@ def _slot_cost_label(cost: int) -> str:
     return "free" if cost == 0 else str(cost)
 
 
-def _budget_bar(used: int, total: int, label: str) -> str:
+def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> str:
     left = total - used
     pct = 0 if total <= 0 else min(100, round(used / total * 100))
     return (
@@ -641,7 +629,7 @@ def _budget_bar(used: int, total: int, label: str) -> str:
         f'<div class="budget-top"><span>{label}</span>'
         f'<span class="budget-num">{left} left</span></div>'
         f'<div class="bar"><div class="bar-fill" style="width:{pct}%"></div></div>'
-        f'<div class="budget-sub">{used} of {total} slots used</div>'
+        f'<div class="budget-sub">{used} of {total} {unit}</div>'
         '</div>'
     )
 
@@ -678,6 +666,7 @@ def _weapon_section(cm) -> str:
     return (
         '<section class="prof-sec">'
         '<h3 class="prof-h">Weapon Proficiencies</h3>'
+        f'{_handedness_field(cm)}'
         f'{_budget_bar(used, total, "Weapon slots")}'
         '<div class="hint">House rules: crossbows are free, bows cost 2 slots.</div>'
         f'<div class="chosen">{chosen}</div>'
@@ -802,6 +791,18 @@ def _eq_item_detail(it: dict) -> str:
     return " &middot; ".join(bits) if bits else _esc(it.get("category", ""))
 
 
+def _eq_item_plain(it: dict) -> str:
+    """Plain-text stat line (no HTML entities) for an item's hover title=."""
+    bits = []
+    if it.get("category") == "Armor" and it.get("ac_bonus"):
+        bits.append(f'+{it["ac_bonus"]} AC')
+    if it.get("category") == "Weapon" and it.get("damage"):
+        bits.append(f'{it["damage"]} dmg')
+    if it.get("weight"):
+        bits.append(f'{it["weight"]:g} lb')
+    return " · ".join(bits) if bits else str(it.get("category", ""))
+
+
 def _equipment_body(cm, saved=None) -> str:
     c = cm.character
     money, ac, weight = c.money_cp, c.armor_class(), c.total_weight()
@@ -830,8 +831,11 @@ def _equipment_body(cm, saved=None) -> str:
             wear = (f'<a class="wear {"on" if worn else ""}" href="dnd:///cm/wear/{name}">'
                     f'{"Worn ✓" if worn else "Wear"}</a>')
         qtytag = f' ×{qty}' if qty > 1 else ""
+        # Hover an owned item for its stat line + notes (the buy chips already do
+        # this; the owned rows didn't).
+        tip = _esc("; ".join(x for x in (_eq_item_plain(it), it.get("notes")) if x))
         owned += (
-            '<div class="prof-row">'
+            f'<div class="prof-row" title="{tip}">'
             f'<a class="pr-rm" href="dnd:///cm/sell/{name}" title="Sell / return">✕</a>'
             f'<div class="pr-main"><span class="pr-name">{_esc(name)}{qtytag}</span>'
             f'<span class="pr-detail">{_eq_item_detail(it)}</span></div>'
@@ -867,6 +871,16 @@ def _equipment_body(cm, saved=None) -> str:
 
 # ── spells step ──────────────────────────────────────────────────────────────
 
+def _spell_description_html(s) -> str:
+    """A spell's full effect as an expandable block (mirrors _prof_description_html)."""
+    desc = s.get("description") or ""
+    if not desc.strip():
+        return ""
+    paras = "".join(f"<p>{_esc(par)}</p>" for par in desc.split("\n\n") if par.strip())
+    return (f'<details class="pr-desc"><summary>What it does</summary>'
+            f'<div class="pr-desc-body">{paras}</div></details>')
+
+
 def _spells_body(cm, saved=None) -> str:
     c = cm.character
     group = c.spellcasting_group()
@@ -878,12 +892,25 @@ def _spells_body(cm, saved=None) -> str:
             f'<p>A {_esc(c.char_class or "character")} doesn\'t cast spells at 1st level — '
             'skip ahead.</p></div></section>')
 
+    catalog = {s["name"]: s for s in cm.spell_catalog}
     chosen_names = set(c.spells)
-    chosen = "".join(
-        f'<a class="chip-x" href="dnd:///cm/rmspell/{name}">{_esc(name)}'
-        '<span class="cx-cost">✕</span></a>' for name in c.spells
-    ) or '<span class="hint">No spells chosen yet.</span>'
 
+    # Chosen spells: rows with a collapsible description, like the chosen NWPs.
+    chosen = ""
+    for name in c.spells:
+        s = catalog.get(name, {"name": name})
+        meta = _esc(s.get("school") or "")
+        chosen += (
+            '<div class="prof-row">'
+            f'<a class="pr-rm" href="dnd:///cm/rmspell/{name}" title="Remove">✕</a>'
+            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
+            f'<span class="pr-detail">{meta}</span>{_spell_description_html(s)}</div>'
+            '</div>')
+    chosen = chosen or '<span class="hint">No spells chosen yet.</span>'
+
+    # Once the level-1 limit is spent, available spells grey out (dispatch also
+    # refuses the add, so this can't be worked around by clicking a stale link).
+    full = not c.can_add_spell()
     by_school: dict = {}
     for s in cm.spell_catalog:
         if s["name"] in chosen_names:
@@ -894,20 +921,33 @@ def _spells_body(cm, saved=None) -> str:
         chips = ""
         for s in sorted(by_school[school], key=lambda x: x["name"]):
             tip = _esc(" ".join((s.get("description") or "").split())[:280])
-            chips += (f'<a class="opt" href="dnd:///cm/addspell/{s["name"]}" title="{tip}">'
+            dis = " dis" if full else ""
+            chips += (f'<a class="opt{dis}" href="dnd:///cm/addspell/{s["name"]}" title="{tip}">'
                       f'<span class="opt-name">{_esc(s["name"])}</span></a>')
         avail += f'<div class="grp-label">{_esc(school)}</div><div class="opt-grid">{chips}</div>'
     avail = avail or '<span class="hint">No spell data loaded for this class.</span>'
 
-    guide = ("A 1st-level mage begins with a small spellbook — Read Magic plus a few picks "
-             "(Intelligence caps spells per level)." if group == "wizard" else
+    limit = c.spell_limit()
+    if limit is None:
+        budget = ('<div class="hint">Intelligence 19+ — your spellbook may hold every '
+                  '1st-level spell.</div>')
+    else:
+        unit = "known" if group == "wizard" else "memorized"
+        budget = _budget_bar(len(c.spells), limit, "Spells", unit=unit)
+
+    guide = ("A 1st-level mage begins with a small spellbook — Read Magic (free) plus "
+             "Intelligence-capped picks." if group == "wizard" else
              "Choose the 1st-level priest spells you'll memorize; Wisdom grants bonus slots.")
+    full_note = ('<div class="hint">Spell limit reached — remove one to choose another.</div>'
+                 if full and limit else "")
     return (
         '<section class="prof-sec">'
         f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; 1st level</span></h3>'
-        f'<div class="hint">{guide} Hover a spell for its effect.</div>'
+        f'{budget}'
+        f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
         '<div class="side-sub">Chosen</div>'
-        f'<div class="chosen">{chosen}</div>'
+        f'<div class="chosen-list">{chosen}</div>'
+        f'{full_note}'
         f'<div class="avail">{avail}</div>'
         '</section>')
 
@@ -972,7 +1012,7 @@ _REF_BADGE = {"phb": "PHB", "app": "APP"}
 
 
 def _step_refs(step) -> str:
-    """A compact reference row of deep-links for the current step."""
+    """A compact reference panel of deep-links for the current step."""
     refs = _STEP_REFS.get(step)
     if not refs:
         return ""
@@ -984,6 +1024,20 @@ def _step_refs(step) -> str:
     )
     return (f'<div class="phb-refs"><span class="phb-refs-label">References</span>'
             f'{chips}</div>')
+
+
+def _side_rail(cm) -> str:
+    """The persistent right rail shown on every build step except Review: the
+    character overview (eligibility while setting scores, the running summary once
+    a race/class exists) plus this step's References — pinned so both stay in view
+    as you scroll the step."""
+    panel = _eligibility_panel(cm) if cm.step == "abilities" else _summary_panel(cm)
+    return (
+        '<aside class="side-rail">'
+        f'<div class="col-side">{panel}</div>'
+        f'{_step_refs(cm.step)}'
+        '</aside>'
+    )
 
 
 _BODIES = {
@@ -1027,6 +1081,14 @@ def _next_hint(cm) -> str:
 
 def generate(cm, saved=None) -> str:
     body = _BODIES.get(cm.step, _placeholder_body)(cm, saved)
+    step = (f'<section class="step"><h2 class="step-h">{STEP_TITLES[cm.step]}</h2>'
+            f'{body}</section>')
+    # Every step but Review gets the pinned side rail (overview + references);
+    # Review keeps its own full-width finished sheet.
+    if cm.step == "review":
+        step_block = step
+    else:
+        step_block = f'<div class="step-layout">{step}{_side_rail(cm)}</div>'
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1041,11 +1103,7 @@ def generate(cm, saved=None) -> str:
     <h1>Create a Character</h1>
   </header>
   {_rail(cm)}
-  <section class="step">
-    <h2 class="step-h">{STEP_TITLES[cm.step]}</h2>
-    {body}
-    {_step_refs(cm.step)}
-  </section>
+  {step_block}
   {_footer(cm)}
 </div>
 <script>
@@ -1106,8 +1164,13 @@ _CSS = f"""
          font-size: 14px; }}
   .hint {{ color: #6b7290; font-size: 11.5px; font-style: italic; margin-top: 6px; line-height: 1.5; }}
 
-  .two-col {{ display: grid; grid-template-columns: 1fr 250px; gap: 22px; align-items: start; }}
-  @media (max-width: 720px) {{ .two-col {{ grid-template-columns: 1fr; }} }}
+  /* Shell-level step + pinned side rail (overview + references). The body owns
+     only the main column; the rail is shared across every step but Review. */
+  .step-layout {{ display: grid; grid-template-columns: 1fr 260px; gap: 20px;
+                 align-items: start; margin-bottom: 20px; }}
+  @media (max-width: 820px) {{ .step-layout {{ grid-template-columns: 1fr; }} }}
+  .step-layout > .step {{ margin-bottom: 0; }}
+  .side-rail {{ position: sticky; top: 16px; display: grid; gap: 14px; }}
   .ab-grid {{ display: grid; gap: 8px; }}
   .ab-row {{ display: grid; grid-template-columns: 96px 74px 1fr; align-items: center; gap: 12px;
             background: #23263a; border: 1px solid #2f3346; border-radius: 8px; padding: 8px 12px; }}
@@ -1319,8 +1382,10 @@ _CSS = f"""
   .nav-btn.primary {{ background: {ACCENT}; border-color: {ACCENT}; color: #1a1c26; }}
   .nav-btn.off {{ opacity: .38; pointer-events: none; }}
 
-  /* PHB reference links (folded in from the old walkthrough) */
-  .phb-refs {{ margin-top: 20px; padding-top: 14px; border-top: 1px solid #262a3d; }}
+  /* PHB reference links (folded in from the old walkthrough) — now a boxed panel
+     that lives in the pinned side rail alongside the character overview. */
+  .phb-refs {{ background: #191b25; border: 1px solid #2a2e3e; border-radius: 10px;
+              padding: 12px 14px; }}
   .phb-refs-label {{ display: block; color: #5a6080; font-size: 10px; font-weight: 700;
                      letter-spacing: .09em; text-transform: uppercase; margin-bottom: 8px; }}
   .phb-ref {{ display: inline-flex; align-items: center; margin: 0 7px 7px 0;

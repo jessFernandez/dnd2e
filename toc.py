@@ -73,3 +73,30 @@ def build_chapters(entries, markers) -> list:
         return []
     markers = list(markers)
     return chapters_from_markers(entries, markers) if markers else chapters_by_letter(entries)
+
+
+def build_tree(rows) -> list:
+    """Reconstruct the site's real nested TOC tree from flat rows.
+
+    `rows` are (id, parent_id, position, name, page_url) — see db.toc_tree. Returns
+    the root nodes (those whose parent_id is None), each a dict
+    {"name": str, "page_url": str|None, "children": [node, …]} ordered by position;
+    folders carry a None page_url. Returns [] for no rows, so the caller can fall
+    back to the flat chapter layout on an older DB with no toc_tree table.
+    """
+    from collections import defaultdict
+    nodes, children = {}, defaultdict(list)
+    for row in rows:
+        nid, pid, pos, name, url = row[0], row[1], row[2], row[3], row[4]
+        nodes[nid] = {"name": name, "page_url": url, "children": []}
+        children[pid].append((pos, nid))
+
+    def attach(pid):
+        out = []
+        for _pos, nid in sorted(children.get(pid, [])):
+            node = nodes[nid]
+            node["children"] = attach(nid)
+            out.append(node)
+        return out
+
+    return attach(None)

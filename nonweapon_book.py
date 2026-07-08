@@ -2,7 +2,7 @@
 
 The campaign's nonweapon-proficiency sourcebook, 'The Codex of Worldly Craft': the mechanical
 table joined to its prose rules text. char_rules.py loads ENTRIES into its
-Proficiency model. Regenerate with `python build_nwp_book.py`.
+Proficiency model. Regenerate with `python scripts/build_nwp_book.py`.
 """
 
 BOOK_NAME = 'The Codex of Worldly Craft'

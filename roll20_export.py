@@ -77,8 +77,7 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         "hp": c.max_hp() or 0,
         "attack_base": c.attack_bonus() or 0,          # 20 − THAC0
         "armor_base": 10,
-        "armor_bonus": c.worn_ac_bonus(),              # sheet adds Dex on top
-        "move": 12,
+        "move": c.movement(),                          # base rate by race (demihumans 6)
     }
     out.update(_split_money(c.money_cp))
     for cat, key in _SAVE_KEYS.items():

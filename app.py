@@ -24,9 +24,10 @@ import askscreen_html
 import charactermancer_html
 import proficiencies_html
 import char_rules as cr
-from charactermancer import Charactermancer, STEPS
-from character import Character
-from rules_agent import AskWorker, DEFAULT_MODEL, ollama_status, pick_default_model
+from charactermancer import Charactermancer
+from character_library import CharacterLibrary
+from rules_agent import AskWorker, ollama_status
+from ask_controller import Conversation, resolve_model, page_state
 from calculator import HouseRuleCalculator
 
 from PyQt5.QtWidgets import (
@@ -35,8 +36,8 @@ from PyQt5.QtWidgets import (
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
     QLabel, QSizePolicy, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
+from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -256,7 +257,7 @@ QTreeWidget {
     background: #13151b;
     border: none;
     outline: none;
-    show-decoration-selected: 1;
+    show-decoration-selected: 0;   /* keep selection on the item text, not the indent gutter */
 }
 QTreeWidget::item {
     padding: 5px 4px;
@@ -265,11 +266,7 @@ QTreeWidget::item {
 }
 QTreeWidget::item:hover    { background: #1e2130; }
 QTreeWidget::item:selected { background: #4d3f18; color: #f2e8cc; }
-QTreeWidget::branch { background: #13151b; }
-QTreeWidget::branch:has-children:!has-siblings:closed,
-QTreeWidget::branch:closed:has-children:has-siblings {
-    border-image: none;
-}
+/* Branch gutter (indent guides + folder chevrons) is painted by BrowseTree.drawBranches. */
 
 /* ── List widgets (results / bookmarks) ────────────────────────── */
 QListWidget {
@@ -384,6 +381,7 @@ QWidget#findBar QPushButton:pressed { background: #c9a84c; color: #1a1c26; }
 
 class SearchWorker(QThread):
     results_ready = pyqtSignal(list)
+    failed        = pyqtSignal(str)   # a real error, distinct from a genuine zero-match
 
     def __init__(self, db_path: str, query: str):
         super().__init__()
@@ -396,8 +394,8 @@ class SearchWorker(QThread):
             rows = db.search_pages(conn, self.query)
             conn.close()
             self.results_ready.emit(rows)
-        except Exception:
-            self.results_ready.emit([])
+        except Exception as e:
+            self.failed.emit(str(e))
 
 
 # ── dnd:// link interception ──────────────────────────────────────────────────
@@ -520,6 +518,13 @@ class ContentView(QWidget):
         "line-height:1.66!important;}"
         "p,li,td{line-height:1.66!important;}"
         "p{margin:0 0 12px!important;}"
+        # Float a table's header row so column labels stay visible while scrolling
+        # long price/stat tables (e.g. Economics → Weapons). border-collapse (above)
+        # drops sticky cell borders in this Chromium, so draw the divider with an
+        # inset box-shadow and paint the background so rows don't show through.
+        "thead th{position:sticky!important;top:0!important;"
+        "background-color:#2a2d36!important;"
+        "box-shadow:inset 0 -1px 0 #3a3e50!important;z-index:2!important;}"
     )
 
     _TOC_LINK_RE = re.compile(
@@ -569,6 +574,55 @@ class TabContext:
         self.current_page_url: str | None  = None
 
 
+class BrowseTree(QTreeWidget):
+    """The book-browser tree with VS-Code-style indent guides.
+
+    We paint the branch gutter ourselves (`drawBranches`): a faint vertical guide
+    line down each ancestor level, and a ▸/▾ chevron on any node that has children
+    (the group/folder indicator). Clicking a guide line collapses the ancestor at
+    that depth — a quick "collapse the section I'm in" from anywhere inside it.
+    """
+    GUIDE   = QColor("#2c3040")   # indent guide line
+    CHEVRON = QColor("#8a90a8")   # folder ▸/▾ marker
+
+    def drawBranches(self, painter: QPainter, rect, index):
+        indent = self.indentation()
+        own_left = rect.right() - indent + 1          # this node's own (rightmost) column
+        painter.save()
+        painter.setPen(QPen(self.GUIDE, 1))
+        x = rect.left() + indent // 2
+        while x < own_left:                            # guide line per ancestor column
+            painter.drawLine(x, rect.top(), x, rect.bottom())
+            x += indent
+        if self.model().hasChildren(index):            # group/folder → chevron
+            painter.setPen(QPen(self.CHEVRON))
+            f = painter.font(); f.setPointSizeF(8.0); painter.setFont(f)
+            glyph = "▾" if self.isExpanded(index) else "▸"   # ▾ / ▸
+            painter.drawText(QRect(own_left, rect.top(), indent, rect.height()),
+                             Qt.AlignCenter, glyph)
+        painter.restore()
+
+    def mousePressEvent(self, event):
+        indent = self.indentation()
+        item = self.itemAt(event.pos())
+        if item is not None:
+            text_left = self.visualItemRect(item).left()   # where content begins (after indent)
+            col = (text_left - event.x()) // indent         # 0 = own column, ≥1 = an ancestor's line
+            if col >= 1:
+                ancestor = item
+                for _ in range(col):
+                    if ancestor.parent() is None:
+                        break
+                    ancestor = ancestor.parent()
+                if ancestor is not item:
+                    ancestor.setExpanded(False)
+                    self.setCurrentItem(ancestor)
+                    self.scrollToItem(ancestor)
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
@@ -585,12 +639,13 @@ class MainWindow(QMainWindow):
         self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
         self._zoom: float = float(self._settings.value("zoom", 1.0))
         self._ask_worker = None
-        self._ask_thread: list = []         # current Jarvis conversation [(q, answer_md)]
+        self._ask = Conversation()          # current Jarvis conversation + in-flight context
         self._calc = None                   # floating house-rule calculator window
         self._spells_file = None            # cached temp file for the Spells screen
         self._prof_file = None              # cached temp file for the Proficiencies book
         self._all_spells = None             # lazily-loaded spell list for the builder
         self._cm = None                     # in-progress Charactermancer build (window-level)
+        self._char_library = CharacterLibrary(self.user_db)   # save/load/delete for builds
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -675,10 +730,10 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
 
-        self.browse_tree = QTreeWidget()
+        self.browse_tree = BrowseTree()
         self.browse_tree.setHeaderHidden(True)
         self.browse_tree.setAnimated(True)
-        self.browse_tree.setIndentation(16)
+        self.browse_tree.setIndentation(18)
         self.browse_tree.setFont(QFont("Segoe UI", 11))
         self.browse_tree.itemClicked.connect(self._on_tree_click)
         self.tabs.addTab(self.browse_tree, "Browse")
@@ -1035,19 +1090,12 @@ class MainWindow(QMainWindow):
         total_entries = 0
         for book_code in BOOK_ORDER:
             book_name = BOOK_NAMES.get(book_code, book_code)
-            chapters  = self._get_chapters(book_code)
-            if not chapters:
+            chapters  = self._get_chapters(book_code)          # flat: TOC page + house rules
+            tree      = toc.build_tree(db.toc_tree(self.db, book_code))  # site's real nesting
+            if not chapters and not tree:
                 continue
 
             self._book_chapters[book_code] = chapters
-            # Flat reading order for this book (Prev/Next), duplicates removed.
-            order, seen = [], set()
-            for ch in chapters:
-                for page_url, _sub in ch["entries"]:
-                    if page_url not in seen:
-                        seen.add(page_url)
-                        order.append(page_url)
-            self._book_page_order[book_code] = order
             tree_color = BOOK_TREE_COLORS.get(book_code, "#c9ccd6")
 
             # Book node
@@ -1056,26 +1104,38 @@ class MainWindow(QMainWindow):
             book_item.setForeground(0, QColor(tree_color))
             book_item.setData(0, Qt.UserRole, ("book", book_code))
 
-            for ch in chapters:
-                # Chapter node
-                chap_item = QTreeWidgetItem([f"  {ch['name']}"])
-                chap_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
-                chap_item.setForeground(0, QColor("#8a90a8"))
-                chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
+            order: list = []
+            if tree:
+                # Render the real nested tree (Book › Chapter › Section › page).
+                for node in tree:
+                    total_entries += self._add_tree_node(book_item, node, order)
+            else:
+                # Fallback (no toc_tree in this DB): the flat chapter → pages layout.
+                for ch in chapters:
+                    chap_item = QTreeWidgetItem([f"  {ch['name']}"])
+                    chap_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+                    chap_item.setForeground(0, QColor("#8a90a8"))
+                    chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
+                    for page_url, subtopic in ch["entries"]:
+                        label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
+                        entry_item = QTreeWidgetItem([f"   {label}"])
+                        entry_item.setFont(0, QFont("Segoe UI", 10))
+                        entry_item.setForeground(0, QColor("#7a8098"))
+                        entry_item.setData(0, Qt.UserRole, ("entry", page_url))
+                        entry_item.setToolTip(0, subtopic)
+                        chap_item.addChild(entry_item)
+                        self._url_to_tree_item[page_url] = entry_item
+                        order.append(page_url)
+                        total_entries += 1
+                    book_item.addChild(chap_item)
 
-                for page_url, subtopic in ch["entries"]:
-                    # Strip the "(Book Name)" suffix from display label
-                    label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
-                    entry_item = QTreeWidgetItem([f"   {label}"])
-                    entry_item.setFont(0, QFont("Segoe UI", 10))
-                    entry_item.setForeground(0, QColor("#7a8098"))
-                    entry_item.setData(0, Qt.UserRole, ("entry", page_url))
-                    entry_item.setToolTip(0, subtopic)
-                    chap_item.addChild(entry_item)
-                    self._url_to_tree_item[page_url] = entry_item
-                    total_entries += 1
-
-                book_item.addChild(chap_item)
+            # Reading order for Prev/Next, duplicates removed (a page can recur).
+            seen, deduped = set(), []
+            for page_url in order:
+                if page_url not in seen:
+                    seen.add(page_url)
+                    deduped.append(page_url)
+            self._book_page_order[book_code] = deduped
 
             self.browse_tree.addTopLevelItem(book_item)
 
@@ -1107,6 +1167,30 @@ class MainWindow(QMainWindow):
             f"  {book_count} books  ·  {total_entries} entries"
         )
 
+    def _add_tree_node(self, parent_item, node: dict, order: list) -> int:
+        """Render one toc_tree node (folder or page) under parent_item, recursing
+        into its children. Returns the number of page entries added (for the count).
+        Qt indents children by depth, so no manual label padding is needed."""
+        url = node["page_url"]
+        item = QTreeWidgetItem([f"  {node['name']}"])
+        if url:                                         # a page (leaf, or a section with sub-pages)
+            item.setFont(0, QFont("Segoe UI", 10))
+            item.setForeground(0, QColor("#7a8098"))
+            item.setData(0, Qt.UserRole, ("entry", url))
+            item.setToolTip(0, node["name"])
+            self._url_to_tree_item[url] = item
+            order.append(url)
+            added = 1
+        else:                                           # a folder (container only)
+            item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+            item.setForeground(0, QColor("#8a90a8"))
+            item.setData(0, Qt.UserRole, ("group", None))
+            added = 0
+        parent_item.addChild(item)
+        for child in node["children"]:
+            added += self._add_tree_node(item, child, order)
+        return added
+
     def _on_tree_click(self, item: QTreeWidgetItem, _col):
         data = item.data(0, Qt.UserRole)
         if not data:
@@ -1123,18 +1207,18 @@ class MainWindow(QMainWindow):
             self._load_page(value)
         elif kind == "entry" and value:
             self._load_page(value)
+        elif kind == "group":                            # folder node — toggle it
+            item.setExpanded(not item.isExpanded())
 
     def _sync_tree_selection(self, page_url: str):
         item = self._url_to_tree_item.get(page_url)
         if not item:
             return
-        chap_item = item.parent()
-        if chap_item:
-            book_item = chap_item.parent()
-            if book_item and not book_item.isExpanded():
-                book_item.setExpanded(True)
-            if not chap_item.isExpanded():
-                chap_item.setExpanded(True)
+        parent = item.parent()          # expand every ancestor: book › chapter › folders…
+        while parent is not None:
+            if not parent.isExpanded():
+                parent.setExpanded(True)
+            parent = parent.parent()
         self.browse_tree.blockSignals(True)
         self.browse_tree.setCurrentItem(item)
         self.browse_tree.scrollToItem(item, QTreeWidget.PositionAtCenter)
@@ -1284,8 +1368,7 @@ class MainWindow(QMainWindow):
         window-level state (self._cm) so leaving and returning keeps your progress."""
         if self._cm is None:
             self._cm = Charactermancer()
-        db.ensure_characters_schema(self.user_db)
-        saved = db.all_characters(self.user_db)
+        saved = self._char_library.all()
         self._set_spell_catalog()
         self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
         self.current_page_url = None
@@ -1329,57 +1412,28 @@ class MainWindow(QMainWindow):
         self._render_charactermancer()
 
     def _cm_export_roll20(self):
-        """Build the Roll20 import JSON for the current character, enrich its spells
-        from the spell DB, and copy it to the clipboard for pasting into the sheet."""
-        import roll20_export
+        """Build the Roll20 import JSON for the current character (enriching its
+        spells from the spell DB) and copy it to the clipboard for pasting."""
         from PyQt5.QtWidgets import QApplication
         if self._all_spells is None:
             self._all_spells = db.all_spells(self.db)
-        details = {s["name"]: {"level": s.get("level"), "school": s.get("school"),
-                               "range": s.get("range"), "casting_time": s.get("casting_time"),
-                               "duration": s.get("duration"), "aoe": s.get("aoe"),
-                               "save": s.get("save"), "damage": s.get("damage"),
-                               "materials": s.get("materials"), "components": s.get("components"),
-                               "description": s.get("description")}
-                   for s in self._all_spells}
-        data = roll20_export.character_to_roll20(self._cm.character, details)
+        data = self._char_library.roll20_payload(self._cm, self._all_spells)
         QApplication.clipboard().setText(json.dumps(data, indent=2))
         name = self._cm.character.name or "character"
         self.status.showMessage(
             f"  Roll20 JSON for {name} copied — paste into the sheet's Settings → Import box")
 
     def _cm_save(self):
-        c = self._cm.character
-        db.ensure_characters_schema(self.user_db)
-        data = json.dumps(c.to_dict())
-        name = c.name or "Unnamed"
-        if self._cm.saved_id:
-            db.update_character(self.user_db, self._cm.saved_id,
-                                name, c.race, c.char_class, c.alignment, data)
-        else:
-            self._cm.saved_id = db.insert_character(
-                self.user_db, name, c.race, c.char_class, c.alignment, data)
+        self._cm.saved_id = self._char_library.save(self._cm)
 
     def _cm_load(self, cid: str):
-        try:
-            cid = int(cid)
-        except ValueError:
-            return
-        raw = db.get_character(self.user_db, cid)
-        if not raw:
-            return
-        cm = Charactermancer(character=Character.from_dict(json.loads(raw)))
-        cm.saved_id = cid
-        cm.index = len(STEPS) - 1        # a saved build opens on its finished sheet
-        self._cm = cm
+        cm = self._char_library.load(cid)
+        if cm is not None:
+            self._cm = cm
 
     def _cm_delete(self, cid: str):
-        try:
-            cid = int(cid)
-        except ValueError:
-            return
-        db.delete_character(self.user_db, cid)
-        if self._cm and self._cm.saved_id == cid:
+        deleted = self._char_library.delete(cid)
+        if deleted is not None and self._cm and self._cm.saved_id == deleted:
             self._cm.saved_id = None
 
     def _render_toc(self, book_code: str) -> bool:
@@ -1404,10 +1458,7 @@ class MainWindow(QMainWindow):
     # ── Ask the Rules (local Ollama model) ──────────────────────────────────
 
     def _ask_model(self, models=None) -> str:
-        chosen = (self._settings.value("askModel", "") or "").strip()
-        if models and chosen not in models:
-            chosen = pick_default_model(models)
-        return chosen or DEFAULT_MODEL
+        return resolve_model(self._settings.value("askModel", ""), models)
 
     def _ask_stop(self):
         w = getattr(self, "_ask_worker", None)
@@ -1433,10 +1484,10 @@ class MainWindow(QMainWindow):
     def _render_ask(self, force_setup: bool = False) -> bool:
         """Render the Jarvis page fresh (Ollama setup help, or an empty ask box)."""
         self._ask_stop()                    # stop any in-flight generation
-        self._ask_thread = []               # a fresh visit starts a new conversation
+        self._ask.reset()                   # a fresh visit starts a new conversation
         ok, models = ollama_status()
         model = self._ask_model(models)
-        state = "ready" if (ok and models) else "setup"
+        state = page_state(ok, models)
         self.content._view.setHtml(
             askscreen_html.generate(state, model=model, models=models, ollama_ok=ok)
         )
@@ -1454,15 +1505,10 @@ class MainWindow(QMainWindow):
             self._render_ask()          # fall back to the setup instructions
             return
 
-        thread = getattr(self, "_ask_thread", None)
-        if thread is None:
-            thread = self._ask_thread = []
+        thread = self._ask.pairs
         model = self._ask_model(models)
         view  = self.content._view      # answer renders onto the tab that asked
-        self._ask_view = view
-        self._ask_question_text = question
-        self._ask_model_id = model
-        self._ask_models = models
+        self._ask.begin(question, model, models, view)
         view.setHtml(askscreen_html.generate(
             "loading", model=model, models=models, question=question, thread=thread))
         self._set_tab_title("Jarvis")
@@ -1481,7 +1527,7 @@ class MainWindow(QMainWindow):
         worker.start()
 
     def _ask_status(self, msg: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         js = ("var s=document.getElementById('ask-status');"
@@ -1490,7 +1536,7 @@ class MainWindow(QMainWindow):
         view.page().runJavaScript(js)
 
     def _ask_delta(self, chunk: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         js = ("var s=document.getElementById('ask-stream');"
@@ -1500,25 +1546,25 @@ class MainWindow(QMainWindow):
         view.page().runJavaScript(js)
 
     def _ask_finished(self, answer_md: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
-        self._ask_thread.append((getattr(self, "_ask_question_text", ""), answer_md))
+        self._ask.record_answer(answer_md)
         view.setHtml(askscreen_html.generate(
-            "answer", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
-            models=getattr(self, "_ask_models", None), thread=self._ask_thread,
+            "answer", model=self._ask.model,
+            models=self._ask.models, thread=self._ask.pairs,
         ))
         self.status.showMessage("  Jarvis  ·  answer ready")
 
     def _ask_failed(self, error: str):
-        view = getattr(self, "_ask_view", None)
+        view = self._ask.view
         if view is None:
             return
         view.setHtml(askscreen_html.generate(
-            "error", model=getattr(self, "_ask_model_id", DEFAULT_MODEL),
-            models=getattr(self, "_ask_models", None),
-            question=getattr(self, "_ask_question_text", ""),
-            error=error, thread=getattr(self, "_ask_thread", []),
+            "error", model=self._ask.model,
+            models=self._ask.models,
+            question=self._ask.question,
+            error=error, thread=self._ask.pairs,
         ))
         self.status.showMessage("  Jarvis  ·  error")
 
@@ -1678,6 +1724,7 @@ class MainWindow(QMainWindow):
 
         self._search_worker = SearchWorker(str(DB_PATH), query)
         self._search_worker.results_ready.connect(self._show_results)
+        self._search_worker.failed.connect(self._show_search_error)
         self._search_worker.start()
 
     def _show_results(self, rows):
@@ -1705,6 +1752,15 @@ class MainWindow(QMainWindow):
 
         self.tabs.setTabText(1, f"Results ({len(rows)})")
         self.status.showMessage(f"  Found {len(rows)} results")
+
+    def _show_search_error(self, message: str):
+        """A search that actually failed (bad DB, FTS syntax) — surfaced distinctly
+        from a genuine zero-match so the user isn't told 'no results' for an error."""
+        self.results_list.clear()
+        item = QListWidgetItem("  Search failed — try a simpler query.")
+        item.setForeground(QColor("#c07070"))
+        self.results_list.addItem(item)
+        self.status.showMessage(f"  Search failed: {message}")
 
     def _on_result_click(self, item: QListWidgetItem):
         url = item.data(Qt.UserRole)
