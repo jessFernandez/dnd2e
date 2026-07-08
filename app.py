@@ -36,8 +36,8 @@ from PyQt5.QtWidgets import (
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
     QLabel, QSizePolicy, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
+from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -257,7 +257,7 @@ QTreeWidget {
     background: #13151b;
     border: none;
     outline: none;
-    show-decoration-selected: 1;
+    show-decoration-selected: 0;   /* keep selection on the item text, not the indent gutter */
 }
 QTreeWidget::item {
     padding: 5px 4px;
@@ -266,11 +266,7 @@ QTreeWidget::item {
 }
 QTreeWidget::item:hover    { background: #1e2130; }
 QTreeWidget::item:selected { background: #4d3f18; color: #f2e8cc; }
-QTreeWidget::branch { background: #13151b; }
-QTreeWidget::branch:has-children:!has-siblings:closed,
-QTreeWidget::branch:closed:has-children:has-siblings {
-    border-image: none;
-}
+/* Branch gutter (indent guides + folder chevrons) is painted by BrowseTree.drawBranches. */
 
 /* ── List widgets (results / bookmarks) ────────────────────────── */
 QListWidget {
@@ -571,6 +567,55 @@ class TabContext:
         self.current_page_url: str | None  = None
 
 
+class BrowseTree(QTreeWidget):
+    """The book-browser tree with VS-Code-style indent guides.
+
+    We paint the branch gutter ourselves (`drawBranches`): a faint vertical guide
+    line down each ancestor level, and a ▸/▾ chevron on any node that has children
+    (the group/folder indicator). Clicking a guide line collapses the ancestor at
+    that depth — a quick "collapse the section I'm in" from anywhere inside it.
+    """
+    GUIDE   = QColor("#2c3040")   # indent guide line
+    CHEVRON = QColor("#8a90a8")   # folder ▸/▾ marker
+
+    def drawBranches(self, painter: QPainter, rect, index):
+        indent = self.indentation()
+        own_left = rect.right() - indent + 1          # this node's own (rightmost) column
+        painter.save()
+        painter.setPen(QPen(self.GUIDE, 1))
+        x = rect.left() + indent // 2
+        while x < own_left:                            # guide line per ancestor column
+            painter.drawLine(x, rect.top(), x, rect.bottom())
+            x += indent
+        if self.model().hasChildren(index):            # group/folder → chevron
+            painter.setPen(QPen(self.CHEVRON))
+            f = painter.font(); f.setPointSizeF(8.0); painter.setFont(f)
+            glyph = "▾" if self.isExpanded(index) else "▸"   # ▾ / ▸
+            painter.drawText(QRect(own_left, rect.top(), indent, rect.height()),
+                             Qt.AlignCenter, glyph)
+        painter.restore()
+
+    def mousePressEvent(self, event):
+        indent = self.indentation()
+        item = self.itemAt(event.pos())
+        if item is not None:
+            text_left = self.visualItemRect(item).left()   # where content begins (after indent)
+            col = (text_left - event.x()) // indent         # 0 = own column, ≥1 = an ancestor's line
+            if col >= 1:
+                ancestor = item
+                for _ in range(col):
+                    if ancestor.parent() is None:
+                        break
+                    ancestor = ancestor.parent()
+                if ancestor is not item:
+                    ancestor.setExpanded(False)
+                    self.setCurrentItem(ancestor)
+                    self.scrollToItem(ancestor)
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
@@ -678,10 +723,10 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
 
-        self.browse_tree = QTreeWidget()
+        self.browse_tree = BrowseTree()
         self.browse_tree.setHeaderHidden(True)
         self.browse_tree.setAnimated(True)
-        self.browse_tree.setIndentation(16)
+        self.browse_tree.setIndentation(18)
         self.browse_tree.setFont(QFont("Segoe UI", 11))
         self.browse_tree.itemClicked.connect(self._on_tree_click)
         self.tabs.addTab(self.browse_tree, "Browse")
@@ -1038,19 +1083,12 @@ class MainWindow(QMainWindow):
         total_entries = 0
         for book_code in BOOK_ORDER:
             book_name = BOOK_NAMES.get(book_code, book_code)
-            chapters  = self._get_chapters(book_code)
-            if not chapters:
+            chapters  = self._get_chapters(book_code)          # flat: TOC page + house rules
+            tree      = toc.build_tree(db.toc_tree(self.db, book_code))  # site's real nesting
+            if not chapters and not tree:
                 continue
 
             self._book_chapters[book_code] = chapters
-            # Flat reading order for this book (Prev/Next), duplicates removed.
-            order, seen = [], set()
-            for ch in chapters:
-                for page_url, _sub in ch["entries"]:
-                    if page_url not in seen:
-                        seen.add(page_url)
-                        order.append(page_url)
-            self._book_page_order[book_code] = order
             tree_color = BOOK_TREE_COLORS.get(book_code, "#c9ccd6")
 
             # Book node
@@ -1059,26 +1097,38 @@ class MainWindow(QMainWindow):
             book_item.setForeground(0, QColor(tree_color))
             book_item.setData(0, Qt.UserRole, ("book", book_code))
 
-            for ch in chapters:
-                # Chapter node
-                chap_item = QTreeWidgetItem([f"  {ch['name']}"])
-                chap_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
-                chap_item.setForeground(0, QColor("#8a90a8"))
-                chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
+            order: list = []
+            if tree:
+                # Render the real nested tree (Book › Chapter › Section › page).
+                for node in tree:
+                    total_entries += self._add_tree_node(book_item, node, order)
+            else:
+                # Fallback (no toc_tree in this DB): the flat chapter → pages layout.
+                for ch in chapters:
+                    chap_item = QTreeWidgetItem([f"  {ch['name']}"])
+                    chap_item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+                    chap_item.setForeground(0, QColor("#8a90a8"))
+                    chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
+                    for page_url, subtopic in ch["entries"]:
+                        label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
+                        entry_item = QTreeWidgetItem([f"   {label}"])
+                        entry_item.setFont(0, QFont("Segoe UI", 10))
+                        entry_item.setForeground(0, QColor("#7a8098"))
+                        entry_item.setData(0, Qt.UserRole, ("entry", page_url))
+                        entry_item.setToolTip(0, subtopic)
+                        chap_item.addChild(entry_item)
+                        self._url_to_tree_item[page_url] = entry_item
+                        order.append(page_url)
+                        total_entries += 1
+                    book_item.addChild(chap_item)
 
-                for page_url, subtopic in ch["entries"]:
-                    # Strip the "(Book Name)" suffix from display label
-                    label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
-                    entry_item = QTreeWidgetItem([f"   {label}"])
-                    entry_item.setFont(0, QFont("Segoe UI", 10))
-                    entry_item.setForeground(0, QColor("#7a8098"))
-                    entry_item.setData(0, Qt.UserRole, ("entry", page_url))
-                    entry_item.setToolTip(0, subtopic)
-                    chap_item.addChild(entry_item)
-                    self._url_to_tree_item[page_url] = entry_item
-                    total_entries += 1
-
-                book_item.addChild(chap_item)
+            # Reading order for Prev/Next, duplicates removed (a page can recur).
+            seen, deduped = set(), []
+            for page_url in order:
+                if page_url not in seen:
+                    seen.add(page_url)
+                    deduped.append(page_url)
+            self._book_page_order[book_code] = deduped
 
             self.browse_tree.addTopLevelItem(book_item)
 
@@ -1110,6 +1160,30 @@ class MainWindow(QMainWindow):
             f"  {book_count} books  ·  {total_entries} entries"
         )
 
+    def _add_tree_node(self, parent_item, node: dict, order: list) -> int:
+        """Render one toc_tree node (folder or page) under parent_item, recursing
+        into its children. Returns the number of page entries added (for the count).
+        Qt indents children by depth, so no manual label padding is needed."""
+        url = node["page_url"]
+        item = QTreeWidgetItem([f"  {node['name']}"])
+        if url:                                         # a page (leaf, or a section with sub-pages)
+            item.setFont(0, QFont("Segoe UI", 10))
+            item.setForeground(0, QColor("#7a8098"))
+            item.setData(0, Qt.UserRole, ("entry", url))
+            item.setToolTip(0, node["name"])
+            self._url_to_tree_item[url] = item
+            order.append(url)
+            added = 1
+        else:                                           # a folder (container only)
+            item.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+            item.setForeground(0, QColor("#8a90a8"))
+            item.setData(0, Qt.UserRole, ("group", None))
+            added = 0
+        parent_item.addChild(item)
+        for child in node["children"]:
+            added += self._add_tree_node(item, child, order)
+        return added
+
     def _on_tree_click(self, item: QTreeWidgetItem, _col):
         data = item.data(0, Qt.UserRole)
         if not data:
@@ -1126,18 +1200,18 @@ class MainWindow(QMainWindow):
             self._load_page(value)
         elif kind == "entry" and value:
             self._load_page(value)
+        elif kind == "group":                            # folder node — toggle it
+            item.setExpanded(not item.isExpanded())
 
     def _sync_tree_selection(self, page_url: str):
         item = self._url_to_tree_item.get(page_url)
         if not item:
             return
-        chap_item = item.parent()
-        if chap_item:
-            book_item = chap_item.parent()
-            if book_item and not book_item.isExpanded():
-                book_item.setExpanded(True)
-            if not chap_item.isExpanded():
-                chap_item.setExpanded(True)
+        parent = item.parent()          # expand every ancestor: book › chapter › folders…
+        while parent is not None:
+            if not parent.isExpanded():
+                parent.setExpanded(True)
+            parent = parent.parent()
         self.browse_tree.blockSignals(True)
         self.browse_tree.setCurrentItem(item)
         self.browse_tree.scrollToItem(item, QTreeWidget.PositionAtCenter)

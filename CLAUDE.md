@@ -59,6 +59,12 @@ app.py               MainWindow — Qt shell that wires the above to the UI
 from `char_rules` rather than reimplementing them, so the calculator, the builder,
 and the Roll20 sheet can never disagree. Preserve that — don't duplicate a rule.
 
+The builder currently makes **level-1, single-class PHB** characters, but
+`char_rules` is already fully parameterized by level. The top planned feature —
+character leveling / advancement — is scoped in
+[`docs/leveling-plan.md`](docs/leveling-plan.md), including which 2e tables are
+still missing from the engine.
+
 ### "Ask the Rules" (Jarvis)
 
 `rules_agent.py` runs retrieval + a local Ollama model on a `QThread` (`AskWorker`)
@@ -85,6 +91,14 @@ ones. Good next candidate: session save/restore (`_save_session` /
 each just supply their cards. `toc_html.py` / `toc.py` build tables of contents.
 Navigation uses `dnd://` links intercepted in `app.py._on_content_navigate`.
 
+The browse sidebar renders the site's **real nested tree** (Book → Chapter →
+Section → page, arbitrary depth) from the `toc_tree` table, built by
+`scripts/build_toc_tree.py` from the site's TOC XML (`pw_toc_6.xml`). `toc.build_tree`
+reconstructs it and `app.py._load_topics` renders it, falling back to the flat
+`toc_entries` layout if `toc_tree` is absent. (`toc_entries` still drives the
+book-contents page and per-chapter house-rule callouts.) Background:
+[`docs/toc-tree-fidelity.md`](docs/toc-tree-fidelity.md).
+
 ## Data & generated code
 
 - **`dnd2e.db`** (~55 MB) is the scraped rulebook DB, committed to the repo and
@@ -93,7 +107,8 @@ Navigation uses `dnd://` links intercepted in `app.py._on_content_navigate`.
 - Some modules are **generated — do not hand-edit**. They say so at the top:
   - `equipment.py` ← `scripts/build_items.py`
   - spell data ← `scripts/build_spells.py`; economics ← `scripts/build_economics.py`;
-    nonweapon-proficiency book ← `scripts/build_nwp_book.py` / `scripts/build_chunks.py`
+    nonweapon-proficiency book ← `scripts/build_nwp_book.py` / `scripts/build_chunks.py`;
+    the `toc_tree` table ← `scripts/build_toc_tree.py` (from the site's TOC XML)
   Regenerate via the `scripts/build_*.py` script named in the file's docstring;
   run it from the repo root (each script anchors its data paths to the repo root).
 - **`scripts/`** holds all the data-tooling: the tracked `build_*.py` generators
