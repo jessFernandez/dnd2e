@@ -135,14 +135,15 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
                           "amagic": 0, "adex": 0, "aequipped": 1})
     out["armor"] = armor
 
-    # Known spells (all 1st level at creation), enriched from the DB: full stat
-    # block, description, and V/S/M components.
+    # Known spells, enriched from the DB: full stat block, description, and V/S/M
+    # components. The level comes from the character (that's what the builder
+    # validated against its slots), and drives the sheet's repeating_spells<N>.
     spells = []
-    for name in c.spells:
+    for name, spell_level in c.spells.items():
         d = spell_details.get(name, {})
         comp = (d.get("components") or "").upper()
         spells.append({
-            "level": d.get("level", 1), "name": name,
+            "level": spell_level, "name": name,
             "school": d.get("school", ""), "range": d.get("range", ""),
             "castingTime": _casting_segments(d.get("casting_time")),
             "save": d.get("save", ""), "aoe": d.get("aoe", ""),

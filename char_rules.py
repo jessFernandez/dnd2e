@@ -244,25 +244,211 @@ def priest_bonus_spells(wis) -> dict:
     return out
 
 
-# Priest spell slots by class level (PHB Table 24), per spell level. Only class
-# level 1 is tabulated today — the builder makes level-1 characters. The rest are
-# left for the leveling work (see docs/leveling-plan.md), which will extend this
-# the same way it extends the wizard progression.
-_PRIEST_SPELL_SLOTS = {
-    1: {1: 1},
+# ═══════════════════════════════════════════════════════════════════════════
+#  Spell progression (PHB Tables 21, 24, 17, 18, 32)
+#
+#  Each row lists the spells castable of levels 1..N at that class level; a 0
+#  means none. Below a table's first row the class casts nothing; at or above its
+#  last row the slots stop improving (the "maximum spell ability" footnote on the
+#  paladin and ranger tables).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Table 21 — Wizard (spell levels 1-9).
+_WIZARD_SPELL_SLOTS = {
+    1:  (1, 0, 0, 0, 0, 0, 0, 0, 0),
+    2:  (2, 0, 0, 0, 0, 0, 0, 0, 0),
+    3:  (2, 1, 0, 0, 0, 0, 0, 0, 0),
+    4:  (3, 2, 0, 0, 0, 0, 0, 0, 0),
+    5:  (4, 2, 1, 0, 0, 0, 0, 0, 0),
+    6:  (4, 2, 2, 0, 0, 0, 0, 0, 0),
+    7:  (4, 3, 2, 1, 0, 0, 0, 0, 0),
+    8:  (4, 3, 3, 2, 0, 0, 0, 0, 0),
+    9:  (4, 3, 3, 2, 1, 0, 0, 0, 0),
+    10: (4, 4, 3, 2, 2, 0, 0, 0, 0),
+    11: (4, 4, 4, 3, 3, 0, 0, 0, 0),
+    12: (4, 4, 4, 4, 4, 1, 0, 0, 0),
+    13: (5, 5, 5, 4, 4, 2, 0, 0, 0),
+    14: (5, 5, 5, 4, 4, 2, 1, 0, 0),
+    15: (5, 5, 5, 5, 5, 2, 1, 0, 0),
+    16: (5, 5, 5, 5, 5, 3, 2, 1, 0),
+    17: (5, 5, 5, 5, 5, 3, 3, 2, 0),
+    18: (5, 5, 5, 5, 5, 3, 3, 2, 1),
+    19: (5, 5, 5, 5, 5, 3, 3, 3, 1),
+    20: (5, 5, 5, 5, 5, 4, 3, 3, 2),
 }
+
+# Table 24 — Priest (spell levels 1-7). Footnotes: 6th-level spells are usable
+# only with Wisdom 17+, 7th-level only with Wisdom 18+ (see priest_spell_slots).
+_PRIEST_SPELL_SLOTS = {
+    1:  (1, 0, 0, 0, 0, 0, 0),
+    2:  (2, 0, 0, 0, 0, 0, 0),
+    3:  (2, 1, 0, 0, 0, 0, 0),
+    4:  (3, 2, 0, 0, 0, 0, 0),
+    5:  (3, 3, 1, 0, 0, 0, 0),
+    6:  (3, 3, 2, 0, 0, 0, 0),
+    7:  (3, 3, 2, 1, 0, 0, 0),
+    8:  (3, 3, 3, 2, 0, 0, 0),
+    9:  (4, 4, 3, 2, 1, 0, 0),
+    10: (4, 4, 3, 3, 2, 0, 0),
+    11: (5, 4, 4, 3, 2, 1, 0),
+    12: (6, 5, 5, 3, 2, 2, 0),
+    13: (6, 6, 6, 4, 2, 2, 0),
+    14: (6, 6, 6, 5, 3, 2, 1),
+    15: (6, 6, 6, 6, 4, 2, 1),
+    16: (7, 7, 7, 6, 4, 3, 1),
+    17: (7, 7, 7, 7, 5, 3, 2),
+    18: (8, 8, 8, 8, 6, 4, 2),
+    19: (9, 9, 8, 8, 6, 4, 2),
+    20: (9, 9, 9, 8, 7, 5, 2),
+}
+
+# Table 17 — Paladin: priest spells from 9th level (priest spell levels 1-4).
+_PALADIN_SPELL_SLOTS = {
+    9:  (1, 0, 0, 0),
+    10: (2, 0, 0, 0),
+    11: (2, 1, 0, 0),
+    12: (2, 2, 0, 0),
+    13: (2, 2, 1, 0),
+    14: (3, 2, 1, 0),
+    15: (3, 2, 1, 1),
+    16: (3, 3, 2, 1),
+    17: (3, 3, 3, 1),
+    18: (3, 3, 3, 1),
+    19: (3, 3, 3, 2),
+    20: (3, 3, 3, 3),
+}
+
+# Table 18 — Ranger: priest spells from 8th level (priest spell levels 1-3).
+_RANGER_SPELL_SLOTS = {
+    8:  (1, 0, 0),
+    9:  (2, 0, 0),
+    10: (2, 1, 0),
+    11: (2, 2, 0),
+    12: (2, 2, 1),
+    13: (3, 2, 1),
+    14: (3, 2, 2),
+    15: (3, 3, 2),
+    16: (3, 3, 3),      # "maximum spell ability" — no further gain
+}
+
+# Table 32 — Bard: wizard spells from 2nd level (wizard spell levels 1-6).
+_BARD_SPELL_SLOTS = {
+    2:  (1, 0, 0, 0, 0, 0),
+    3:  (2, 0, 0, 0, 0, 0),
+    4:  (2, 1, 0, 0, 0, 0),
+    5:  (3, 1, 0, 0, 0, 0),
+    6:  (3, 2, 0, 0, 0, 0),
+    7:  (3, 2, 1, 0, 0, 0),
+    8:  (3, 3, 1, 0, 0, 0),
+    9:  (3, 3, 2, 0, 0, 0),
+    10: (3, 3, 2, 1, 0, 0),
+    11: (3, 3, 3, 1, 0, 0),
+    12: (3, 3, 3, 2, 0, 0),
+    13: (3, 3, 3, 2, 1, 0),
+    14: (3, 3, 3, 3, 1, 0),
+    15: (3, 3, 3, 3, 2, 0),
+    16: (4, 3, 3, 3, 2, 1),
+    17: (4, 4, 3, 3, 3, 1),
+    18: (4, 4, 4, 3, 3, 2),
+    19: (4, 4, 4, 4, 3, 2),
+    20: (4, 4, 4, 4, 4, 3),
+}
+
+# Specialist wizards gain one extra spell per castable spell level (of their
+# school). Illusionist is the only specialist the builder offers.
+_SPECIALIST_WIZARDS = frozenset({"Illusionist"})
+
+
+def _progression_slots(table: dict, level: int) -> dict:
+    """{spell_level: count} for a class level, dropping the zero entries. Below the
+    table's first row the class casts nothing; past its last row slots are capped."""
+    if not table or level < min(table):
+        return {}
+    row = table[min(level, max(table))]
+    return {i + 1: n for i, n in enumerate(row) if n}
+
+
+def wizard_spell_slots(level: int, int_score=None, specialist: bool = False) -> dict:
+    """Wizard spells castable per spell level. Intelligence caps the highest spell
+    level a wizard can ever learn (Table 4); a specialist gains one extra spell of
+    each castable level."""
+    slots = _progression_slots(_WIZARD_SPELL_SLOTS, level)
+    if int_score is not None:
+        cap = intelligence_mods(int_score).max_spell_level
+        slots = {lvl: n for lvl, n in slots.items() if lvl <= cap}
+    if specialist:
+        slots = {lvl: n + 1 for lvl, n in slots.items()}
+    return slots
 
 
 def priest_spell_slots(level: int, wis) -> dict:
-    """Priest spells memorizable at a class level, per spell level, INCLUDING the
-    Wisdom bonus spells (Table 5). The base table decides which spell levels are
-    castable; the Wisdom bonus only augments those (a low-level priest gets no
-    bonus for spell levels too high to cast). E.g. level 1, Wis 16 -> {1: 3}."""
-    slots = dict(_PRIEST_SPELL_SLOTS.get(level, {}))
-    bonus = priest_bonus_spells(wis)
+    """Priest spells memorizable per spell level, INCLUDING the Wisdom bonus spells
+    (Table 5). The base table decides which spell levels are castable and the bonus
+    only augments those, so a low-level priest gets no bonus for spell levels too
+    high to cast. Table 24's footnotes also gate the top two levels on Wisdom:
+    6th-level spells need Wis 17+, 7th-level need Wis 18+."""
+    slots = _progression_slots(_PRIEST_SPELL_SLOTS, level)
+    if wis is None or wis < 17:
+        slots.pop(6, None)
+    if wis is None or wis < 18:
+        slots.pop(7, None)
+    bonus = priest_bonus_spells(wis) if wis is not None else {}
     for spell_level in list(slots):
         slots[spell_level] += bonus.get(spell_level, 0)
     return slots
+
+
+def paladin_spell_slots(level: int) -> dict:
+    """Priest spells for a paladin (9th level+). PHB: 'Unlike a priest, the paladin
+    does not gain extra spells for a high Wisdom score.'"""
+    return _progression_slots(_PALADIN_SPELL_SLOTS, level)
+
+
+def ranger_spell_slots(level: int) -> dict:
+    """Priest spells for a ranger (8th level+), plant/animal spheres only. PHB: 'He
+    does not gain bonus spells for a high Wisdom score.'"""
+    return _progression_slots(_RANGER_SPELL_SLOTS, level)
+
+
+def bard_spell_slots(level: int, int_score=None) -> dict:
+    """Wizard spells for a bard (2nd level+), capped by Intelligence like a wizard."""
+    slots = _progression_slots(_BARD_SPELL_SLOTS, level)
+    if int_score is not None:
+        cap = intelligence_mods(int_score).max_spell_level
+        slots = {lvl: n for lvl, n in slots.items() if lvl <= cap}
+    return slots
+
+
+def spell_slots(class_name: str, level: int, wis=None, int_score=None) -> dict:
+    """{spell_level: count} a class can cast at a level; {} for non-casters and for
+    casters below the level at which their progression starts."""
+    if class_name in ("Mage", "Illusionist"):
+        return wizard_spell_slots(level, int_score, class_name in _SPECIALIST_WIZARDS)
+    if class_name in ("Cleric", "Druid"):
+        return priest_spell_slots(level, wis)
+    if class_name == "Paladin":
+        return paladin_spell_slots(level)
+    if class_name == "Ranger":
+        return ranger_spell_slots(level)
+    if class_name == "Bard":
+        return bard_spell_slots(level, int_score)
+    return {}
+
+
+def max_spell_level(class_name: str, level: int, wis=None, int_score=None) -> int:
+    """The highest spell level castable, or 0 for a non-caster."""
+    slots = spell_slots(class_name, level, wis, int_score)
+    return max(slots) if slots else 0
+
+
+def spell_caster_group(class_name: str):
+    """'wizard' | 'priest' | None — which spell list a class ever draws on, ignoring
+    level. Bards cast wizard spells; paladins and rangers cast priest spells."""
+    if class_name in ("Mage", "Illusionist", "Bard"):
+        return "wizard"
+    if class_name in ("Cleric", "Druid", "Paladin", "Ranger"):
+        return "priest"
+    return None
 
 
 @dataclass(frozen=True)

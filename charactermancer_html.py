@@ -550,11 +550,20 @@ def _review_equipment(c) -> str:
 
 
 def _review_spells(c) -> str:
-    if not c.spellcasting_group():
-        return '<span class="hint">No spells at 1st level.</span>'
-    sp = "".join(f'<span class="chip">{_esc(n)}</span>' for n in c.spells) \
-        or '<span class="hint">none chosen</span>'
-    return f'<div class="chips">{sp}</div>'
+    slots = c.spell_slots()
+    if not slots:
+        return f'<span class="hint">No spells at {_ordinal(c.level)} level.</span>'
+    if not c.spells:
+        return '<span class="hint">none chosen</span>'
+    out = ""
+    for lvl in sorted(slots):
+        names = sorted(c.spells_at(lvl))
+        if not names:
+            continue
+        chips = "".join(f'<span class="chip">{_esc(n)}</span>' for n in names)
+        out += (f'<div class="side-sub">{_ordinal(lvl)} level</div>'
+                f'<div class="chips">{chips}</div>')
+    return out or '<span class="hint">none chosen</span>'
 
 
 def _review_body(cm, saved=None):
@@ -950,39 +959,29 @@ def _spell_description_html(s) -> str:
             f'<div class="pr-desc-body">{paras}</div></details>')
 
 
-def _spells_body(cm, saved=None) -> str:
+def _spell_level_section(cm, spell_level: int, catalog: dict) -> str:
+    """One spell level's budget, chosen spells and available picks."""
     c = cm.character
     group = c.spellcasting_group()
-    if not group:
-        return (
-            '<section class="prof-sec"><h3 class="prof-h">Spells</h3>'
-            '<div class="placeholder"><div class="ph-ico">✦</div>'
-            '<div class="ph-title">No spells at 1st level</div>'
-            f'<p>A {_esc(c.char_class or "character")} doesn\'t cast spells at 1st level — '
-            'skip ahead.</p></div></section>')
-
-    catalog = {s["name"]: s for s in cm.spell_catalog}
+    limit = c.spell_limit(spell_level)
+    full = not c.can_add_spell(spell_level)
     chosen_names = set(c.spells)
 
-    # Chosen spells: rows with a collapsible description, like the chosen NWPs.
     chosen = ""
-    for name in c.spells:
+    for name in sorted(c.spells_at(spell_level)):
         s = catalog.get(name, {"name": name})
-        meta = _esc(s.get("school") or "")
         chosen += (
             '<div class="prof-row">'
             f'<a class="pr-rm" href="dnd:///cm/rmspell/{name}" title="Remove">✕</a>'
             f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
-            f'<span class="pr-detail">{meta}</span>{_spell_description_html(s)}</div>'
+            f'<span class="pr-detail">{_esc(s.get("school") or "")}</span>'
+            f'{_spell_description_html(s)}</div>'
             '</div>')
-    chosen = chosen or '<span class="hint">No spells chosen yet.</span>'
+    chosen = chosen or '<span class="hint">None chosen at this level.</span>'
 
-    # Once the level-1 limit is spent, available spells grey out (dispatch also
-    # refuses the add, so this can't be worked around by clicking a stale link).
-    full = not c.can_add_spell()
     by_school: dict = {}
     for s in cm.spell_catalog:
-        if s["name"] in chosen_names:
+        if s["name"] in chosen_names or int(s.get("level") or 1) != spell_level:
             continue
         by_school.setdefault(s.get("school") or "Other", []).append(s)
     avail = ""
@@ -994,37 +993,56 @@ def _spells_body(cm, saved=None) -> str:
             chips += (f'<a class="opt{dis}" href="dnd:///cm/addspell/{s["name"]}" title="{tip}">'
                       f'<span class="opt-name">{_esc(s["name"])}</span></a>')
         avail += f'<div class="grp-label">{_esc(school)}</div><div class="opt-grid">{chips}</div>'
-    avail = avail or '<span class="hint">No spell data loaded for this class.</span>'
+    avail = avail or '<span class="hint">No spell data loaded for this level.</span>'
 
-    limit = c.spell_limit()
     if limit is None:
         budget = ('<div class="hint">Intelligence 19+ — your spellbook may hold every '
-                  '1st-level spell.</div>')
+                  'spell of this level.</div>')
     else:
         unit = "known" if group == "wizard" else "memorized"
-        budget = _budget_bar(len(c.spells), limit, "Spells", unit=unit)
-
-    guide = ("A 1st-level mage begins with a small spellbook — Read Magic (free) plus "
-             "Intelligence-capped picks." if group == "wizard" else
-             "Choose the 1st-level priest spells you'll memorize; Wisdom grants bonus slots.")
-    full_note = ('<div class="hint">Spell limit reached — remove one to choose another.</div>'
-                 if full and limit else "")
-    # Spell progression above 1st level isn't modelled yet (leveling phase 2), so be
-    # explicit rather than quietly showing 1st-level slots for a high-level caster.
-    level_note = (
-        f'<div class="callout warn2">✦ <b>{_ordinal(c.level)}-level {group}.</b> '
-        'Spell progression above 1st level isn\'t modelled yet — the spells and slot '
-        'limits below are still the 1st-level ones. Add the rest by hand for now.</div>'
-        if c.level > 1 else "")
+        budget = _budget_bar(len(c.spells_at(spell_level)), limit,
+                             f"{_ordinal(spell_level)}-level spells", unit=unit)
+    full_note = ('<div class="hint">Limit reached at this level — remove one to choose '
+                 'another.</div>' if full and limit else "")
     return (
-        '<section class="prof-sec">'
-        f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; 1st level</span></h3>'
-        f'{level_note}{budget}'
-        f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
-        '<div class="side-sub">Chosen</div>'
+        f'<div class="grp-label" style="margin-top:18px">{_ordinal(spell_level)} level</div>'
+        f'{budget}'
         f'<div class="chosen-list">{chosen}</div>'
         f'{full_note}'
-        f'<div class="avail">{avail}</div>'
+        f'<div class="avail">{avail}</div>')
+
+
+def _spells_body(cm, saved=None) -> str:
+    c = cm.character
+    group = c.spellcasting_group()
+    slots = c.spell_slots()
+    if not group or not slots:
+        # Either a non-caster, or a caster below the level its progression starts
+        # (a ranger before 8th, a paladin before 9th, a bard at 1st).
+        if group and c.char_class:
+            why = (f'A {_esc(c.char_class)} gains no spells until a higher level — '
+                   f'they cast nothing at {_ordinal(c.level)} level.')
+        else:
+            why = (f'A {_esc(c.char_class or "character")} doesn\'t cast spells — '
+                   'skip ahead.')
+        return (
+            '<section class="prof-sec"><h3 class="prof-h">Spells</h3>'
+            '<div class="placeholder"><div class="ph-ico">✦</div>'
+            f'<div class="ph-title">No spells at {_ordinal(c.level)} level</div>'
+            f'<p>{why}</p></div></section>')
+
+    catalog = {s["name"]: s for s in cm.spell_catalog}
+    guide = ("Your spellbook's size at each level is capped by Intelligence."
+             if group == "wizard" else
+             "Choose the priest spells you'll memorize; Wisdom grants bonus spells.")
+    sections = "".join(_spell_level_section(cm, lvl, catalog) for lvl in sorted(slots))
+    return (
+        '<section class="prof-sec">'
+        f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; '
+        f'{_ordinal(c.level)} level &middot; up to {_ordinal(max(slots))}-level spells'
+        '</span></h3>'
+        f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
+        f'{sections}'
         '</section>')
 
 

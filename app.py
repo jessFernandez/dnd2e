@@ -1378,16 +1378,21 @@ class MainWindow(QMainWindow):
         return True
 
     def _set_spell_catalog(self):
-        """Load the level-1 spell list for the build's class onto the controller so
-        the Spells step can render and validate picks. Empty for non-casters."""
-        group = self._cm.character.spellcasting_group()
-        if not group:
+        """Load the spell list for the build's class onto the controller so the Spells
+        step can render and validate picks: every spell of a level the character can
+        actually cast. Empty for non-casters (and for casters below the level their
+        progression starts, e.g. a 7th-level ranger)."""
+        char = self._cm.character
+        group = char.spellcasting_group()
+        max_level = char.max_spell_level()
+        if not group or max_level < 1:
             self._cm.spell_catalog = []
             return
         if self._all_spells is None:
             self._all_spells = db.all_spells(self.db)
-        self._cm.spell_catalog = [s for s in self._all_spells
-                                  if s.get("caster") == group and s.get("level") == 1]
+        self._cm.spell_catalog = [
+            s for s in self._all_spells
+            if s.get("caster") == group and 1 <= (s.get("level") or 0) <= max_level]
 
     def _cm_action(self, path: str):
         """Apply a cm/ link action to the builder and re-render it in place. Save/

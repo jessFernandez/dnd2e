@@ -75,7 +75,7 @@ class Character:
     money_cp: int = 0                                     # copper pieces on hand
     inventory: dict = field(default_factory=dict)        # item name -> quantity
     worn: list = field(default_factory=list)             # equipped armor item names (⊆ inventory)
-    spells: list = field(default_factory=list)           # chosen spell names
+    spells: dict = field(default_factory=dict)           # spell name -> its spell level
 
     # ── ability scores ──────────────────────────────────────────────────────
     def ability_names(self) -> list:
@@ -295,45 +295,64 @@ class Character:
 
     # ── equipment & spells ───────────────────────────────────────────────────
     def spellcasting_group(self):
-        """'wizard', 'priest', or None — which spell list this class draws on at
-        1st level. Warriors and rogues gain spells only at higher levels (if ever),
-        so they cast nothing at creation."""
+        """'wizard', 'priest', or None — which spell list this class ever draws on.
+        Bards cast wizard spells; paladins and rangers cast priest spells. Says
+        nothing about *this* level — use spell_slots() for that."""
         if not self.char_class:
             return None
-        group = cr.CLASSES[self.char_class].group
-        return {"Wizard": "wizard", "Priest": "priest"}.get(group)
+        return cr.spell_caster_group(self.char_class)
 
-    def spell_limit(self):
-        """How many spells may be chosen at 1st level. Wizards are capped by
-        Intelligence (max spells known per level; None means 'All', Int 19+);
-        priests by their 1st-level spell slots plus the Wisdom bonus. Returns None
-        when there's no cap (unlimited, or a non-caster class)."""
+    def spell_slots(self) -> dict:
+        """{spell_level: count} castable at the character's level; {} for a
+        non-caster, and for a caster below the level its progression starts."""
+        if not self.char_class:
+            return {}
+        final = self.final_abilities()
+        return cr.spell_slots(self.char_class, self.level,
+                              final.get("Wisdom"), final.get("Intelligence"))
+
+    def max_spell_level(self) -> int:
+        slots = self.spell_slots()
+        return max(slots) if slots else 0
+
+    def casts_spells(self) -> bool:
+        """Whether the character has any spell slots at their current level."""
+        return bool(self.spell_slots())
+
+    def spells_at(self, spell_level: int) -> list:
+        """Chosen spell names of one spell level."""
+        return [n for n, lvl in self.spells.items() if lvl == spell_level]
+
+    def spell_limit(self, spell_level: int = 1):
+        """How many spells of `spell_level` may be chosen. Wizards (and bards) are
+        capped by Intelligence's max-spells-per-level — the size of the spellbook at
+        that level, None meaning 'All' at Int 19+. Priests (and paladins/rangers) are
+        capped by the spells they can memorize. 0 when that spell level isn't
+        castable yet; None for a non-caster (no cap concept)."""
         group = self.spellcasting_group()
+        if group is None:
+            return None
+        slots = self.spell_slots()
+        if spell_level not in slots:
+            return 0                       # not castable at this class level
         if group == "wizard":
             intel = self.final_abilities().get("Intelligence")
             if intel is None:
                 return 0
             cap = cr.intelligence_mods(intel).max_spells_per_level
             return None if cap >= 999 else cap
-        if group == "priest":
-            wis = self.final_abilities().get("Wisdom")
-            if wis is None:
-                return 0
-            # Class level 1 is deliberate: only level-1 priest slots are tabulated
-            # (leveling phase 2 fills Table 24). The Spells step says so on screen.
-            return cr.priest_spell_slots(1, wis).get(1, 0)
-        return None
+        return slots[spell_level]
 
-    def spells_left(self):
-        """Remaining spell picks, or None when uncapped (unlimited / non-caster)."""
-        limit = self.spell_limit()
+    def spells_left(self, spell_level: int = 1):
+        """Remaining picks at a spell level, or None when uncapped."""
+        limit = self.spell_limit(spell_level)
         if limit is None:
             return None
-        return max(0, limit - len(self.spells))
+        return max(0, limit - len(self.spells_at(spell_level)))
 
-    def can_add_spell(self) -> bool:
-        """Whether another spell may be chosen (False once the limit is reached)."""
-        left = self.spells_left()
+    def can_add_spell(self, spell_level: int = 1) -> bool:
+        """Whether another spell of that level may be chosen."""
+        left = self.spells_left(spell_level)
         return left is None or left > 0
 
     def movement(self) -> int:
@@ -377,7 +396,7 @@ class Character:
             "money_cp": self.money_cp,
             "inventory": dict(self.inventory),
             "worn": list(self.worn),
-            "spells": list(self.spells),
+            "spells": dict(self.spells),
         }
 
     @classmethod
@@ -388,7 +407,11 @@ class Character:
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])
-        d["spells"] = list(d.get("spells") or [])
+        # Spells were a flat name list before per-spell-level limits existed; every
+        # one of them was necessarily a 1st-level spell, so migrate to {name: 1}.
+        spells = d.get("spells") or {}
+        d["spells"] = ({n: 1 for n in spells} if isinstance(spells, list)
+                       else {n: int(lvl) for n, lvl in spells.items()})
         # Saves written before levelling existed carry no level/xp/hp_rolls; the
         # dataclass defaults (level 1, no xp, no rolls) are exactly right for them.
         d["level"] = int(d.get("level") or 1)

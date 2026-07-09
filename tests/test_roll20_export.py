@@ -17,7 +17,7 @@ def _cleric() -> Character:
     c.worn = [armor]
     c.nonweapon_profs = {"Healing": 1, "Anatomy": 1}
     c.weapon_profs = ["Mace"]
-    c.spells = ["Bless"]
+    c.spells = {"Bless": 1}
     return c
 
 
@@ -63,6 +63,14 @@ def test_export_armor_and_spell_details():
     assert sp["description"].startswith("Bless")
     assert sp["save"] == "None" and sp["materials"] == "holy water"
     assert sp["verbal"] == 1 and sp["somatic"] == 1 and sp["material"] == 1
+
+
+def test_export_spells_carry_their_own_level():
+    c = _cleric()
+    c.spells = {"Bless": 1, "Silence": 2, "Prayer": 3}
+    d = rx.character_to_roll20(c)
+    by_name = {s["name"]: s["level"] for s in d["spells"]}
+    assert by_name == {"Bless": 1, "Silence": 2, "Prayer": 3}   # drives repeating_spells<N>
 
 
 def test_export_carries_level_and_xp():

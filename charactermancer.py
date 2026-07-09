@@ -309,15 +309,31 @@ class Charactermancer:
     def _catalog_names(self) -> set:
         return {s["name"] for s in self.spell_catalog}
 
+    def spell_level_of(self, name: str):
+        """The spell level of a catalog spell, or None if it isn't in the catalog."""
+        for s in self.spell_catalog:
+            if s["name"] == name:
+                return int(s.get("level") or 1)
+        return None
+
+    def chosen_by_level(self) -> dict:
+        """{spell_level: [names]} of the spells already chosen, in catalog order."""
+        out = {}
+        for name, lvl in self.character.spells.items():
+            out.setdefault(lvl, []).append(name)
+        return out
+
     def add_spell(self, name: str):
-        # Respect the level-1 spell limit (wizard: Int cap; priest: slots + Wis bonus).
-        if (name in self._catalog_names() and name not in self.character.spells
-                and self.character.can_add_spell()):
-            self.character.spells.append(name)
+        """Add a spell, respecting the budget for *its own* spell level (wizards are
+        capped by Intelligence, priests by memorizable slots)."""
+        spell_level = self.spell_level_of(name)
+        if spell_level is None or name in self.character.spells:
+            return
+        if self.character.can_add_spell(spell_level):
+            self.character.spells[name] = spell_level
 
     def remove_spell(self, name: str):
-        if name in self.character.spells:
-            self.character.spells.remove(name)
+        self.character.spells.pop(name, None)
 
     # ── action dispatch (from dnd:///cm/<path> links) ─────────────────────────
     def dispatch(self, path: str) -> bool:

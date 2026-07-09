@@ -62,6 +62,71 @@ def test_priest_spell_slots_level1_includes_only_castable_bonus():
     assert cr.priest_spell_slots(1, 18) == {1: 3}
 
 
+# ── Spell progression (PHB Tables 21, 24, 17, 18, 32) ────────────────────────
+
+def test_wizard_progression_matches_table_21():
+    assert cr.wizard_spell_slots(1) == {1: 1}
+    assert cr.wizard_spell_slots(5) == {1: 4, 2: 2, 3: 1}
+    assert cr.wizard_spell_slots(12) == {1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 1}
+    assert cr.wizard_spell_slots(20) == {1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 4, 7: 3, 8: 3, 9: 2}
+
+
+def test_intelligence_caps_the_highest_wizard_spell_level():
+    # Int 9 -> max spell level 4, so a 12th-level mage loses his 5th and 6th
+    assert cr.wizard_spell_slots(12, int_score=9) == {1: 4, 2: 4, 3: 4, 4: 4}
+    assert cr.max_spell_level("Mage", 20, int_score=18) == 9
+
+
+def test_specialist_wizard_gains_one_extra_spell_per_level():
+    assert cr.wizard_spell_slots(5) == {1: 4, 2: 2, 3: 1}
+    assert cr.spell_slots("Illusionist", 5, int_score=18) == {1: 5, 2: 3, 3: 2}
+    assert cr.spell_slots("Mage", 5, int_score=18) == {1: 4, 2: 2, 3: 1}   # not a specialist
+
+
+def test_priest_progression_matches_table_24_with_wisdom_bonus():
+    # base row 9 is 4/4/3/2/1; Wis 13 adds one 1st-level bonus spell
+    assert cr.priest_spell_slots(9, 13) == {1: 5, 2: 4, 3: 3, 4: 2, 5: 1}
+    assert cr.priest_spell_slots(9, 10) == {1: 4, 2: 4, 3: 3, 4: 2, 5: 1}   # no bonus
+
+
+def test_priest_top_two_spell_levels_are_gated_on_wisdom():
+    # Table 24 footnotes: 6th needs Wis 17+, 7th needs Wis 18+
+    assert 6 not in cr.priest_spell_slots(11, 16)
+    assert 6 in cr.priest_spell_slots(11, 17)
+    assert 7 not in cr.priest_spell_slots(14, 17)
+    assert 7 in cr.priest_spell_slots(14, 18)
+
+
+def test_paladin_and_ranger_cast_late_and_get_no_wisdom_bonus():
+    assert cr.spell_slots("Paladin", 8) == {}           # nothing before 9th
+    assert cr.spell_slots("Paladin", 9) == {1: 1}
+    assert cr.spell_slots("Ranger", 7) == {}            # nothing before 8th
+    assert cr.spell_slots("Ranger", 8) == {1: 1}
+    # PHB is explicit: neither gains bonus spells for high Wisdom
+    assert cr.spell_slots("Paladin", 9, wis=18) == {1: 1}
+    assert cr.spell_slots("Ranger", 8, wis=18) == {1: 1}
+    # a ranger's slots stop improving after the table's last row (16th)
+    assert cr.spell_slots("Ranger", 20) == cr.spell_slots("Ranger", 16) == {1: 3, 2: 3, 3: 3}
+
+
+def test_bard_casts_wizard_spells_from_second_level():
+    assert cr.spell_slots("Bard", 1, int_score=16) == {}
+    assert cr.spell_slots("Bard", 2, int_score=16) == {1: 1}
+    assert cr.spell_slots("Bard", 20, int_score=18) == {1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 3}
+
+
+def test_spell_caster_group_and_noncasters():
+    assert cr.spell_caster_group("Mage") == "wizard"
+    assert cr.spell_caster_group("Bard") == "wizard"      # bards cast wizard spells
+    assert cr.spell_caster_group("Cleric") == "priest"
+    assert cr.spell_caster_group("Paladin") == "priest"   # ...and paladins priest spells
+    assert cr.spell_caster_group("Ranger") == "priest"
+    for cls in ("Fighter", "Thief"):
+        assert cr.spell_caster_group(cls) is None
+        assert cr.spell_slots(cls, 20) == {}
+        assert cr.max_spell_level(cls, 20) == 0
+
+
 def test_charisma_henchmen_and_reaction():
     assert cr.charisma_mods(18).max_henchmen == 15
     assert cr.charisma_mods(18).loyalty_base == 8

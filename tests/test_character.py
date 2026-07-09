@@ -158,14 +158,14 @@ def test_wizard_spell_limit_capped_by_intelligence():
     assert c.spellcasting_group() == "wizard"
     assert c.spell_limit() == cr.intelligence_mods(11).max_spells_per_level  # 7
     assert c.spells_left() == 7 and c.can_add_spell()
-    c.spells = list("abcdefg")                            # 7 chosen -> full
+    c.spells = {n: 1 for n in "abcdefg"}                  # 7 chosen -> full
     assert c.spells_left() == 0 and not c.can_add_spell()
 
 
 def test_wizard_high_intelligence_is_unlimited():
     c = _with(Intelligence=19); c.race, c.char_class = "Human", "Mage"
     assert c.spell_limit() is None and c.spells_left() is None
-    c.spells = list("abcdefghij")
+    c.spells = {n: 1 for n in "abcdefghij"}
     assert c.can_add_spell()                              # no cap at Int 19+ ("All")
 
 
@@ -173,13 +173,45 @@ def test_priest_spell_limit_from_wisdom_slots():
     c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
     assert c.spellcasting_group() == "priest"
     assert c.spell_limit() == 3                           # 1 base + 2 Wis bonus
-    c.spells = ["x", "y", "z"]
+    c.spells = {"x": 1, "y": 1, "z": 1}
     assert c.spells_left() == 0 and not c.can_add_spell()
 
 
 def test_noncaster_has_no_spell_limit():
     c = _with(); c.race, c.char_class = "Human", "Fighter"
     assert c.spell_limit() is None and c.can_add_spell()
+    assert c.spell_slots() == {} and not c.casts_spells()
+
+
+def test_spell_slots_and_limits_are_per_spell_level():
+    c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
+    c.set_level(5, rng=random.Random(1))
+    assert c.spell_slots() == {1: 5, 2: 3, 3: 1}       # 3/3/1 base, +2 Wis bonus at 1st
+    assert c.max_spell_level() == 3
+    assert c.spell_limit(1) == 5 and c.spell_limit(2) == 3 and c.spell_limit(3) == 1
+    assert c.spell_limit(4) == 0                       # not castable yet
+    c.spells = {"Prayer": 3}
+    assert not c.can_add_spell(3) and c.can_add_spell(1)
+    assert c.spells_at(3) == ["Prayer"] and c.spells_at(1) == []
+
+
+def test_late_casters_have_no_slots_before_their_level():
+    for cls, first in (("Paladin", 9), ("Ranger", 8), ("Bard", 2)):
+        c = _with(Intelligence=16, Wisdom=16)
+        c.race, c.char_class = "Human", cls
+        assert c.spellcasting_group() is not None       # they *are* casters...
+        assert not c.casts_spells()                     # ...just not yet at 1st
+        c.set_level(first, rng=random.Random(2))
+        assert c.casts_spells() and c.spell_slots() == {1: 1}
+
+
+def test_legacy_spell_list_migrates_to_levelled_dict():
+    c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
+    legacy = c.to_dict()
+    legacy["spells"] = ["Bless", "Cure Light Wounds"]   # the old flat list
+    back = ch.Character.from_dict(legacy)
+    assert back.spells == {"Bless": 1, "Cure Light Wounds": 1}   # all were 1st level
+    assert back.spells_at(1) == ["Bless", "Cure Light Wounds"]
 
 
 def test_out_of_range_scores_flagged():
@@ -413,7 +445,7 @@ def test_serialization_preserves_equipment_and_spells():
     c.money_cp = 12345
     c.inventory = {"Gambeson, Body": 1}
     c.worn = ["Gambeson, Body"]
-    c.spells = ["Bless", "Cure Light Wounds"]
+    c.spells = {"Bless": 1, "Cure Light Wounds": 1}
     r = ch.Character.from_dict(json.loads(json.dumps(c.to_dict())))
     assert r.money_cp == 12345 and r.inventory == c.inventory
     assert r.worn == c.worn and r.spells == c.spells

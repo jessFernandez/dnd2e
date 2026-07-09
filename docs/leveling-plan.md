@@ -1,6 +1,6 @@
 # Feature plan: character leveling / advancement
 
-Status: **Phase 1 done** (engine + state); phases 2–3 planned · Last updated: 2026-07-09
+Status: **Phases 1 + 2 done**; Phase 3 planned · Last updated: 2026-07-09
 
 Turn the character builder from a level-1 generator into a real character manager
 that can set a character's level (or track XP and level up) and recompute every
@@ -54,16 +54,17 @@ gone:
    less than 1 hp); levels past `name_level` add `hp_after` flat with **no die and
    no Con bonus**. Con is applied at call time, not baked into the rolls, so a
    later Constitution change recomputes correctly.
-2. **Spellcaster spell-slot tables** — the biggest transcription gap:
-   - Wizard **Table 21** (spells of each level by class level 1–20) — absent
-   - Priest **Table 24** (base priest spells by class level) — **partially added**:
-     `char_rules.priest_spell_slots(level, wis)` + `_PRIEST_SPELL_SLOTS` now exist
-     but only **class level 1** is tabulated (added for the builder's level-1 spell
-     limit). Fill in levels 2–20 here. It already combines the base with
-     `priest_bonus_spells(wis)`, capping the bonus to castable spell levels.
-   - Wizard highest castable level is currently gated only by Intelligence
-     (`max_spell_level`), not by class level
-   - The builder filters spells to `level == 1` today (`_set_spell_catalog`)
+2. ✅ **Spellcaster spell-slot tables — DONE (Phase 2).** All five transcribed into
+   `char_rules`, with `spell_slots(class, level, wis, int)` / `max_spell_level()` /
+   `spell_caster_group()` over them:
+   - Wizard **Table 21** (levels 1–20, spell levels 1–9), capped by Intelligence's
+     highest-castable-level; **specialists** (Illusionist) gain +1 spell per level
+   - Priest **Table 24** (levels 1–20, spell levels 1–7) + the Wisdom bonus spells.
+     Its footnotes are enforced: **6th-level spells need Wis 17+, 7th need Wis 18+**
+   - Paladin **Table 17** (9th+), Ranger **Table 18** (8th+), Bard **Table 32** (2nd+).
+     PHB is explicit that **neither paladins nor rangers get Wisdom bonus spells**;
+     the ranger's slots stop improving after 16th ("maximum spell ability")
+   - `_set_spell_catalog` now offers every spell of a castable level, not just 1st
 3. ✅ **Multiple attacks per round (warriors) — DONE.** `cr.attacks_per_round(class,
    level)` returns `(attacks, rounds)`: 1/1 → 3/2 at 7th → 2/1 at 13th, Warrior
    group only. (Weapon specialisation grants further attacks — that's Combat &
@@ -75,8 +76,11 @@ gone:
    Dex (Table 27), race (Table 28), and armor adjustments. **Completely
    unmodeled today.** A Thief level-up without this is a major omission.
 5. **Turn Undead (Table 61)** — Cleric from 1st, Paladin from 3rd (as cleric −2).
-6. **Sub-caster progressions** — Ranger priest spells @8th, Paladin priest spells
-   @9th, Bard wizard spells (Table 25). Tie into #2 with their own capped tables.
+6. ✅ **Sub-caster progressions — DONE (Phase 2).** Ranger @8th, Paladin @9th, Bard
+   @2nd, each with its own capped table. `spellcasting_group()` now reports what a
+   class *ever* casts (bards → wizard, paladins/rangers → priest) while
+   `casts_spells()` / `spell_slots()` answer for *this* level, so the Spells step
+   shows a proper "no spells until a higher level" placeholder.
 
 ### ⚪ Out of scope (narrative / DM-adjudicated / optional — the rulebook browser already covers these)
 
@@ -116,11 +120,14 @@ modelling; still worth offering as an override later).
   — and again on the finished **Review** sheet so a saved character can level up in
   place. The `+` disables at the racial cap; the stored hit dice are listed with a
   reroll link; the side rail and sheet now read "At *N*th level" and show
-  attacks/round. The Spells step **warns explicitly** when level > 1 that spell
-  progression above 1st isn't modelled yet (see Phase 2) rather than quietly
-  showing 1st-level slots.
-- **Phase 2 — casters:** Wizard Table 21 + Priest Table 24 (+ specialist / Ranger
-  @8 / Paladin @9 / Bard hooks); extend the Spells step beyond level 1.
+  attacks/round. (It also warned that spell progression above 1st wasn't modelled —
+  Phase 2 made that warning unnecessary and removed it.)
+- ✅ **Phase 2 — casters: DONE.** All five progression tables, the Intelligence cap,
+  the priest Wisdom gates, the specialist bonus, and the sub-casters. The Spells
+  step now renders **one budgeted section per castable spell level** (so a 5th-level
+  cleric picks 1st-, 2nd- and 3rd-level spells against separate budgets), and the
+  "progression isn't modelled" warning is gone. `Character.spells` became
+  `{name: spell_level}`; legacy saves holding a flat name list migrate to `{n: 1}`.
 - **Phase 3 — Thief skills** subsystem and Turn Undead.
 
 ## Conventions to follow (per CLAUDE.md)

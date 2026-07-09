@@ -151,13 +151,48 @@ def test_html_review_shows_level_and_advance_control():
     assert "dnd:///cm/level/" in html                  # level up from the sheet
 
 
-def test_html_spells_step_warns_above_first_level():
+def test_html_spells_step_shows_a_section_per_castable_level():
+    cm = _cleric_at_profs()                       # Wis 14
+    cm.dispatch("level/5")                        # Table 24 row 5 = 3/3/1, +2 Wis bonus at 1st
+    cm.index = STEPS.index("spells")
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1},
+                        {"name": "Silence", "school": "Guardian", "level": 2}]
+    html = cmh.generate(cm)
+    assert "up to 3rd-level spells" in html
+    for label in ("1st level", "2nd level", "3rd level"):
+        assert label in html
+    assert "dnd:///cm/addspell/Silence" in html    # 2nd-level spells are now offered
+    # per-spell-level budgets: 5 first-level (3 base + 2 Wisdom bonus), 3 second, 1 third
+    assert "0 of 5 memorized" in html
+    assert "0 of 3 memorized" in html
+    assert "0 of 1 memorized" in html
+
+
+def test_html_spells_step_placeholder_for_late_casters():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Ranger")   # rangers cast nothing before 8th
+    cm.index = STEPS.index("spells")
+    html = cmh.generate(cm)
+    assert "No spells at 1st level" in html
+    assert "gains no spells until a higher level" in html
+
+
+def test_spell_added_at_its_own_level_and_budgeted_separately():
     cm = _cleric_at_profs()
     cm.dispatch("level/5")
-    cm.index = STEPS.index("spells")
-    cm.spell_catalog = [{"name": "Bless", "school": "Combat"}]
-    html = cmh.generate(cm)
-    assert "5th-level priest" in html and "1st level" in html   # honest about the gap
+    cm.spell_catalog = [{"name": "Bless", "school": "C", "level": 1},
+                        {"name": "Silence", "school": "G", "level": 2},
+                        {"name": "Prayer", "school": "C", "level": 3},
+                        {"name": "Chant", "school": "C", "level": 3}]
+    cm.dispatch("addspell/Bless")
+    cm.dispatch("addspell/Silence")
+    cm.dispatch("addspell/Prayer")
+    assert cm.character.spells == {"Bless": 1, "Silence": 2, "Prayer": 3}
+    # only one 3rd-level slot at 5th level, so the second 3rd-level pick is refused
+    cm.dispatch("addspell/Chant")
+    assert "Chant" not in cm.character.spells
+    # ...but the 1st-level budget (5) is untouched by that
+    assert cm.character.can_add_spell(1) and not cm.character.can_add_spell(3)
 
 
 def test_ordinal_suffixes():
@@ -789,12 +824,12 @@ def test_cannot_overspend_on_equipment():
 def test_spell_pick_validated_against_catalog():
     cm = _cleric_at_profs()
     cm.index = STEPS.index("spells")
-    cm.spell_catalog = [{"name": "Bless", "school": "Combat"}]
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1}]
     cm.dispatch("addspell/Bless")
     cm.dispatch("addspell/Fireball")                       # not in catalog -> rejected
-    assert cm.character.spells == ["Bless"]
+    assert cm.character.spells == {"Bless": 1}
     cm.dispatch("rmspell/Bless")
-    assert cm.character.spells == []
+    assert cm.character.spells == {}
 
 
 def test_html_equipment_and_spells_steps_render():
@@ -805,7 +840,7 @@ def test_html_equipment_and_spells_steps_render():
     assert "Equipment" in h and "Armor Class" in h and "dnd:///cm/buy/" in h
     cm2 = _cleric_at_profs()
     cm2.index = STEPS.index("spells")
-    cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "description": "x"}]
+    cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1, "description": "x"}]
     assert "dnd:///cm/addspell/Bless" in cmh.generate(cm2)
 
 
@@ -813,10 +848,10 @@ def test_spell_pick_respects_level1_limit():
     cm = _cleric_at_profs()                                # Wis 14 -> 3 spells
     cm.index = STEPS.index("spells")
     names = ["Bless", "Cure Light Wounds", "Sanctuary", "Command"]
-    cm.spell_catalog = [{"name": n, "school": "Combat"} for n in names]
+    cm.spell_catalog = [{"name": n, "school": "Combat", "level": 1} for n in names]
     for n in names:
         cm.dispatch("addspell/" + n)
-    assert cm.character.spells == names[:3]                # capped at the 3-spell limit
+    assert set(cm.character.spells) == set(names[:3])      # capped at the 3-spell limit
     cm.dispatch("rmspell/Bless")                           # free up a slot
     cm.dispatch("addspell/Command")
     assert "Command" in cm.character.spells and len(cm.character.spells) == 3
@@ -825,7 +860,7 @@ def test_spell_pick_respects_level1_limit():
 def test_html_spells_shows_limit_and_collapsible_info():
     cm = _cleric_at_profs()
     cm.index = STEPS.index("spells")
-    cm.spell_catalog = [{"name": "Bless", "school": "Combat",
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1,
                          "description": "The caster raises morale for nearby allies."}]
     cm.dispatch("addspell/Bless")
     h = cmh.generate(cm)
