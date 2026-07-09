@@ -529,8 +529,7 @@ def _review_profs(c) -> str:
     weapons += [f"{a} (armor prof.)" for a in c.armor_profs]
     weapons += [f"{s} style" + (" (specialised)" if c.style_specialisation(s) else "")
                 for s in c.fighting_styles]
-    if c.bought_ambidexterity:
-        weapons.append("Ambidexterity")
+    weapons += list(c.special_talents)
     wp = ", ".join(_esc(w) for w in weapons) or "none"
     nwp = ""
     for name in c.nonweapon_profs:
@@ -903,6 +902,57 @@ def _fighting_styles_block(cm) -> str:
         + (f'<div class="opt-grid">{opts}</div>' if opts else ""))
 
 
+def _talents_block(cm) -> str:
+    """CT special talents. Bought with weapon slots; the two CT asterisks (Alertness,
+    Endurance) may use a nonweapon slot instead."""
+    c = cm.character
+    if not c.char_class:
+        return ""
+
+    rows = ""
+    for name, source in c.special_talents.items():
+        talent = cr.SPECIAL_TALENTS.get(name)
+        if not talent:
+            continue
+        bits = [f'{talent.slots} {source} slot' + ("s" if talent.slots != 1 else "")]
+        skill = c.talent_skill(name)
+        if skill is not None:
+            bits.append(f'{_ABBR.get(talent.ability, talent.ability)} check {skill}')
+        if talent.initial_rating:
+            bits.append(f'rating {talent.initial_rating}')
+        rows += (
+            '<div class="prof-row">'
+            f'<a class="pr-rm" href="dnd:///cm/rmtalent/{name}" title="Remove">✕</a>'
+            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
+            f'<span class="pr-detail">{" &middot; ".join(bits)}</span></div>'
+            f'<div class="pr-slots"><span class="pr-sn">{talent.slots}</span></div></div>')
+
+    opts = ""
+    for talent in cr.talents_for_class(c.char_class):
+        if talent.name in c.special_talents:
+            continue
+        dis = "" if c.can_add_talent(talent.name) else " dis"
+        meta = (f'<span class="opt-meta">{_ABBR.get(talent.ability, talent.ability)}</span>'
+                if talent.ability else "")
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addtalent/{talent.name}">'
+                 f'<span class="opt-name">{_esc(talent.name)}</span>{meta}'
+                 f'<span class="opt-cost">{talent.slots}</span></a>')
+        if talent.either_slot:
+            dis2 = "" if c.can_add_talent(talent.name, "nonweapon") else " dis"
+            opts += (f'<a class="opt{dis2}" href="dnd:///cm/addtalentnwp/{talent.name}" '
+                     f'title="Pay with a nonweapon slot instead">'
+                     f'<span class="opt-name">{_esc(talent.name)} (NWP)</span>'
+                     f'<span class="opt-cost">{talent.slots}</span></a>')
+    opts = opts or '<span class="hint">No talents available to this class.</span>'
+
+    return (
+        '<div class="grp-label" style="margin-top:16px">Special talents</div>'
+        '<div class="hint">Bought with weapon slots. Alertness and Endurance may be '
+        'paid for with a nonweapon slot instead (CT marks them with an asterisk).</div>'
+        + (f'<div class="chosen-list">{rows}</div>' if rows else "")
+        + f'<div class="opt-grid">{opts}</div>')
+
+
 def _weapon_section(cm) -> str:
     c = cm.character
     total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
@@ -912,22 +962,11 @@ def _weapon_section(cm) -> str:
     for w in cr.WEAPONS:
         if w not in c.weapon_profs and c.group_covers(w):
             chosen += _weapon_row(cm, w, "proficient", from_group=True)
-    if c.bought_ambidexterity:
-        chosen += (
-            '<div class="prof-row">'
-            '<a class="pr-rm" href="dnd:///cm/ambi" title="Remove">✕</a>'
-            '<div class="pr-main"><span class="pr-name">Ambidexterity</span>'
-            '<span class="pr-detail">Special talent &middot; 1 slot</span></div>'
-            f'<div class="pr-slots"><span class="pr-sn">'
-            f'{cr.HOUSE_RULES.ambidexterity_slot_cost}</span></div></div>')
     chosen = chosen or '<span class="hint">No weapons chosen yet.</span>'
 
+    # Ambidexterity is no longer special-cased here — it is a CT special talent and
+    # lives in the talents block below.
     opts = ""
-    if c.can_buy_ambidexterity() and not c.bought_ambidexterity:
-        cost = cr.HOUSE_RULES.ambidexterity_slot_cost
-        dis = "" if cost <= left else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/ambi"><span class="opt-name">Ambidexterity</span>'
-                 f'<span class="opt-cost">{cost}</span></a>')
     for w in cr.WEAPONS:
         if w in c.weapon_profs or c.group_covers(w):
             continue                       # already trained, or granted by a group
@@ -963,6 +1002,7 @@ def _weapon_section(cm) -> str:
         f'{_weapon_group_block(cm)}'
         f'{_shield_armor_block(cm)}'
         f'{_fighting_styles_block(cm)}'
+        f'{_talents_block(cm)}'
         '</section>'
     )
 

@@ -83,7 +83,10 @@ class Character:
     # every style for free; nonwarriors pay a slot to learn one.
     fighting_styles: dict = field(default_factory=dict)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
-    bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
+    # Combat & Tactics special talents: name -> which budget paid for it,
+    # "weapon" or "nonweapon" (only CT's asterisked talents may use the latter).
+    # Ambidexterity lives here too — the campaign's house rule *is* the CT talent.
+    special_talents: dict = field(default_factory=dict)
     # Equipment (Equipment step) and known spells (Spells step).
     money_cp: int = 0                                     # copper pieces on hand
     inventory: dict = field(default_factory=dict)        # item name -> quantity
@@ -271,8 +274,7 @@ class Character:
         used += cr.ARMOR_PROF_SLOT_COST * len(self.armor_profs)
         used += sum(cr.style_slot_cost(s, n, self.char_class)
                     for s, n in self.fighting_styles.items())
-        if self.bought_ambidexterity:
-            used += cr.HOUSE_RULES.ambidexterity_slot_cost
+        used += self.talent_slots_used("weapon")
         return used
 
     def weapon_slots_left(self) -> int:
@@ -374,7 +376,7 @@ class Character:
         return cr.nonweapon_slots(self.char_class, self.level, int_score, self.house_rules)
 
     def nonweapon_slots_used(self) -> int:
-        return sum(self.nonweapon_profs.values())
+        return sum(self.nonweapon_profs.values()) + self.talent_slots_used("nonweapon")
 
     def nonweapon_slots_left(self) -> int:
         return self.nonweapon_slots_total() - self.nonweapon_slots_used()
@@ -466,6 +468,49 @@ class Character:
         """Base movement rate (PHB). Demihumans (dwarf/gnome/halfling) are 6, the
         rest 12; defaults to 12 before a race is chosen."""
         return cr.RACES[self.race].movement if self.race in cr.RACES else 12
+
+    # ── special talents (Combat & Tactics) ───────────────────────────────────
+    def talent_slots_used(self, source: str) -> int:
+        """Slots one budget has spent on talents ('weapon' or 'nonweapon')."""
+        return sum(cr.SPECIAL_TALENTS[name].slots
+                   for name, paid_from in self.special_talents.items()
+                   if paid_from == source and name in cr.SPECIAL_TALENTS)
+
+    @property
+    def bought_ambidexterity(self) -> bool:
+        """Kept as an attribute because the campaign's house rule *is* CT's
+        Ambidexterity talent; it's stored as one."""
+        return "Ambidexterity" in self.special_talents
+
+    @bought_ambidexterity.setter
+    def bought_ambidexterity(self, value: bool):
+        if value:
+            self.special_talents["Ambidexterity"] = "weapon"
+        else:
+            self.special_talents.pop("Ambidexterity", None)
+
+    def can_add_talent(self, name: str, source: str = "weapon") -> bool:
+        talent = cr.SPECIAL_TALENTS.get(name)
+        if talent is None or name in self.special_talents:
+            return False
+        if not cr.talent_allowed(name, self.char_class):
+            return False
+        if source == "nonweapon" and not talent.either_slot:
+            return False       # only CT's asterisked talents may use an NWP slot
+        if name == "Ambidexterity" and not self.can_buy_ambidexterity():
+            return False       # already ambidextrous, or house rules off
+        left = (self.weapon_slots_left() if source == "weapon"
+                else self.nonweapon_slots_left())
+        return talent.slots <= left
+
+    def talent_skill(self, name: str):
+        """A talent's proficiency check score, when it has one: the governing ability
+        plus its modifier (the campaign's nonweapon-proficiency check model)."""
+        talent = cr.SPECIAL_TALENTS.get(name)
+        if talent is None or not talent.ability:
+            return None
+        score = self.final_abilities().get(talent.ability)
+        return None if score is None else score + talent.modifier
 
     # ── fighting styles (Combat & Tactics) ───────────────────────────────────
     def knows_style(self, style: str) -> bool:
@@ -576,7 +621,7 @@ class Character:
             "armor_profs": list(self.armor_profs),
             "fighting_styles": dict(self.fighting_styles),
             "nonweapon_profs": dict(self.nonweapon_profs),
-            "bought_ambidexterity": self.bought_ambidexterity,
+            "special_talents": dict(self.special_talents),
             "money_cp": self.money_cp,
             "inventory": dict(self.inventory),
             "worn": list(self.worn),
@@ -596,6 +641,12 @@ class Character:
         d["shield_profs"] = list(d.get("shield_profs") or [])
         d["armor_profs"] = list(d.get("armor_profs") or [])
         d["fighting_styles"] = {k: int(v) for k, v in (d.get("fighting_styles") or {}).items()}
+        # Ambidexterity used to be a lone bool; it is CT's special talent, so a
+        # legacy save that bought it migrates into the talent dict.
+        talents = dict(d.get("special_talents") or {})
+        if d.pop("bought_ambidexterity", False) and "Ambidexterity" not in talents:
+            talents["Ambidexterity"] = "weapon"
+        d["special_talents"] = talents
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

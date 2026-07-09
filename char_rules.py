@@ -1281,6 +1281,51 @@ def style_slot_cost(style: str, spec_slots: int, class_name: str) -> int:
     return cost + paid * STYLE_SPECIALISE_SLOT_COST
 
 
+# ── Special talents (CT/DD02653-DD02665) ────────────────────────────────────
+# Bought with weapon proficiency slots. CT marks two of them with an asterisk —
+# "originally presented as nonweapon proficiencies ... they can be purchased with
+# either type of proficiency slot" — Alertness and Endurance.
+# `groups` are the class groups allowed to take it; () means anyone ("All"/"General").
+
+@dataclass(frozen=True)
+class SpecialTalent:
+    name: str
+    slots: int
+    ability: str = None
+    modifier: int = 0
+    groups: tuple = ()
+    initial_rating: int = None
+    either_slot: bool = False
+
+
+SPECIAL_TALENTS = {t.name: t for t in (
+    SpecialTalent("Alertness", 1, "Wisdom", 1, (), None, either_slot=True),
+    SpecialTalent("Ambidexterity", 1, "Dexterity", 0, ("Warrior", "Rogue")),
+    SpecialTalent("Ambush", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Camouflage", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Dirty Fighting", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Endurance", 2, "Constitution", 0, ("Warrior",), 3, either_slot=True),
+    SpecialTalent("Fine Balance", 2, "Dexterity", 0, ("Warrior", "Rogue"), 7),
+    SpecialTalent("Iron Will", 2, "Wisdom", -2, ("Warrior", "Priest"), 3),
+    SpecialTalent("Leadership", 1, "Charisma", -1, ("Warrior",), 5),
+    SpecialTalent("Quickness", 2, "Dexterity", 0, ("Warrior", "Rogue"), 3),
+    SpecialTalent("Steady Hand", 1, "Dexterity", 0, ("Warrior", "Rogue")),
+    SpecialTalent("Trouble Sense", 1, "Wisdom", 0, (), 3),
+)}
+
+
+def talent_allowed(name: str, class_name: str) -> bool:
+    """Whether a class group may take this talent at all."""
+    talent = SPECIAL_TALENTS.get(name)
+    if talent is None or class_name not in CLASSES:
+        return False
+    return not talent.groups or CLASSES[class_name].group in talent.groups
+
+
+def talents_for_class(class_name: str) -> tuple:
+    return tuple(t for t in SPECIAL_TALENTS.values() if talent_allowed(t.name, class_name))
+
+
 def two_weapon_penalty(specialised: bool, ambidextrous: bool) -> tuple:
     """(primary, off-hand) attack penalties when fighting with a weapon in each hand.
 

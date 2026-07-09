@@ -303,12 +303,20 @@ class Charactermancer:
             c.fighting_styles.pop(style)
 
     def toggle_ambidexterity(self):
+        """Ambidexterity is CT's special talent; the house rule prices it the same."""
         c = self.character
         if c.bought_ambidexterity:
-            c.bought_ambidexterity = False
-        elif c.can_buy_ambidexterity() and \
-                cr.HOUSE_RULES.ambidexterity_slot_cost <= c.weapon_slots_left():
-            c.bought_ambidexterity = True
+            self.remove_talent("Ambidexterity")
+        else:
+            self.add_talent("Ambidexterity")
+
+    # ── special talents ──────────────────────────────────────────────────────
+    def add_talent(self, name: str, source: str = "weapon"):
+        if self.character.can_add_talent(name, source):
+            self.character.special_talents[name] = source
+
+    def remove_talent(self, name: str):
+        self.character.special_talents.pop(name, None)
 
     def add_proficiency(self, name: str):
         c = self.character
@@ -501,6 +509,12 @@ class Charactermancer:
             self.specialise_style(tail); return True
         if verb == "styledown" and tail:
             self.despecialise_style(tail); return True
+        if verb == "addtalent" and tail:
+            self.add_talent(tail); return True
+        if verb == "addtalentnwp" and tail:
+            self.add_talent(tail, "nonweapon"); return True
+        if verb == "rmtalent" and tail:
+            self.remove_talent(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
         if verb == "addprof" and tail:

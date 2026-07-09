@@ -1,6 +1,6 @@
 # Feature plan: Combat & Tactics character-building rules
 
-Status: **Phase 0 done**; phases 1+ planned · Created 2026-07-09 · Updated 2026-07-09
+Status: **Phases 0–6 done**; 6.5 / 6.6 / 7 remain · Created 2026-07-09 · Updated 2026-07-09
 
 > **Sequencing.** Leveling Phase 1 lands *before* CT phases 1+: CT's top four rungs
 > (mastery / high / grand mastery) are gated on 5th–6th level, and `Character` has no
@@ -292,7 +292,7 @@ Each phase ships independently with tests. **Phases 1–6 are all reachable at l
 | ~~**2**~~ | ✅ **Done.** `Character.weapon_groups`: 2 slots buys proficiency in every weapon of one tight group. Buying a group **refunds** the now-redundant per-weapon proficiencies it grants; a group-covered weapon can still be specialised for the *extra* rung slot only (its proficiency slot was paid by the group), and stepping back down drops the entry entirely. Familiarity is computed over the union of explicit and group-granted proficiencies. |
 | ~~**3**~~ | ✅ **Done.** `shield_profs` / `armor_profs`, one weapon slot each. Armor proficiency halves that armor's encumbering weight, which flows through `total_weight()` → `encumbrance()` → the Roll20 gear export, so the sheet's encumbrance matches the builder's. **Important:** the *homebrew item* owns a shield's normal AC bonus (our Aspis is +2 where CT's medium shield is +1); CT's table only supplies the **proficient upgrade**, and `max()` guarantees it never lowers a shield. Routing the normal case through CT's table silently cost every non-proficient character 1 AC — caught by driving it, not by the tests. |
 | ~~**4**~~ | ✅ **Done.** `fighting_styles: {style: specialisation slots}`. Warriors know every style free and may specialise in as many as they can afford; priests and rogues pay a slot to learn one and may specialise in **only one**; wizards may learn but never specialise. Rangers hold the first two-weapon specialisation slot free. `two_weapon_penalty()` is the payoff: −2/−4 normally, 0/−2 specialised, −2/−2 ambidextrous, and **0/0 for both**. |
-| **5** | Special talents (fold `bought_ambidexterity` in). |
+| ~~**5**~~ | ✅ **Done.** All 12 talents in `char_rules.SPECIAL_TALENTS`, gated by class group. `Character.bought_ambidexterity` is now a **property** backed by `special_talents["Ambidexterity"]` — the campaign house rule *is* the CT talent, so there is one implementation, and legacy saves holding the old bool migrate into it. CT's asterisk turns out to mark exactly **Alertness and Endurance**; those two may be paid for from the *nonweapon* budget, which the talent state records per-talent. |
 | ~~**6**~~ | ✅ **Done (fell out of phase 1).** `weapon_prof_cost` already adds `barred_weapon_penalty`, so a mage's long sword costs 2 slots and a two-handed sword 3. The buy list badges the penalty. Pleasingly, this reproduces CT's own remark that "the limited number of weapon proficiencies available for nonwarrior characters will tend to control character abuse of this rule" — a 3rd-level mage has one slot and simply cannot afford a barred long sword. |
 | **6.5** | **Ch5 unarmed**: Pummeling/Wrestling as pseudo-weapons on the ladder (rung caps), Overbearing as familiar-only, martial arts styles A–D + the 6 martial arts talents (with the "≥1 style" prerequisite). Depends on phase 1 (rung engine) and phase 5 (talents). |
 | **6.6** | **Ch8 siege proficiencies**: Artillerist, Vehicle Handling. Trivial — two rows in the existing nonweapon-proficiency table; no new machinery. Could ride along with phase 5. |
@@ -314,8 +314,9 @@ special talents have no native home on the sheet (open question below).
 ## Open questions
 1. **Talent checks.** Talents with an "Initial rating" (Ambush 5, Endurance 3, …)
    are Skills & Powers-flavored. Do they use our house-rule NWP check
-   (`skill = ability + 2 per extra slot`, target 21) or their own rating? This
-   decides whether `SPECIAL_TALENTS` reuses `NonweaponProficiency`.
+   (`skill = ability + 2 per extra slot`, target 21) or their own rating? *Interim:*
+   `Character.talent_skill()` returns `ability + modifier` (the NWP model) and the
+   `initial_rating` is stored and displayed but not yet used. Still your ruling.
 2. ~~**`Shield, Aspis`** → CT "medium" or "body"?~~ **Answered: medium.**
 3. **Roll20**: where do fighting styles / special talents / unarmed disciplines live —
    NWP rows, WP rows, or notes?

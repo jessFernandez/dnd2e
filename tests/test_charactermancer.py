@@ -974,6 +974,59 @@ def test_fighting_styles_survive_a_round_trip():
     assert back.fighting_styles == {"Two-Weapon": 1}
 
 
+def test_ambidexterity_is_the_ct_special_talent():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Ambidexterity")
+    assert c.special_talents == {"Ambidexterity": "weapon"}
+    assert c.bought_ambidexterity is True             # the old attribute still works
+    assert c.weapon_slots_used() == cr.HOUSE_RULES.ambidexterity_slot_cost == 1
+    cm.dispatch("ambi")                                # the legacy verb toggles it off
+    assert c.special_talents == {} and c.bought_ambidexterity is False
+
+
+def test_talents_are_gated_by_class_group():
+    assert len(cr.talents_for_class("Fighter")) == 12
+    # only the "All"/"General" talents are open to a wizard
+    assert {t.name for t in cr.talents_for_class("Mage")} == {"Alertness", "Trouble Sense"}
+    cm = _cleric_at_profs()
+    cm.dispatch("addtalent/Leadership")                # warrior-only
+    assert cm.character.special_talents == {}
+    cm.dispatch("addtalent/Iron Will")                 # warrior + priest
+    assert "Iron Will" in cm.character.special_talents
+
+
+def test_asterisked_talents_may_use_a_nonweapon_slot():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalentnwp/Endurance")              # CT asterisks Endurance
+    assert c.special_talents["Endurance"] == "nonweapon"
+    assert c.nonweapon_slots_used() == 2 and c.weapon_slots_used() == 0
+    cm.dispatch("addtalentnwp/Iron Will")              # not asterisked -> refused
+    assert "Iron Will" not in c.special_talents
+    assert {t.name for t in cr.SPECIAL_TALENTS.values() if t.either_slot} == \
+        {"Alertness", "Endurance"}
+
+
+def test_talent_skill_applies_the_ability_modifier():
+    cm = _fighter_at_profs()                           # Wis 14
+    c = cm.character
+    cm.dispatch("addtalent/Iron Will")                 # Wisdom −2
+    assert c.talent_skill("Iron Will") == c.final_abilities()["Wisdom"] - 2
+    assert c.talent_skill("Ambidexterity") == c.final_abilities()["Dexterity"]
+
+
+def test_legacy_bought_ambidexterity_bool_migrates_into_the_talents():
+    from character import Character
+    c = _fighter_at_profs().character
+    legacy = c.to_dict()
+    legacy.pop("special_talents")
+    legacy["bought_ambidexterity"] = True              # the old flat flag
+    back = Character.from_dict(legacy)
+    assert back.special_talents == {"Ambidexterity": "weapon"}
+    assert back.bought_ambidexterity is True
+
+
 def test_legacy_weapon_prof_list_migrates_to_rungs():
     from character import Character
     c = _fighter_at_profs().character
