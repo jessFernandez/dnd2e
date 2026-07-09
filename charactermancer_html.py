@@ -527,6 +527,8 @@ def _review_profs(c) -> str:
     weapons += [f"{g} group" for g in c.weapon_groups]
     weapons += [f"{s} (shield prof.)" for s in c.shield_profs]
     weapons += [f"{a} (armor prof.)" for a in c.armor_profs]
+    weapons += [f"{s} style" + (" (specialised)" if c.style_specialisation(s) else "")
+                for s in c.fighting_styles]
     if c.bought_ambidexterity:
         weapons.append("Ambidexterity")
     wp = ", ".join(_esc(w) for w in weapons) or "none"
@@ -838,6 +840,69 @@ def _shield_armor_block(cm) -> str:
         + f'<div class="opt-grid">{opts}</div>')
 
 
+def _fighting_styles_block(cm) -> str:
+    """Warriors know every style free; nonwarriors buy one. Specialising costs a slot
+    (and priests/rogues may specialise in only one style)."""
+    c = cm.character
+    if not c.char_class:
+        return ""
+    free = cr.knows_styles_free(c.char_class)
+
+    rows = ""
+    for style in cr.FIGHTING_STYLES:
+        known = c.knows_style(style)
+        spec = c.style_specialisation(style)
+        if not known:
+            continue
+        cost = c.style_cost(style)
+        down = (f'<a class="slot-btn" href="dnd:///cm/styledown/{style}">&minus;</a>'
+                if c.can_despecialise_style(style) else '<span class="slot-btn off">&minus;</span>')
+        up = (f'<a class="slot-btn" href="dnd:///cm/styleup/{style}">+</a>'
+              if c.can_specialise_style(style) else '<span class="slot-btn off">+</span>')
+
+        detail = "Known (free)" if free and spec == 0 else "Known"
+        if spec:
+            detail = f'Specialised &times;{spec}' if spec > 1 else "Specialised"
+            if cr.style_free_specialisation(style, c.char_class):
+                detail += ' &middot; <span class="hint">first slot free for rangers</span>'
+        if style == "Two-Weapon":
+            primary, off = c.two_weapon_penalty()
+            detail += f' &middot; to-hit {primary:+d} / {off:+d}'
+        rm = (f'<a class="pr-rm" href="dnd:///cm/forgetstyle/{style}" title="Unlearn">✕</a>'
+              if c.can_forget_style(style) else '<span class="pr-rm">•</span>')
+        rows += (
+            '<div class="prof-row">'
+            f'{rm}'
+            f'<div class="pr-main"><span class="pr-name">{_esc(style)}</span>'
+            f'<span class="pr-detail">{detail}</span></div>'
+            f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
+            '</div>')
+
+    opts = ""
+    for style in cr.FIGHTING_STYLES:
+        if c.knows_style(style):
+            continue
+        dis = "" if c.can_learn_style(style) else " dis"
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/learnstyle/{style}">'
+                 f'<span class="opt-name">{_esc(style)}</span>'
+                 f'<span class="opt-cost">{cr.STYLE_LEARN_SLOT_COST}</span></a>')
+
+    if free:
+        note = ("Warriors know every fighting style. Specialising costs one slot, and "
+                "you may specialise in as many styles as you can afford.")
+    elif cr.can_specialise_styles(c.char_class):
+        note = ("One slot to learn a style, one more to specialise — and a "
+                f"{_esc(c.char_class)} may specialise in only one style.")
+    else:
+        note = f"One slot to learn a style. A {_esc(c.char_class)} cannot specialise in one."
+
+    return (
+        '<div class="grp-label" style="margin-top:16px">Fighting styles</div>'
+        f'<div class="hint">{note}</div>'
+        + (f'<div class="chosen-list">{rows}</div>' if rows else "")
+        + (f'<div class="opt-grid">{opts}</div>' if opts else ""))
+
+
 def _weapon_section(cm) -> str:
     c = cm.character
     total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
@@ -897,6 +962,7 @@ def _weapon_section(cm) -> str:
         f'<div class="opt-grid">{opts}</div>'
         f'{_weapon_group_block(cm)}'
         f'{_shield_armor_block(cm)}'
+        f'{_fighting_styles_block(cm)}'
         '</section>'
     )
 

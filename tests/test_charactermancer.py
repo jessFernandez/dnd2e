@@ -907,6 +907,73 @@ def test_shield_and_armor_profs_survive_a_round_trip():
     assert back.armor_profs == ["Plate, Full"]
 
 
+def test_warriors_know_every_fighting_style_for_free():
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert all(c.knows_style(s) for s in cr.FIGHTING_STYLES)
+    assert c.weapon_slots_used() == 0                 # knowing them costs nothing
+    cm.dispatch("styleup/Two-Weapon")
+    cm.dispatch("styleup/Weapon and Shield")
+    assert c.weapon_slots_used() == 2                 # a warrior may specialise in many
+    assert sorted(c.specialised_styles()) == ["Two-Weapon", "Weapon and Shield"]
+
+
+def test_nonwarriors_pay_to_learn_and_may_specialise_in_only_one():
+    cm = _cleric_at_profs()                            # Priest: 2 weapon slots
+    c = cm.character
+    assert not c.knows_style("Two-Weapon")
+    cm.dispatch("learnstyle/Two-Weapon")
+    assert c.fighting_styles == {"Two-Weapon": 0} and c.weapon_slots_used() == 1
+    cm.dispatch("styleup/Two-Weapon")
+    assert c.fighting_styles == {"Two-Weapon": 1} and c.weapon_slots_used() == 2
+    # a second specialised style is refused even with slots (priests get only one)
+    c.weapon_profs = {}                                # free the budget artificially
+    cm.dispatch("learnstyle/Weapon and Shield")
+    cm.dispatch("styleup/Weapon and Shield")
+    assert c.style_specialisation("Weapon and Shield") == 0
+
+
+def test_wizards_may_learn_a_style_but_never_specialise():
+    cm = _at_abilities_done()
+    cm.set_ability("Intelligence", 12)
+    cm.set_race("Human"); cm.set_class("Mage")
+    cm.dispatch("learnstyle/One-Handed Weapon")
+    cm.dispatch("styleup/One-Handed Weapon")
+    assert cm.character.fighting_styles == {"One-Handed Weapon": 0}
+    assert not cr.can_specialise_styles("Mage")
+
+
+def test_rangers_get_the_first_two_weapon_specialisation_free():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Ranger")
+    c = cm.character
+    assert c.style_specialisation("Two-Weapon") == 1   # held without ever buying it
+    assert c.style_cost("Two-Weapon") == 0
+    assert c.weapon_slots_used() == 0
+
+
+def test_two_weapon_penalty_rewards_specialisation_and_ambidexterity():
+    assert cr.two_weapon_penalty(specialised=False, ambidextrous=False) == (-2, -4)
+    assert cr.two_weapon_penalty(specialised=True, ambidextrous=False) == (0, -2)
+    assert cr.two_weapon_penalty(specialised=False, ambidextrous=True) == (-2, -2)
+    assert cr.two_weapon_penalty(specialised=True, ambidextrous=True) == (0, 0)
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert c.two_weapon_penalty() == (-2, -4)
+    cm.dispatch("styleup/Two-Weapon")
+    assert c.two_weapon_penalty() == (0, -2)
+    c.bought_ambidexterity = True
+    assert c.two_weapon_penalty() == (0, 0)            # the ambidexterity payoff
+
+
+def test_fighting_styles_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("styleup/Two-Weapon")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.fighting_styles == {"Two-Weapon": 1}
+
+
 def test_legacy_weapon_prof_list_migrates_to_rungs():
     from character import Character
     c = _fighter_at_profs().character

@@ -279,6 +279,29 @@ class Charactermancer:
         if item_name in self.character.armor_profs:
             self.character.armor_profs.remove(item_name)
 
+    # ── fighting styles ──────────────────────────────────────────────────────
+    def learn_style(self, style: str):
+        if self.character.can_learn_style(style):
+            self.character.fighting_styles[style] = 0
+
+    def forget_style(self, style: str):
+        if self.character.can_forget_style(style):
+            self.character.fighting_styles.pop(style)
+
+    def specialise_style(self, style: str):
+        c = self.character
+        if c.can_specialise_style(style):
+            c.fighting_styles[style] = c.fighting_styles.get(style, 0) + 1
+
+    def despecialise_style(self, style: str):
+        c = self.character
+        if not c.can_despecialise_style(style):
+            return
+        c.fighting_styles[style] -= 1
+        # A warrior knows every style anyway, so an empty entry is just noise.
+        if c.fighting_styles[style] == 0 and cr.knows_styles_free(c.char_class):
+            c.fighting_styles.pop(style)
+
     def toggle_ambidexterity(self):
         c = self.character
         if c.bought_ambidexterity:
@@ -470,6 +493,14 @@ class Charactermancer:
             self.add_armor_prof(tail); return True
         if verb == "rmarmorprof" and tail:
             self.remove_armor_prof(tail); return True
+        if verb == "learnstyle" and tail:
+            self.learn_style(tail); return True
+        if verb == "forgetstyle" and tail:
+            self.forget_style(tail); return True
+        if verb == "styleup" and tail:
+            self.specialise_style(tail); return True
+        if verb == "styledown" and tail:
+            self.despecialise_style(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
         if verb == "addprof" and tail:

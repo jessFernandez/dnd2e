@@ -79,6 +79,9 @@ class Character:
     # and half encumbrance from that armor.
     shield_profs: list = field(default_factory=list)
     armor_profs: list = field(default_factory=list)
+    # Fighting style -> slots of specialisation (0 = merely known). Warriors know
+    # every style for free; nonwarriors pay a slot to learn one.
+    fighting_styles: dict = field(default_factory=dict)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
     bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
     # Equipment (Equipment step) and known spells (Spells step).
@@ -266,6 +269,8 @@ class Character:
         used += cr.WEAPON_GROUP_SLOT_COST * len(self.weapon_groups)
         used += cr.SHIELD_PROF_SLOT_COST * len(self.shield_profs)
         used += cr.ARMOR_PROF_SLOT_COST * len(self.armor_profs)
+        used += sum(cr.style_slot_cost(s, n, self.char_class)
+                    for s, n in self.fighting_styles.items())
         if self.bought_ambidexterity:
             used += cr.HOUSE_RULES.ambidexterity_slot_cost
         return used
@@ -462,6 +467,58 @@ class Character:
         rest 12; defaults to 12 before a race is chosen."""
         return cr.RACES[self.race].movement if self.race in cr.RACES else 12
 
+    # ── fighting styles (Combat & Tactics) ───────────────────────────────────
+    def knows_style(self, style: str) -> bool:
+        return cr.knows_styles_free(self.char_class) or style in self.fighting_styles
+
+    def style_specialisation(self, style: str) -> int:
+        """Slots of specialisation in a style — including a ranger's free two-weapon
+        slot, which he holds without ever having bought it."""
+        held = self.fighting_styles.get(style, 0)
+        return max(held, cr.style_free_specialisation(style, self.char_class))
+
+    def specialised_styles(self) -> list:
+        return [s for s in cr.FIGHTING_STYLES if self.style_specialisation(s) > 0]
+
+    def style_cost(self, style: str, spec_slots: int = None) -> int:
+        spec = self.fighting_styles.get(style, 0) if spec_slots is None else spec_slots
+        return cr.style_slot_cost(style, spec, self.char_class)
+
+    def can_learn_style(self, style: str) -> bool:
+        if not self.char_class or style not in cr.FIGHTING_STYLES:
+            return False
+        if self.knows_style(style):
+            return False
+        return cr.STYLE_LEARN_SLOT_COST <= self.weapon_slots_left()
+
+    def can_forget_style(self, style: str) -> bool:
+        """Only a nonwarrior's *bought* knowledge can be given back, and only while
+        nothing is specialised in it."""
+        return (style in self.fighting_styles and self.fighting_styles[style] == 0
+                and not cr.knows_styles_free(self.char_class))
+
+    def can_specialise_style(self, style: str) -> bool:
+        if not self.knows_style(style) or not cr.can_specialise_styles(self.char_class):
+            return False
+        current = self.fighting_styles.get(style, 0)
+        if current >= cr.max_style_specialisation(style):
+            return False
+        # Priests and rogues may specialise in only one style; warriors in any number.
+        if not cr.knows_styles_free(self.char_class):
+            others = [s for s in self.specialised_styles() if s != style]
+            if others:
+                return False
+        extra = self.style_cost(style, current + 1) - self.style_cost(style, current)
+        return extra <= self.weapon_slots_left()
+
+    def can_despecialise_style(self, style: str) -> bool:
+        return self.fighting_styles.get(style, 0) > 0
+
+    def two_weapon_penalty(self) -> tuple:
+        """(primary, off-hand) penalties for fighting with two weapons."""
+        return cr.two_weapon_penalty(self.style_specialisation("Two-Weapon") > 0,
+                                     self.ambidextrous or self.bought_ambidexterity)
+
     # ── shield / armor proficiency (Combat & Tactics) ────────────────────────
     def can_add_shield_prof(self, item_name: str) -> bool:
         return (cr.is_shield(item_name) and item_name not in self.shield_profs
@@ -517,6 +574,7 @@ class Character:
             "weapon_groups": list(self.weapon_groups),
             "shield_profs": list(self.shield_profs),
             "armor_profs": list(self.armor_profs),
+            "fighting_styles": dict(self.fighting_styles),
             "nonweapon_profs": dict(self.nonweapon_profs),
             "bought_ambidexterity": self.bought_ambidexterity,
             "money_cp": self.money_cp,
@@ -537,6 +595,7 @@ class Character:
         d["weapon_groups"] = list(d.get("weapon_groups") or [])
         d["shield_profs"] = list(d.get("shield_profs") or [])
         d["armor_profs"] = list(d.get("armor_profs") or [])
+        d["fighting_styles"] = {k: int(v) for k, v in (d.get("fighting_styles") or {}).items()}
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

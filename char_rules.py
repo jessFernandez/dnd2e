@@ -1232,6 +1232,70 @@ def specialises(rung: str) -> bool:
     return rung in ("specialist", "master", "high_master", "grand_master")
 
 
+# ── Fighting styles (CT Ch2 list, Ch4 specialisation: DD02645-DD02650) ───────
+# "Warriors automatically know every style, while the other character types are
+# limited... If a nonwarrior wishes to learn a style he doesn't know, he can do so
+# at the cost of a weapon proficiency. In addition to simply knowing a style,
+# warriors, priests, and rogues can specialize... by spending a weapon proficiency
+# slot." Warriors may specialise in as many styles as they like; priests and rogues
+# in only one. Wizards may learn a style but never specialise in it.
+FIGHTING_STYLES = (
+    "Weapon and Shield",
+    "One-Handed Weapon",
+    "Two-Handed Weapon",
+    "Two-Weapon",
+    "Missile or Thrown Weapon",
+)
+STYLE_LEARN_SLOT_COST = 1
+STYLE_SPECIALISE_SLOT_COST = 1
+# A second slot in two-weapon style allows two weapons of equal size; the rest cap
+# at a single slot of specialisation.
+_MAX_STYLE_SPECIALISATION = {"Two-Weapon": 2}
+
+
+def knows_styles_free(class_name: str) -> bool:
+    """Warriors automatically know every fighting style."""
+    return class_name in CLASSES and CLASSES[class_name].group == "Warrior"
+
+
+def can_specialise_styles(class_name: str) -> bool:
+    """Warriors, priests and rogues may specialise in a style; wizards may not."""
+    return class_name in CLASSES and CLASSES[class_name].group in ("Warrior", "Priest", "Rogue")
+
+
+def max_style_specialisation(style: str) -> int:
+    return _MAX_STYLE_SPECIALISATION.get(style, 1)
+
+
+def style_free_specialisation(style: str, class_name: str) -> int:
+    """Specialisation slots granted free. CT: 'Rangers are considered to have the
+    first slot of this style specialization' in two-weapon style."""
+    return 1 if (class_name == "Ranger" and style == "Two-Weapon") else 0
+
+
+def style_slot_cost(style: str, spec_slots: int, class_name: str) -> int:
+    """Weapon slots a style costs: learning it (free for warriors) plus each slot of
+    specialisation beyond any granted free."""
+    cost = 0 if knows_styles_free(class_name) else STYLE_LEARN_SLOT_COST
+    paid = max(0, spec_slots - style_free_specialisation(style, class_name))
+    return cost + paid * STYLE_SPECIALISE_SLOT_COST
+
+
+def two_weapon_penalty(specialised: bool, ambidextrous: bool) -> tuple:
+    """(primary, off-hand) attack penalties when fighting with a weapon in each hand.
+
+    Normally −2/−4. Specialising in two-weapon style reduces that to 0/−2. An
+    ambidextrous character has two 'primary' hands (−2 with either), and one who is
+    *both* ambidextrous and specialised suffers no penalty at all."""
+    if ambidextrous and specialised:
+        return (0, 0)
+    if specialised:
+        return (0, -2)
+    if ambidextrous:
+        return (-2, -2)
+    return (-2, -4)
+
+
 # ── Shield proficiency (CT/DD02627) ──────────────────────────────────────────
 # 1 weapon slot. `attackers` is how many attacks the shield's bonus may apply to
 # in a round. Body shields list (melee, missile) bonuses.
