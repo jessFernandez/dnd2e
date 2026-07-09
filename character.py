@@ -56,6 +56,13 @@ class Character:
     race: str = None
     char_class: str = None
     alignment: str = None
+    # Advancement. `level` is authoritative (xp is tracked alongside it, not derived
+    # from, so a DM can hand out levels). `hp_rolls` holds one hit-die roll per level
+    # from 2nd up to the class's name level — see cr.hp_at_level. Keep them in sync
+    # via set_level(); assigning `level` directly will leave hp_rolls short.
+    level: int = 1
+    xp: int = 0
+    hp_rolls: list = field(default_factory=list)
     # Details-step fields (populated later in the flow).
     ambidextrous: bool = False
     handedness_roll: int = None
@@ -139,36 +146,48 @@ class Character:
             return cr.max_level(self.race, self.char_class)
         return None
 
-    def max_hp(self, level: int = 1):
-        """Best-case HP at a level-1 build (max hit die + Con bonus)."""
+    def max_hp(self, level: int = None):
+        """Total HP at `level` (default: the character's own). Max hit die at 1st,
+        then a stored roll + Con bonus per level, then flat HP past name level."""
         if not (self.char_class and "Constitution" in self.final_abilities()):
             return None
-        return cr.max_hp_at_first_level(
-            self.char_class, self.final_abilities()["Constitution"], self.house_rules)
+        return cr.hp_at_level(
+            self.char_class, self._lvl(level), self.final_abilities()["Constitution"],
+            self.hp_rolls, self.house_rules)
 
-    def thac0(self, level: int = 1):
+    def thac0(self, level: int = None):
         if not self.char_class:
             return None
-        return cr.thac0(self.char_class, level, self.house_rules)
+        return cr.thac0(self.char_class, self._lvl(level), self.house_rules)
 
-    def attack_bonus(self, level: int = 1):
+    def attack_bonus(self, level: int = None):
         if not self.char_class:
             return None
-        return cr.attack_bonus(self.char_class, level, self.house_rules)
+        return cr.attack_bonus(self.char_class, self._lvl(level), self.house_rules)
 
-    def saving_throws(self, level: int = 1):
+    def saving_throws(self, level: int = None):
         if not self.char_class:
             return None
-        return cr.saving_throws(self.char_class, level)
+        return cr.saving_throws(self.char_class, self._lvl(level))
 
-    def weapon_slots(self, level: int = 1):
-        return cr.weapon_slots(self.char_class, level) if self.char_class else None
+    def attacks_per_round(self, level: int = None):
+        """(attacks, rounds) — warriors reach 3/2 at 7th and 2/1 at 13th."""
+        if not self.char_class:
+            return None
+        return cr.attacks_per_round(self.char_class, self._lvl(level))
 
-    def nonweapon_slots(self, level: int = 1):
+    def weapon_slots(self, level: int = None):
+        return cr.weapon_slots(self.char_class, self._lvl(level)) if self.char_class else None
+
+    def nonweapon_slots(self, level: int = None):
         if not self.char_class:
             return None
         int_score = self.final_abilities().get("Intelligence")
-        return cr.nonweapon_slots(self.char_class, level, int_score, self.house_rules)
+        return cr.nonweapon_slots(self.char_class, self._lvl(level), int_score, self.house_rules)
+
+    def _lvl(self, level) -> int:
+        """Resolve an optional level argument against the character's own level."""
+        return self.level if level is None else level
 
     def xp_bonus(self) -> bool:
         """Whether this build earns the +10% prime-requisite XP bonus."""
@@ -193,9 +212,44 @@ class Character:
         the player then places across their scores; None if no aging chosen."""
         return cr.aging_totals(self.age_level) if self.age_level else None
 
+    # ── advancement ──────────────────────────────────────────────────────────
+    def set_level(self, level: int, rng=None) -> int:
+        """Set the character's level, clamped to the racial level limit, keeping
+        `hp_rolls` in sync: levelling up rolls the new hit dice, levelling down
+        discards the rolls above the new level (so going back up rerolls them).
+        Returns the level actually set."""
+        if level < 1:
+            raise ValueError("level must be at least 1")
+        cap = self.max_level()
+        if cap is not None:
+            level = min(level, cap)
+        self.level = level
+
+        if not self.char_class:
+            return level
+        needed = cr.hp_die_levels(self.char_class, level)
+        rng = rng or random
+        while len(self.hp_rolls) < needed:
+            self.hp_rolls.append(rng.randint(1, self.hit_die()))
+        del self.hp_rolls[needed:]
+        return level
+
+    def reroll_hp(self, rng=None) -> list:
+        """Reroll every stored hit die (levels 2..name level)."""
+        if not self.char_class:
+            return self.hp_rolls
+        rng = rng or random
+        die = self.hit_die()
+        self.hp_rolls = [rng.randint(1, die) for _ in self.hp_rolls]
+        return self.hp_rolls
+
+    def level_from_xp(self):
+        """The level this character's XP would earn, ignoring the racial cap."""
+        return cr.level_for_xp(self.char_class, self.xp) if self.char_class else None
+
     # ── proficiency slot budgets ─────────────────────────────────────────────
     def weapon_slots_total(self) -> int:
-        return cr.weapon_slots(self.char_class, 1) if self.char_class else 0
+        return cr.weapon_slots(self.char_class, self.level) if self.char_class else 0
 
     def weapon_slots_used(self) -> int:
         used = sum(cr.weapon_slot_cost(w, self.house_rules) for w in self.weapon_profs)
@@ -210,7 +264,7 @@ class Character:
         if not self.char_class:
             return 0
         int_score = self.final_abilities().get("Intelligence")
-        return cr.nonweapon_slots(self.char_class, 1, int_score, self.house_rules)
+        return cr.nonweapon_slots(self.char_class, self.level, int_score, self.house_rules)
 
     def nonweapon_slots_used(self) -> int:
         return sum(self.nonweapon_profs.values())
@@ -312,6 +366,7 @@ class Character:
             "house_rules": self.house_rules, "name": self.name, "gender": self.gender,
             "abilities": dict(self.abilities), "exceptional_str": self.exceptional_str,
             "race": self.race, "char_class": self.char_class, "alignment": self.alignment,
+            "level": self.level, "xp": self.xp, "hp_rolls": list(self.hp_rolls),
             "ambidextrous": self.ambidextrous, "handedness_roll": self.handedness_roll,
             "age_level": self.age_level,
             "weapon_profs": list(self.weapon_profs),
@@ -332,5 +387,10 @@ class Character:
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])
         d["spells"] = list(d.get("spells") or [])
+        # Saves written before levelling existed carry no level/xp/hp_rolls; the
+        # dataclass defaults (level 1, no xp, no rolls) are exactly right for them.
+        d["level"] = int(d.get("level") or 1)
+        d["xp"] = int(d.get("xp") or 0)
+        d["hp_rolls"] = list(d.get("hp_rolls") or [])
         return cls(**{k: v for k, v in d.items()
                       if k in cls.__dataclass_fields__ and k != "rolled_pool"})

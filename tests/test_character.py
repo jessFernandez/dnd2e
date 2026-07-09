@@ -50,6 +50,99 @@ def test_unknown_ability_rejected():
         ch.Character().assign_ability("Luck", 12)
 
 
+# ── leveling ─────────────────────────────────────────────────────────────────
+
+def _fighter(**over):
+    c = _with(**over)
+    c.race, c.char_class = "Human", "Fighter"
+    return c
+
+
+def test_new_character_starts_at_level_1():
+    c = _fighter()
+    assert c.level == 1 and c.xp == 0 and c.hp_rolls == []
+    assert c.max_hp() == cr.max_hp_at_first_level("Fighter", c.final_abilities()["Constitution"])
+
+
+def test_set_level_rolls_and_stores_hit_dice():
+    c = _fighter()
+    c.set_level(4, rng=random.Random(1))
+    assert c.level == 4
+    assert len(c.hp_rolls) == 3                       # levels 2,3,4
+    assert all(1 <= r <= c.hit_die() for r in c.hp_rolls)
+    # HP reflects the stored rolls, not a reroll
+    assert c.max_hp() == cr.hp_at_level("Fighter", 4, c.final_abilities()["Constitution"],
+                                        c.hp_rolls)
+
+
+def test_level_down_discards_rolls_then_up_rerolls():
+    c = _fighter()
+    c.set_level(5, rng=random.Random(2))
+    assert len(c.hp_rolls) == 4
+    c.set_level(2, rng=random.Random(2))
+    assert c.level == 2 and len(c.hp_rolls) == 1      # truncated
+    c.set_level(5, rng=random.Random(3))
+    assert len(c.hp_rolls) == 4                       # refilled
+
+
+def test_set_level_clamps_to_racial_limit():
+    c = _fighter()
+    c.race = "Dwarf"                                  # Dwarf Fighter caps at 15
+    assert c.set_level(20, rng=random.Random(4)) == 15
+    assert c.level == 15
+    c2 = _fighter()                                   # Human: unlimited
+    assert c2.max_level() is None
+    assert c2.set_level(18, rng=random.Random(4)) == 18
+
+
+def test_set_level_rejects_below_one():
+    with pytest.raises(ValueError):
+        _fighter().set_level(0)
+
+
+def test_reroll_hp_keeps_count_changes_values():
+    c = _fighter()
+    c.set_level(6, rng=random.Random(5))
+    before = list(c.hp_rolls)
+    c.reroll_hp(rng=random.Random(99))
+    assert len(c.hp_rolls) == len(before) and c.hp_rolls != before
+
+
+def test_stats_scale_with_level():
+    c = _fighter()
+    lvl1_slots, lvl1_thac0 = c.weapon_slots_total(), c.thac0()
+    c.set_level(7, rng=random.Random(6))
+    assert c.weapon_slots_total() > lvl1_slots        # Table 34: +1 slot / 3 levels
+    assert c.thac0() < lvl1_thac0                     # THAC0 improves (lower is better)
+    assert c.attacks_per_round() == (3, 2)            # warrior 3/2 at 7th
+    assert c.nonweapon_slots_total() >= 3
+
+
+def test_level_from_xp():
+    c = _fighter()
+    c.xp = cr.xp_for_level("Fighter", 5)
+    assert c.level_from_xp() == 5
+    assert c.level == 1                               # xp does not auto-level
+
+
+def test_legacy_save_without_level_loads_as_level_1():
+    legacy = _fighter().to_dict()
+    for key in ("level", "xp", "hp_rolls"):
+        legacy.pop(key)
+    c = ch.Character.from_dict(legacy)
+    assert c.level == 1 and c.xp == 0 and c.hp_rolls == []
+    assert c.max_hp() is not None                     # and still computes
+
+
+def test_level_survives_a_save_load_round_trip():
+    c = _fighter()
+    c.set_level(6, rng=random.Random(7))
+    c.xp = 40000
+    back = ch.Character.from_dict(c.to_dict())
+    assert (back.level, back.xp, back.hp_rolls) == (6, 40000, c.hp_rolls)
+    assert back.max_hp() == c.max_hp()
+
+
 # ── movement + spell limits ──────────────────────────────────────────────────
 
 def test_movement_by_race():

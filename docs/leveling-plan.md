@@ -1,6 +1,6 @@
 # Feature plan: character leveling / advancement
 
-Status: **planned, not started** · Owner: TBD · Last updated: 2026-07-07
+Status: **Phase 1 done** (engine + state); phases 2–3 planned · Last updated: 2026-07-09
 
 Turn the character builder from a level-1 generator into a real character manager
 that can set a character's level (or track XP and level up) and recompute every
@@ -13,16 +13,23 @@ of any D&D feature (transcribing the 2e progression tables) is done and currentl
 unused above level 1. See the readiness table below. This is the highest
 value-to-effort item in the codebase.
 
-## Step zero: character state
+## Step zero: character state — ✅ **DONE (Phase 1)**
 
-`Character` (character.py) has **no `level` or `xp` field**. Every derived method
-already takes `level: int = 1` and just defaults to 1, but three things hardcode
-level 1 and must be threaded:
+`Character` now carries `level`, `xp` and `hp_rolls`, and the level-1 hardcoding is
+gone:
 
-- `weapon_slots_total()` / `nonweapon_slots_total()` — call `cr.*_slots(cls, 1)`
-- `max_hp()` — only best-case level-1 HP
-- `to_dict()` / `from_dict()` — don't persist level/xp
-- `roll20_export.py` — hardcodes `"player_level": 1`
+- `weapon_slots_total()` / `nonweapon_slots_total()` use `self.level`
+- `max_hp()` / `thac0()` / `attack_bonus()` / `saving_throws()` default to the
+  character's own level (an explicit `level=` argument still overrides)
+- `set_level(level, rng)` clamps to the racial cap and keeps `hp_rolls` in sync
+  (levelling up rolls new hit dice, down truncates); `reroll_hp()` rerolls them
+- `to_dict()` / `from_dict()` persist all three, and **legacy saves without them
+  load as a level-1 character** (dataclass defaults) — covered by a test
+- `roll20_export.py` sends the real `player_level` (and now `xp`, which the sheet's
+  import worker writes into its previously-unpopulated `attr_xp` field)
+- `charactermancer._resync_level()` re-applies the level after a race or class
+  change (both move the racial cap **and** the hit-dice count), *after*
+  `_revalidate()` clears an illegal class
 
 ## What the engine already provides (ready — just pass `level`)
 
@@ -41,12 +48,12 @@ level 1 and must be threaded:
 
 ### 🔴 Required for a correct level-up
 
-1. **HP accumulation across levels.** Only `max_hp_at_first_level` exists. The
-   data to compute HP at level N is all there (HD, Con bonus, `name_level`,
-   `hp_after`), but no function sums it. Rules: levels 1..`name_level` each add a
-   hit-die roll **+ Con bonus per HD**; levels past `name_level` add `hp_after`
-   flat with **no die and no Con bonus**. Needs a **design decision** (see below)
-   because 2e HP is rolled per level.
+1. ✅ **HP accumulation across levels — DONE.** `cr.hp_at_level(class, level, con,
+   rolls)` + `cr.hp_die_levels(class, level)`. 1st level is best-case; levels
+   2..`name_level` add a stored roll **+ Con bonus per HD** (a level never yields
+   less than 1 hp); levels past `name_level` add `hp_after` flat with **no die and
+   no Con bonus**. Con is applied at call time, not baked into the rolls, so a
+   later Constitution change recomputes correctly.
 2. **Spellcaster spell-slot tables** — the biggest transcription gap:
    - Wizard **Table 21** (spells of each level by class level 1–20) — absent
    - Priest **Table 24** (base priest spells by class level) — **partially added**:
@@ -57,8 +64,10 @@ level 1 and must be threaded:
    - Wizard highest castable level is currently gated only by Intelligence
      (`max_spell_level`), not by class level
    - The builder filters spells to `level == 1` today (`_set_spell_catalog`)
-3. **Multiple attacks per round (warriors)** — 1/round → 3/2 at 7th → 2/1 at
-   13th. Small table, but numeric and level-based (Fighter/Paladin/Ranger).
+3. ✅ **Multiple attacks per round (warriors) — DONE.** `cr.attacks_per_round(class,
+   level)` returns `(attacks, rounds)`: 1/1 → 3/2 at 7th → 2/1 at 13th, Warrior
+   group only. (Weapon specialisation grants further attacks — that's Combat &
+   Tactics, see [`combat-tactics-chargen-plan.md`](combat-tactics-chargen-plan.md).)
 
 ### 🟡 Substantial subsystems (in-scope classes, real work)
 
@@ -98,10 +107,11 @@ modelling; still worth offering as an override later).
 
 ## Suggested phasing
 
-- **Phase 1 — advance the core stats (all classes):** add `level`/`xp` state; HP
-  accumulation (after the decision above); un-hardcode the slot budgets and Roll20
-  `player_level`; enforce racial caps; add warrior multiple-attacks. Mostly wiring
-  + one small table — makes every character levelable for the numbers that matter.
+- ✅ **Phase 1 — advance the core stats (all classes): DONE.** `level`/`xp`/`hp_rolls`
+  state, HP accumulation, un-hardcoded slot budgets, Roll20 `player_level` + `xp`,
+  racial caps enforced in `set_level`, warrior multiple-attacks.
+  **Not yet exposed in the UI** — the builder still makes level-1 characters; a
+  level control on the Details/Review step is the natural follow-up.
 - **Phase 2 — casters:** Wizard Table 21 + Priest Table 24 (+ specialist / Ranger
   @8 / Paladin @9 / Bard hooks); extend the Spells step beyond level 1.
 - **Phase 3 — Thief skills** subsystem and Turn Undead.

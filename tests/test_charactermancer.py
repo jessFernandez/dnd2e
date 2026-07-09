@@ -79,6 +79,27 @@ def test_changing_race_clears_illegal_class():
     assert cm.character.char_class is None
 
 
+def test_changing_race_reclamps_level_to_the_new_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.character.set_level(18, rng=random.Random(1))
+    assert cm.character.level == 18                     # humans are uncapped
+    cm.set_race("Dwarf")                               # dwarf fighters cap at 15
+    assert cm.character.level == 15
+    assert len(cm.character.hp_rolls) == cr.hp_die_levels("Fighter", 15)
+
+
+def test_changing_class_resyncs_the_hit_dice_count():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.character.set_level(10, rng=random.Random(2))
+    assert len(cm.character.hp_rolls) == 8              # warrior name level is 9
+    cm.set_class("Mage")                               # wizard name level is 10
+    assert cm.character.char_class == "Mage"
+    assert len(cm.character.hp_rolls) == 9              # a 9th die is rolled
+    assert cm.character.max_hp() is not None            # and HP still computes
+
+
 def test_changing_class_clears_illegal_alignment():
     cm = _at_abilities_done()                          # FULL stats qualify for Ranger
     cm.set_class("Fighter"); cm.set_alignment("Chaotic Evil")

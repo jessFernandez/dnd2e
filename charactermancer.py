@@ -128,11 +128,23 @@ class Charactermancer:
         if race in cr.RACES:
             self.character.race = race
             self._revalidate()
+            self._resync_level()
 
     def set_class(self, class_name: str):
         if class_name in cr.CLASSES:
             self.character.char_class = class_name
             self._revalidate()
+            self._resync_level()
+
+    def _resync_level(self):
+        """Race and class both move the racial level cap and the number of hit dice
+        a level needs, so re-apply the level after either changes. Must run *after*
+        _revalidate(), which clears a class the new race can't take — otherwise
+        max_level() would raise on the illegal pair. A no-op for the level-1 builds
+        the builder makes today."""
+        if self.character.char_class:
+            # set_level falls back to the `random` module when rng is None.
+            self.character.set_level(self.character.level, rng=self._rng)
 
     def set_alignment(self, alignment: str):
         self.character.alignment = alignment

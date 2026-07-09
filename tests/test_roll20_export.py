@@ -65,6 +65,19 @@ def test_export_armor_and_spell_details():
     assert sp["verbal"] == 1 and sp["somatic"] == 1 and sp["material"] == 1
 
 
+def test_export_carries_level_and_xp():
+    import random
+    c = _cleric()
+    d = rx.character_to_roll20(c)
+    assert d["player_level"] == 1 and d["xp"] == 0      # default level-1 build
+    c.set_level(6, rng=random.Random(3))
+    c.xp = 55000
+    d = rx.character_to_roll20(c)
+    assert d["player_level"] == 6 and d["xp"] == 55000
+    assert d["hp_max"] == c.max_hp()                     # HP follows the level
+    assert d["attack_base"] == c.attack_bonus()          # so do THAC0-derived stats
+
+
 def test_movement_by_race():
     c = _cleric()
     assert rx.character_to_roll20(c)["move"] == 12    # Human

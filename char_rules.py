@@ -576,6 +576,58 @@ def max_hp_at_first_level(class_name: str, con: int, house_rules: bool = True) -
     return max(1, hit_die(class_name, house_rules) + con_hp_bonus(class_name, con))
 
 
+def hp_die_levels(class_name: str, level: int) -> int:
+    """How many hit dice are rolled *after* 1st level, i.e. how many stored rolls
+    `hp_at_level` needs. Levels 2..name_level roll a die; levels past the class's
+    name level add flat HP instead."""
+    name_level = GROUPS[CLASSES[class_name].group].name_level
+    return max(0, min(level, name_level) - 1)
+
+
+def hp_at_level(class_name: str, level: int, con: int, rolls=(),
+                house_rules: bool = True) -> int:
+    """Total HP at a class level.
+
+    The campaign's model (see docs/leveling-plan.md): 1st level is **best case**
+    (max hit die + Con bonus); each level from 2nd up to the class's *name level*
+    adds a stored hit-die **roll** plus the per-HD Con bonus (a level always yields
+    at least 1 hp); every level beyond the name level adds the group's flat
+    `hp_after` with **no die and no Con bonus**.
+
+    Con is applied at call time rather than baked into `rolls`, so a later
+    Constitution change recomputes correctly. `rolls` must hold at least
+    `hp_die_levels(class_name, level)` entries."""
+    group = GROUPS[CLASSES[class_name].group]
+    needed = hp_die_levels(class_name, level)
+    rolls = list(rolls)
+    if len(rolls) < needed:
+        raise ValueError(
+            f"{class_name} at level {level} needs {needed} hit-die roll(s), got {len(rolls)}")
+
+    total = max_hp_at_first_level(class_name, con, house_rules)
+    bonus = con_hp_bonus(class_name, con)
+    for roll in rolls[:needed]:
+        total += max(1, roll + bonus)          # a level never yields less than 1 hp
+    total += max(0, level - group.name_level) * group.hp_after
+    return max(1, total)
+
+
+# ── Attacks per round (PHB Table 58: warriors only) ─────────────────────────
+# Returned as (attacks, per_rounds): 1/1 -> 3/2 at 7th -> 2/1 at 13th. Only the
+# Warrior group advances; everyone else attacks once per round. (Weapon
+# specialisation grants further attacks — that's Combat & Tactics, not here.)
+
+def attacks_per_round(class_name: str, level: int) -> tuple:
+    """(attacks, rounds) for a class at a level, e.g. (3, 2) == three per two rounds."""
+    if CLASSES[class_name].group != "Warrior":
+        return (1, 1)
+    if level >= 13:
+        return (2, 1)
+    if level >= 7:
+        return (3, 2)
+    return (1, 1)
+
+
 # ── THAC0 / attack bonus ────────────────────────────────────────────────────
 
 def _thac0_raw(group: str, level: int) -> int:

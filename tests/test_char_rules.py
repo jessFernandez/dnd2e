@@ -112,6 +112,48 @@ def test_racial_requirements_pass_and_fail():
     assert fails == [("Constitution", 11, 18, 9)]
 
 
+# ── Leveling: HP accumulation + attacks per round ────────────────────────────
+
+def test_hp_die_levels_stops_at_name_level():
+    # Warriors stop rolling HD after 9th; wizards after 10th.
+    assert [cr.hp_die_levels("Fighter", n) for n in (1, 2, 9, 10, 15)] == [0, 1, 8, 8, 8]
+    assert cr.hp_die_levels("Mage", 12) == 9
+
+
+def test_hp_at_level_1_matches_best_case():
+    assert cr.hp_at_level("Fighter", 1, 16, []) == cr.max_hp_at_first_level("Fighter", 16)
+
+
+def test_hp_accumulates_roll_plus_con_per_hit_die():
+    b = cr.con_hp_bonus("Fighter", 16)                 # +2 per HD for a warrior
+    assert cr.hp_at_level("Fighter", 3, 16, [5, 6]) == (10 + b) + (5 + b) + (6 + b)
+
+
+def test_hp_past_name_level_is_flat_with_no_die_or_con():
+    b = cr.con_hp_bonus("Fighter", 16)
+    hp = cr.hp_at_level("Fighter", 11, 16, [6] * 8)    # 8 rolled HD, then 2 flat levels
+    assert hp == (10 + b) + 8 * (6 + b) + 2 * cr.GROUPS["Warrior"].hp_after
+
+
+def test_each_level_yields_at_least_one_hp():
+    # Mage (house d6) with Con 3 (-2/HD): a rolled 1 would be -1, clamped to +1.
+    assert cr.hp_at_level("Mage", 2, 3, [1]) == cr.max_hp_at_first_level("Mage", 3) + 1
+
+
+def test_hp_at_level_requires_enough_rolls():
+    with pytest.raises(ValueError):
+        cr.hp_at_level("Fighter", 5, 16, [4, 5])       # needs 4 rolls, given 2
+
+
+def test_attacks_per_round_warriors_only():
+    assert [cr.attacks_per_round("Fighter", n) for n in (1, 6, 7, 12, 13, 20)] == \
+        [(1, 1), (1, 1), (3, 2), (3, 2), (2, 1), (2, 1)]
+    assert cr.attacks_per_round("Paladin", 7) == (3, 2)   # paladins/rangers are warriors
+    assert cr.attacks_per_round("Ranger", 13) == (2, 1)
+    for cls in ("Mage", "Cleric", "Thief"):
+        assert cr.attacks_per_round(cls, 20) == (1, 1)    # never advances
+
+
 # ── Combat & Tactics: weapon groups + barred weapons (CT Ch4/Ch7) ────────────
 
 def test_every_weapon_has_group_and_access_data():
