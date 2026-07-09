@@ -119,23 +119,26 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         nwp.append({"name": name, "stat": stat, "base": base})
     out["nwp"] = nwp
 
-    # All carried gear (weight + cost drive the sheet's encumbrance/wealth).
+    # All carried gear (weight + cost drive the sheet's encumbrance/wealth). Weight
+    # is the *encumbering* weight, so armor the character is proficient in counts
+    # half (Combat & Tactics) — the sheet's encumbrance then matches the builder's.
     gear = []
     for name, qty in c.inventory.items():
         it = cr.item(name) or {}
         gear.append({
             "name": name, "qty": qty,
-            "weight": it.get("weight") or 0, "cost": it.get("cost_cp") or 0,
+            "weight": c.item_weight(name), "cost": it.get("cost_cp") or 0,
         })
     out["gear"] = gear
 
     # Worn armor -> the sheet's Armor section, so its AC worker recomputes Armor
-    # Class from equipped pieces (10 base + these + Dex, ascending).
+    # Class from equipped pieces (10 base + these + Dex, ascending). A shield gives
+    # a bigger bonus to a proficient wielder.
     armor = []
     for name in c.worn:
         it = cr.item(name)
         if it and it.get("category") == "Armor":
-            armor.append({"name": name, "aac": it.get("ac_bonus", 0),
+            armor.append({"name": name, "aac": c.item_ac_bonus(name),
                           "amagic": 0, "adex": 0, "aequipped": 1})
     out["armor"] = armor
 

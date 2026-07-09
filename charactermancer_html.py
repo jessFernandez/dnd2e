@@ -525,6 +525,8 @@ def _review_profs(c) -> str:
     weapons = [w if rung == "proficient" else f"{w} ({cr.RUNG_LABELS[rung]})"
                for w, rung in c.weapon_profs.items()]
     weapons += [f"{g} group" for g in c.weapon_groups]
+    weapons += [f"{s} (shield prof.)" for s in c.shield_profs]
+    weapons += [f"{a} (armor prof.)" for a in c.armor_profs]
     if c.bought_ambidexterity:
         weapons.append("Ambidexterity")
     wp = ", ".join(_esc(w) for w in weapons) or "none"
@@ -785,6 +787,57 @@ def _weapon_group_block(cm) -> str:
         + f'<div class="opt-grid">{opts}</div>')
 
 
+def _shield_armor_block(cm) -> str:
+    """Shield and armor proficiencies — one weapon slot each."""
+    c = cm.character
+    rows = ""
+    for name in c.shield_profs:
+        detail = (f'Shield &middot; AC +{cr.shield_ac_bonus(name, True)} '
+                  f'(was +{cr.shield_ac_bonus(name, False)}) &middot; blocks '
+                  f'{cr.shield_attackers_blocked(name)}')
+        rows += (
+            '<div class="prof-row">'
+            f'<a class="pr-rm" href="dnd:///cm/rmshieldprof/{name}" title="Remove">✕</a>'
+            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
+            f'<span class="pr-detail">{detail}</span></div>'
+            f'<div class="pr-slots"><span class="pr-sn">{cr.SHIELD_PROF_SLOT_COST}</span>'
+            '</div></div>')
+    for name in c.armor_profs:
+        rows += (
+            '<div class="prof-row">'
+            f'<a class="pr-rm" href="dnd:///cm/rmarmorprof/{name}" title="Remove">✕</a>'
+            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
+            f'<span class="pr-detail">Armor &middot; counts '
+            f'{c.item_weight(name):g} lb instead of '
+            f'{(cr.item(name) or {}).get("weight", 0):g}</span></div>'
+            f'<div class="pr-slots"><span class="pr-sn">{cr.ARMOR_PROF_SLOT_COST}</span>'
+            '</div></div>')
+
+    opts = ""
+    for name in cr.SHIELD_TYPES:
+        if name in c.shield_profs:
+            continue
+        dis = "" if c.can_add_shield_prof(name) else " dis"
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addshieldprof/{name}">'
+                 f'<span class="opt-name">{_esc(name)}</span>'
+                 f'<span class="opt-cost">{cr.SHIELD_PROF_SLOT_COST}</span></a>')
+    for name in cr.armor_items():
+        if name in c.armor_profs:
+            continue
+        dis = "" if c.can_add_armor_prof(name) else " dis"
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addarmorprof/{name}">'
+                 f'<span class="opt-name">{_esc(name)}</span>'
+                 f'<span class="opt-cost">{cr.ARMOR_PROF_SLOT_COST}</span></a>')
+
+    return (
+        '<div class="grp-label" style="margin-top:16px">Shield &amp; armor proficiency</div>'
+        '<div class="hint">One slot each. A shield proficiency raises its AC bonus and '
+        'how many attackers it blocks; an armor proficiency halves that armor\'s '
+        'encumbrance.</div>'
+        + (f'<div class="chosen-list">{rows}</div>' if rows else "")
+        + f'<div class="opt-grid">{opts}</div>')
+
+
 def _weapon_section(cm) -> str:
     c = cm.character
     total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
@@ -843,6 +896,7 @@ def _weapon_section(cm) -> str:
         f'<div class="chosen-list">{chosen}</div>'
         f'<div class="opt-grid">{opts}</div>'
         f'{_weapon_group_block(cm)}'
+        f'{_shield_armor_block(cm)}'
         '</section>'
     )
 

@@ -262,6 +262,23 @@ class Charactermancer:
         if c.can_remove_weapon_group(group):
             c.weapon_groups.remove(group)
 
+    # ── shield / armor proficiencies (1 weapon slot each) ────────────────────
+    def add_shield_prof(self, item_name: str):
+        if self.character.can_add_shield_prof(item_name):
+            self.character.shield_profs.append(item_name)
+
+    def remove_shield_prof(self, item_name: str):
+        if item_name in self.character.shield_profs:
+            self.character.shield_profs.remove(item_name)
+
+    def add_armor_prof(self, item_name: str):
+        if self.character.can_add_armor_prof(item_name):
+            self.character.armor_profs.append(item_name)
+
+    def remove_armor_prof(self, item_name: str):
+        if item_name in self.character.armor_profs:
+            self.character.armor_profs.remove(item_name)
+
     def toggle_ambidexterity(self):
         c = self.character
         if c.bought_ambidexterity:
@@ -445,6 +462,14 @@ class Charactermancer:
             self.add_weapon_group(tail); return True
         if verb == "rmgroup" and tail:
             self.remove_weapon_group(tail); return True
+        if verb == "addshieldprof" and tail:
+            self.add_shield_prof(tail); return True
+        if verb == "rmshieldprof" and tail:
+            self.remove_shield_prof(tail); return True
+        if verb == "addarmorprof" and tail:
+            self.add_armor_prof(tail); return True
+        if verb == "rmarmorprof" and tail:
+            self.remove_armor_prof(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
         if verb == "addprof" and tail:

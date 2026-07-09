@@ -75,6 +75,10 @@ class Character:
     weapon_profs: dict = field(default_factory=dict)
     # Tight weapon groups bought wholesale (CT: 2 slots for every weapon in one).
     weapon_groups: list = field(default_factory=list)
+    # Shield / armor proficiencies (1 weapon slot each): a better shield AC bonus,
+    # and half encumbrance from that armor.
+    shield_profs: list = field(default_factory=list)
+    armor_profs: list = field(default_factory=list)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
     bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
     # Equipment (Equipment step) and known spells (Spells step).
@@ -260,6 +264,8 @@ class Character:
     def weapon_slots_used(self) -> int:
         used = sum(self.weapon_prof_cost(w) for w in self.weapon_profs)
         used += cr.WEAPON_GROUP_SLOT_COST * len(self.weapon_groups)
+        used += cr.SHIELD_PROF_SLOT_COST * len(self.shield_profs)
+        used += cr.ARMOR_PROF_SLOT_COST * len(self.armor_profs)
         if self.bought_ambidexterity:
             used += cr.HOUSE_RULES.ambidexterity_slot_cost
         return used
@@ -456,8 +462,30 @@ class Character:
         rest 12; defaults to 12 before a race is chosen."""
         return cr.RACES[self.race].movement if self.race in cr.RACES else 12
 
+    # ── shield / armor proficiency (Combat & Tactics) ────────────────────────
+    def can_add_shield_prof(self, item_name: str) -> bool:
+        return (cr.is_shield(item_name) and item_name not in self.shield_profs
+                and cr.SHIELD_PROF_SLOT_COST <= self.weapon_slots_left())
+
+    def can_add_armor_prof(self, item_name: str) -> bool:
+        return (item_name in cr.armor_items() and item_name not in self.armor_profs
+                and cr.ARMOR_PROF_SLOT_COST <= self.weapon_slots_left())
+
+    def item_ac_bonus(self, item_name: str) -> int:
+        """An item's AC contribution — a shield gives more to a proficient wielder."""
+        if cr.is_shield(item_name):
+            return cr.shield_ac_bonus(item_name, item_name in self.shield_profs)
+        return (cr.item(item_name) or {}).get("ac_bonus", 0)
+
+    def item_weight(self, item_name: str) -> float:
+        """An item's encumbering weight: armor you're proficient in counts half."""
+        weight = (cr.item(item_name) or {}).get("weight") or 0
+        if item_name in self.armor_profs:
+            weight *= cr.ARMOR_PROF_WEIGHT_FACTOR
+        return weight
+
     def worn_ac_bonus(self) -> int:
-        return sum((cr.item(n) or {}).get("ac_bonus", 0) for n in self.worn)
+        return sum(self.item_ac_bonus(n) for n in self.worn)
 
     def armor_class(self):
         """Ascending AC from worn armor + Dexterity (None until Dex is set)."""
@@ -465,12 +493,11 @@ class Character:
         return cr.armor_class(self.worn_ac_bonus(), dex, self.house_rules)
 
     def total_weight(self) -> float:
-        """Total carried weight (lb) across the inventory."""
+        """Total encumbering weight (lb). Armor you have an armor proficiency in
+        counts half (CT/DD02628)."""
         total = 0.0
         for name, qty in self.inventory.items():
-            it = cr.item(name)
-            if it and it.get("weight"):
-                total += it["weight"] * qty
+            total += self.item_weight(name) * qty
         return round(total, 2)
 
     def encumbrance(self):
@@ -488,6 +515,8 @@ class Character:
             "age_level": self.age_level,
             "weapon_profs": dict(self.weapon_profs),
             "weapon_groups": list(self.weapon_groups),
+            "shield_profs": list(self.shield_profs),
+            "armor_profs": list(self.armor_profs),
             "nonweapon_profs": dict(self.nonweapon_profs),
             "bought_ambidexterity": self.bought_ambidexterity,
             "money_cp": self.money_cp,
@@ -506,6 +535,8 @@ class Character:
         d["weapon_profs"] = ({w: "proficient" for w in wprofs} if isinstance(wprofs, list)
                              else dict(wprofs))
         d["weapon_groups"] = list(d.get("weapon_groups") or [])
+        d["shield_profs"] = list(d.get("shield_profs") or [])
+        d["armor_profs"] = list(d.get("armor_profs") or [])
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

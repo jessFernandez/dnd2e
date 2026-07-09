@@ -334,6 +334,23 @@ def test_shield_types_map_to_ct_table():
     assert cr.SHIELD_PROFICIENCY["buckler"]["attackers"] == 1
 
 
+def test_shield_keeps_its_homebrew_bonus_until_proficient():
+    # The homebrew item owns the normal bonus (our aspis is +2 where CT's medium
+    # shield is +1); CT's table only supplies the proficient upgrade.
+    assert cr.shield_ac_bonus("Shield, Aspis") == cr.item("Shield, Aspis")["ac_bonus"] == 2
+    assert cr.shield_ac_bonus("Shield, Aspis", proficient=True) == 3
+    # a buckler gains no AC from proficiency, and never drops below its own value
+    assert cr.shield_ac_bonus("Shield, Buckler") == 1
+    assert cr.shield_ac_bonus("Shield, Buckler", proficient=True) == 1
+    assert cr.shield_ac_bonus("Chain, Full") == 0                # not a shield
+
+
+def test_armor_items_excludes_shields():
+    items = cr.armor_items()
+    assert "Chain, Full" in items and "Helm, Full" in items
+    assert not any(cr.is_shield(i) for i in items)
+
+
 def test_race_base_movement():
     # PHB: humans/elves/half-elves move 12; dwarves/gnomes/halflings move 6.
     assert cr.RACES["Human"].movement == 12 and cr.RACES["Elf"].movement == 12

@@ -863,6 +863,50 @@ def test_weapon_groups_survive_a_save_load_round_trip():
     assert back.weapon_rung("Battle Axe") == "proficient"
 
 
+def test_shield_proficiency_raises_ac_and_costs_a_slot():
+    cm = _fighter_at_profs()
+    c = cm.character
+    c.inventory = {"Shield, Aspis": 1}
+    c.worn = ["Shield, Aspis"]
+    before = c.armor_class()
+    cm.dispatch("addshieldprof/Shield, Aspis")
+    assert c.shield_profs == ["Shield, Aspis"]
+    assert c.weapon_slots_used() == cr.SHIELD_PROF_SLOT_COST == 1
+    assert c.armor_class() == before + 1          # aspis +2 -> +3 when proficient
+    cm.dispatch("rmshieldprof/Shield, Aspis")
+    assert c.shield_profs == [] and c.armor_class() == before
+
+
+def test_armor_proficiency_halves_that_armors_encumbrance():
+    cm = _fighter_at_profs()
+    c = cm.character
+    c.inventory = {"Chain, Full": 1, "Dagger": 1}
+    full = c.total_weight()
+    cm.dispatch("addarmorprof/Chain, Full")
+    assert c.item_weight("Chain, Full") == 20.0   # chain mail 40 lb -> 20
+    assert c.total_weight() == full - 20.0        # the dagger is untouched
+    assert c.weapon_slots_used() == 1
+
+
+def test_armor_proficiency_is_refused_for_shields_and_vice_versa():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addarmorprof/Shield, Aspis")     # shields take a shield proficiency
+    assert c.armor_profs == []
+    cm.dispatch("addshieldprof/Chain, Full")      # ...and armor an armor one
+    assert c.shield_profs == []
+
+
+def test_shield_and_armor_profs_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addshieldprof/Shield, Buckler")
+    cm.dispatch("addarmorprof/Plate, Full")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.shield_profs == ["Shield, Buckler"]
+    assert back.armor_profs == ["Plate, Full"]
+
+
 def test_legacy_weapon_prof_list_migrates_to_rungs():
     from character import Character
     c = _fighter_at_profs().character

@@ -1249,6 +1249,46 @@ SHIELD_TYPES = {
     "Shield, Aspis":   "medium",
 }
 
+# Shield proficiency and armor proficiency each cost one weapon slot (CT/DD02627-8).
+SHIELD_PROF_SLOT_COST = 1
+ARMOR_PROF_SLOT_COST = 1
+# CT: a character proficient in an armor "only has to count half" its weight.
+ARMOR_PROF_WEIGHT_FACTOR = 0.5
+
+
+def is_shield(item_name: str) -> bool:
+    return item_name in SHIELD_TYPES
+
+
+def shield_ac_bonus(item_name: str, proficient: bool = False) -> int:
+    """A shield's AC bonus, better when its wielder is proficient.
+
+    The **homebrew item owns the normal bonus** (our Aspis is +2 where CT's medium
+    shield is +1); CT's table only supplies the *proficient* upgrade, and never
+    lowers a shield below its own value. Body shields list (melee, vs-missile)
+    values; we take the melee one — the sheet has no column for the missile bonus."""
+    shield_type = SHIELD_TYPES.get(item_name)
+    if shield_type is None:
+        return 0
+    own = (item(item_name) or {}).get("ac_bonus", 0)
+    if not proficient:
+        return own
+    value = SHIELD_PROFICIENCY[shield_type]["proficient_ac"]
+    return max(own, value[0] if isinstance(value, tuple) else value)
+
+
+def shield_attackers_blocked(item_name: str) -> int:
+    """How many attacks in a round the shield's bonus may apply to."""
+    shield_type = SHIELD_TYPES.get(item_name)
+    return SHIELD_PROFICIENCY[shield_type]["attackers"] if shield_type else 0
+
+
+def armor_items() -> tuple:
+    """Armor a character can take an armor proficiency in (shields excluded — those
+    take a shield proficiency instead)."""
+    return tuple(it["name"] for it in items_in_category("Armor")
+                 if not is_shield(it["name"]))
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Equipment — starting money, Armor Class, encumbrance

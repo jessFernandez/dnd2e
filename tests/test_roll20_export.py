@@ -73,6 +73,20 @@ def test_export_spells_carry_their_own_level():
     assert by_name == {"Bless": 1, "Silence": 2, "Prayer": 3}   # drives repeating_spells<N>
 
 
+def test_export_reflects_shield_and_armor_proficiency():
+    c = _cleric()
+    c.inventory = {"Chain, Full": 1, "Shield, Aspis": 1}
+    c.worn = ["Chain, Full", "Shield, Aspis"]
+    c.shield_profs = ["Shield, Aspis"]
+    c.armor_profs = ["Chain, Full"]
+    d = rx.character_to_roll20(c)
+    aac = {a["name"]: a["aac"] for a in d["armor"]}
+    assert aac["Shield, Aspis"] == 3                # +2 -> +3 for a proficient wielder
+    weights = {g["name"]: g["weight"] for g in d["gear"]}
+    assert weights["Chain, Full"] == 20.0           # half encumbrance, as the builder shows
+    assert weights["Shield, Aspis"] == cr.item("Shield, Aspis")["weight"]
+
+
 def test_export_carries_level_and_xp():
     import random
     c = _cleric()
