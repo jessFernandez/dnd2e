@@ -214,9 +214,12 @@ class Charactermancer:
     # ── proficiencies ────────────────────────────────────────────────────────
     def add_weapon(self, weapon: str):
         """Become proficient with a weapon. Cost includes the house-rule slot price
-        and any barred-weapon penalty for this class."""
+        and any barred-weapon penalty for this class. A weapon a bought group already
+        covers is free and needs no entry."""
         c = self.character
         if not c.char_class or weapon not in cr.WEAPONS or weapon in c.weapon_profs:
+            return
+        if c.group_covers(weapon):
             return
         if c.weapon_prof_cost(weapon, "proficient") <= c.weapon_slots_left():
             c.weapon_profs[weapon] = "proficient"
@@ -229,14 +232,35 @@ class Charactermancer:
         c = self.character
         if c.can_raise_weapon(weapon):
             c.weapon_profs[weapon] = cr.next_weapon_rung(
-                c.weapon_profs[weapon], c.char_class, c.level)
+                c.weapon_rung(weapon), c.char_class, c.level)
 
     def lower_weapon(self, weapon: str):
-        """Step back down one rung (refunding its extra slot)."""
+        """Step back down one rung, refunding its extra slot. Dropping to proficiency
+        on a group-covered weapon drops the entry entirely — the group grants it."""
         c = self.character
-        if c.can_lower_weapon(weapon):
-            c.weapon_profs[weapon] = cr.prev_weapon_rung(
-                c.weapon_profs[weapon], c.char_class, c.level)
+        if not c.can_lower_weapon(weapon):
+            return
+        prev = cr.prev_weapon_rung(c.weapon_profs[weapon], c.char_class, c.level)
+        if prev == "proficient" and c.group_covers(weapon):
+            c.weapon_profs.pop(weapon)
+        else:
+            c.weapon_profs[weapon] = prev
+
+    # ── weapon group proficiencies (CT: 2 slots for a whole tight group) ─────
+    def add_weapon_group(self, group: str):
+        c = self.character
+        if not c.char_class or not c.can_add_weapon_group(group):
+            return
+        c.weapon_groups.append(group)
+        # Plain proficiencies the group now grants are redundant — refund them.
+        for weapon in list(c.weapon_profs):
+            if c.weapon_profs[weapon] == "proficient" and c.group_covers(weapon):
+                c.weapon_profs.pop(weapon)
+
+    def remove_weapon_group(self, group: str):
+        c = self.character
+        if c.can_remove_weapon_group(group):
+            c.weapon_groups.remove(group)
 
     def toggle_ambidexterity(self):
         c = self.character
@@ -417,6 +441,10 @@ class Charactermancer:
             self.raise_weapon(tail); return True
         if verb == "wpndown" and tail:
             self.lower_weapon(tail); return True
+        if verb == "addgroup" and tail:
+            self.add_weapon_group(tail); return True
+        if verb == "rmgroup" and tail:
+            self.remove_weapon_group(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
         if verb == "addprof" and tail:

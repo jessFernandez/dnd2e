@@ -795,6 +795,74 @@ def test_familiarity_is_reported_for_untrained_weapons():
     assert c.weapon_rung("Short Sword") == "proficient"
 
 
+def test_weapon_group_grants_the_whole_tight_group_for_two_slots():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Medium")                   # Broad Sword + Long Sword
+    c = cm.character
+    assert c.weapon_groups == ["Medium"]
+    assert c.weapon_slots_used() == cr.WEAPON_GROUP_SLOT_COST == 2
+    for w in cr.weapon_group_members("Medium"):
+        assert c.weapon_rung(w) == "proficient"
+    assert c.weapon_profs == {}                      # no per-weapon entries needed
+
+
+def test_buying_a_group_refunds_the_proficiencies_it_now_grants():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")              # 1 slot
+    assert cm.character.weapon_slots_used() == 1
+    cm.dispatch("addgroup/Medium")                   # covers Long Sword
+    c = cm.character
+    assert c.weapon_profs == {}                      # the redundant entry is refunded
+    assert c.weapon_slots_used() == 2                # just the group
+
+
+def test_group_covered_weapon_can_still_be_specialised_for_the_extra_slot_only():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Medium")
+    c = cm.character
+    cm.dispatch("wpnup/Long Sword")                  # proficiency already paid by the group
+    assert c.weapon_profs == {"Long Sword": "specialist"}
+    assert c.weapon_prof_cost("Long Sword") == 1     # only the extra rung slot
+    assert c.weapon_slots_used() == 3                # 2 group + 1 extra
+    cm.dispatch("wpndown/Long Sword")                # back to group-granted proficiency
+    assert c.weapon_profs == {} and c.weapon_slots_used() == 2
+
+
+def test_group_covered_weapon_is_not_bought_individually():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Crossbows")
+    cm.dispatch("addweapon/Light Crossbow")          # already granted -> no entry
+    assert cm.character.weapon_profs == {}
+
+
+def test_group_members_confer_familiarity():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Middle Eastern")           # Short Sword + Scimitar
+    c = cm.character
+    # Short Sword is also Ancient and Short, so those groups' weapons are familiar
+    assert c.weapon_rung("Broad Sword") == "familiar"     # shares Ancient
+    assert c.weapon_rung("Dagger") == "familiar"          # shares Short
+    assert c.weapon_rung("Halberd") == "nonproficient"
+
+
+def test_removing_a_group_is_refused_when_it_would_overdraw():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addgroup/Medium")
+    assert c.can_remove_weapon_group("Medium")
+    cm.dispatch("rmgroup/Medium")
+    assert c.weapon_groups == [] and c.weapon_slots_used() == 0
+
+
+def test_weapon_groups_survive_a_save_load_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Axes")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.weapon_groups == ["Axes"]
+    assert back.weapon_rung("Battle Axe") == "proficient"
+
+
 def test_legacy_weapon_prof_list_migrates_to_rungs():
     from character import Character
     c = _fighter_at_profs().character

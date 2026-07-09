@@ -1066,9 +1066,19 @@ WEAPON_TIGHT_GROUPS = {
 }
 
 
+# CT: "Weapon group proficiencies cost two slots, but may include a number of
+# weapons." One tight group, every weapon in it.
+WEAPON_GROUP_SLOT_COST = 2
+
+
 def weapon_tight_groups(weapon: str) -> tuple:
     """The tight groups a weapon belongs to; () when it belongs to none."""
     return WEAPON_TIGHT_GROUPS.get(weapon, ())
+
+
+def tight_groups_with_members() -> tuple:
+    """Every tight group that has at least one weapon on our roster, alphabetical."""
+    return tuple(sorted(g for g in TIGHT_TO_BROAD if weapon_group_members(g)))
 
 
 def weapon_broad_groups(weapon: str) -> tuple:

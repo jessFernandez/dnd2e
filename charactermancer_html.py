@@ -524,6 +524,7 @@ def _review_age_row(c) -> str:
 def _review_profs(c) -> str:
     weapons = [w if rung == "proficient" else f"{w} ({cr.RUNG_LABELS[rung]})"
                for w, rung in c.weapon_profs.items()]
+    weapons += [f"{g} group" for g in c.weapon_groups]
     if c.bought_ambidexterity:
         weapons.append("Ambidexterity")
     wp = ", ".join(_esc(w) for w in weapons) or "none"
@@ -715,10 +716,10 @@ def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> 
     )
 
 
-def _weapon_row(cm, weapon: str, rung: str) -> str:
+def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:
     """A trained weapon: its rung, the slots it costs, and the mastery steppers."""
     c = cm.character
-    cost = c.weapon_prof_cost(weapon)
+    cost = c.weapon_prof_cost(weapon, rung)
     top = cr.next_weapon_rung(rung, c.char_class, c.level) is None
 
     down = (f'<a class="slot-btn" href="dnd:///cm/wpndown/{weapon}">&minus;</a>'
@@ -728,19 +729,60 @@ def _weapon_row(cm, weapon: str, rung: str) -> str:
 
     detail = f'{cr.RUNG_LABELS[rung]} &middot; {_slot_cost_label(cost)} slot'
     detail += "s" if cost != 1 else ""
+    if from_group:
+        detail += ' &middot; <span class="hint">from a weapon group</span>'
     if top and cr.specialises(rung):
         detail += ' &middot; <span class="hint">top of the ladder</span>'
     groups = cr.weapon_tight_groups(weapon)
     if groups:
         detail += f' &middot; {_esc(", ".join(groups))}'
 
+    # A group-granted proficiency has no entry of its own to remove.
+    rm = ('<span class="pr-rm" title="Granted by a weapon group">•</span>' if from_group
+          else f'<a class="pr-rm" href="dnd:///cm/rmweapon/{weapon}" title="Remove">✕</a>')
     return (
         '<div class="prof-row">'
-        f'<a class="pr-rm" href="dnd:///cm/rmweapon/{weapon}" title="Remove">✕</a>'
+        f'{rm}'
         f'<div class="pr-main"><span class="pr-name">{_esc(weapon)}</span>'
         f'<span class="pr-detail">{detail}</span></div>'
         f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
         '</div>')
+
+
+def _weapon_group_block(cm) -> str:
+    """Buy a whole tight group for 2 slots; every weapon in it becomes proficient."""
+    c = cm.character
+    cost = cr.WEAPON_GROUP_SLOT_COST
+
+    bought = ""
+    for group in c.weapon_groups:
+        members = ", ".join(cr.weapon_group_members(group))
+        rm = (f'<a class="pr-rm" href="dnd:///cm/rmgroup/{group}" title="Remove">✕</a>'
+              if c.can_remove_weapon_group(group)
+              else '<span class="pr-rm" title="Removing would overdraw your slots">✕</span>')
+        bought += (
+            '<div class="prof-row">'
+            f'{rm}'
+            f'<div class="pr-main"><span class="pr-name">{_esc(group)}</span>'
+            f'<span class="pr-detail">{_esc(members)}</span></div>'
+            f'<div class="pr-slots"><span class="pr-sn">{cost}</span></div></div>')
+
+    opts = ""
+    for group in cr.tight_groups_with_members():
+        if group in c.weapon_groups:
+            continue
+        dis = "" if c.can_add_weapon_group(group) else " dis"
+        tip = _esc(", ".join(cr.weapon_group_members(group)))
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addgroup/{group}" title="{tip}">'
+                 f'<span class="opt-name">{_esc(group)}</span>'
+                 f'<span class="opt-cost">{cost}</span></a>')
+
+    return (
+        f'<div class="grp-label" style="margin-top:16px">Weapon groups</div>'
+        f'<div class="hint">{cost} slots buys proficiency in every weapon of one tight '
+        'group. Hover a group for its weapons.</div>'
+        + (f'<div class="chosen-list">{bought}</div>' if bought else "")
+        + f'<div class="opt-grid">{opts}</div>')
 
 
 def _weapon_section(cm) -> str:
@@ -748,6 +790,10 @@ def _weapon_section(cm) -> str:
     total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
 
     chosen = "".join(_weapon_row(cm, w, rung) for w, rung in c.weapon_profs.items())
+    # Weapons a bought group grants: shown so they can still be specialised.
+    for w in cr.WEAPONS:
+        if w not in c.weapon_profs and c.group_covers(w):
+            chosen += _weapon_row(cm, w, "proficient", from_group=True)
     if c.bought_ambidexterity:
         chosen += (
             '<div class="prof-row">'
@@ -765,8 +811,8 @@ def _weapon_section(cm) -> str:
         opts += (f'<a class="opt{dis}" href="dnd:///cm/ambi"><span class="opt-name">Ambidexterity</span>'
                  f'<span class="opt-cost">{cost}</span></a>')
     for w in cr.WEAPONS:
-        if w in c.weapon_profs:
-            continue
+        if w in c.weapon_profs or c.group_covers(w):
+            continue                       # already trained, or granted by a group
         cost = c.weapon_prof_cost(w, "proficient")
         dis = "" if cost <= left else " dis"
         # Flag the two things that change a weapon's price for this character.
@@ -796,6 +842,7 @@ def _weapon_section(cm) -> str:
         f'{guide}'
         f'<div class="chosen-list">{chosen}</div>'
         f'<div class="opt-grid">{opts}</div>'
+        f'{_weapon_group_block(cm)}'
         '</section>'
     )
 

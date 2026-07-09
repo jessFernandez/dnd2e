@@ -73,6 +73,8 @@ class Character:
     # it (cr.weapon_prof_cost), because the house-rule costs mean slots-invested
     # alone can't tell a 2-slot bow proficiency from an expert with a dagger.
     weapon_profs: dict = field(default_factory=dict)
+    # Tight weapon groups bought wholesale (CT: 2 slots for every weapon in one).
+    weapon_groups: list = field(default_factory=list)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
     bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
     # Equipment (Equipment step) and known spells (Spells step).
@@ -257,6 +259,7 @@ class Character:
 
     def weapon_slots_used(self) -> int:
         used = sum(self.weapon_prof_cost(w) for w in self.weapon_profs)
+        used += cr.WEAPON_GROUP_SLOT_COST * len(self.weapon_groups)
         if self.bought_ambidexterity:
             used += cr.HOUSE_RULES.ambidexterity_slot_cost
         return used
@@ -265,19 +268,57 @@ class Character:
         return self.weapon_slots_total() - self.weapon_slots_used()
 
     # ── weapon mastery ladder (Combat & Tactics) ─────────────────────────────
+    def group_covers(self, weapon: str) -> bool:
+        """Whether a bought weapon-group proficiency already covers this weapon."""
+        return any(weapon in cr.weapon_group_members(g) for g in self.weapon_groups)
+
+    def proficient_weapons(self) -> set:
+        """Every weapon known at proficiency or better, from either route."""
+        known = set(self.weapon_profs)
+        for group in self.weapon_groups:
+            known.update(cr.weapon_group_members(group))
+        return known
+
     def weapon_prof_cost(self, weapon: str, rung: str = None) -> int:
-        """Slots invested in a weapon at a rung (its current one by default)."""
+        """Slots invested in a weapon at a rung (its current one by default). When a
+        weapon group already grants proficiency, only the rungs *above* it cost
+        anything — the proficiency slot was paid for by the group."""
         rung = rung or self.weapon_profs.get(weapon, "proficient")
-        return cr.weapon_prof_cost(weapon, rung, self.char_class, self.house_rules)
+        cost = cr.weapon_prof_cost(weapon, rung, self.char_class, self.house_rules)
+        if self.group_covers(weapon):
+            cost -= cr.weapon_prof_cost(weapon, "proficient", self.char_class,
+                                        self.house_rules)
+        return cost
 
     def weapon_rung(self, weapon: str) -> str:
-        """The rung held with a weapon: an explicit one, else familiar (it shares a
-        tight group with something known), else nonproficient."""
+        """The rung held with a weapon: an explicit one, else proficient via a bought
+        weapon group, else familiar (it shares a tight group with something known),
+        else nonproficient."""
         if weapon in self.weapon_profs:
             return self.weapon_profs[weapon]
-        if cr.is_familiar(weapon, self.weapon_profs):
+        if self.group_covers(weapon):
+            return "proficient"
+        if cr.is_familiar(weapon, self.proficient_weapons()):
             return "familiar"
         return "nonproficient"
+
+    # ── weapon group proficiencies ───────────────────────────────────────────
+    def can_add_weapon_group(self, group: str) -> bool:
+        if group in self.weapon_groups or not cr.weapon_group_members(group):
+            return False
+        return cr.WEAPON_GROUP_SLOT_COST <= self.weapon_slots_left()
+
+    def can_remove_weapon_group(self, group: str) -> bool:
+        """Removing a group makes any weapon it covered pay its own proficiency slot
+        again; refuse if that would overdraw the budget."""
+        if group not in self.weapon_groups:
+            return False
+        trial = [g for g in self.weapon_groups if g != group]
+        saved, self.weapon_groups = self.weapon_groups, trial
+        try:
+            return self.weapon_slots_left() >= 0
+        finally:
+            self.weapon_groups = saved
 
     def weapon_rung_ladder(self) -> tuple:
         return cr.weapon_rung_ladder(self.char_class, self.level) if self.char_class else ()
@@ -292,17 +333,21 @@ class Character:
     def can_raise_weapon(self, weapon: str) -> bool:
         """Whether the next rung with this weapon is reachable: it exists on the
         class's ladder at this level, the slots are there, and — for specialisation
-        — no other weapon is already specialised."""
-        if not self.char_class or weapon not in self.weapon_profs:
+        — no other weapon is already specialised. Works for weapons made proficient
+        by a bought weapon group, too."""
+        if not self.char_class:
             return False
-        nxt = cr.next_weapon_rung(self.weapon_profs[weapon], self.char_class, self.level)
+        rung = self.weapon_rung(weapon)
+        if rung not in cr.weapon_rung_ladder(self.char_class, self.level):
+            return False            # nonproficient / familiar: buy proficiency first
+        nxt = cr.next_weapon_rung(rung, self.char_class, self.level)
         if nxt is None:
             return False
         if cr.specialises(nxt):
             other = self.specialised_weapon()
             if other is not None and other != weapon:
                 return False        # a fighter may only specialise in one weapon
-        extra = self.weapon_prof_cost(weapon, nxt) - self.weapon_prof_cost(weapon)
+        extra = self.weapon_prof_cost(weapon, nxt) - self.weapon_prof_cost(weapon, rung)
         return extra <= self.weapon_slots_left()
 
     def can_lower_weapon(self, weapon: str) -> bool:
@@ -442,6 +487,7 @@ class Character:
             "ambidextrous": self.ambidextrous, "handedness_roll": self.handedness_roll,
             "age_level": self.age_level,
             "weapon_profs": dict(self.weapon_profs),
+            "weapon_groups": list(self.weapon_groups),
             "nonweapon_profs": dict(self.nonweapon_profs),
             "bought_ambidexterity": self.bought_ambidexterity,
             "money_cp": self.money_cp,
@@ -459,6 +505,7 @@ class Character:
         wprofs = d.get("weapon_profs") or {}
         d["weapon_profs"] = ({w: "proficient" for w in wprofs} if isinstance(wprofs, list)
                              else dict(wprofs))
+        d["weapon_groups"] = list(d.get("weapon_groups") or [])
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

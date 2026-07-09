@@ -289,7 +289,7 @@ Each phase ships independently with tests. **Phases 1–6 are all reachable at l
 |---|---|
 | ~~**0**~~ | ✅ **Done.** `WEAPON_TIGHT_GROUPS`, `TIGHT_TO_BROAD`, `weapon_tight_groups/broad_groups/group_members`, `is_familiar`, `WEAPON_ACCESS`, `barred_weapon_penalty`, `SHIELD_PROFICIENCY`, `SHIELD_TYPES` — all in `char_rules.py`, tested, **nothing consumes them yet**. Armor-proficiency mapping deferred to phase 3 (each armor item is its own type). |
 | ~~**1**~~ | ✅ **Done.** The rung ladder in `char_rules` (`weapon_rung_ladder`, `next/prev_weapon_rung`, `weapon_prof_cost`, `specialises`), `Character.weapon_profs` as `{weapon: rung}`, and mastery steppers on the Proficiencies step. **Deviation from this plan:** the state is the *rung*, not slots-invested — with the house-rule costs, "2 slots on a Long Bow" is indistinguishable from "expert with a dagger", so slots are derived from the rung instead. Level gates work (mastery 5th, high 6th, grand 9th) now that leveling Phase 1 landed. |
-| **2** | Weapon group proficiency + familiarity display. |
+| ~~**2**~~ | ✅ **Done.** `Character.weapon_groups`: 2 slots buys proficiency in every weapon of one tight group. Buying a group **refunds** the now-redundant per-weapon proficiencies it grants; a group-covered weapon can still be specialised for the *extra* rung slot only (its proficiency slot was paid by the group), and stepping back down drops the entry entirely. Familiarity is computed over the union of explicit and group-granted proficiencies. |
 | **3** | Shield & armor proficiency (+ encumbrance halving). |
 | **4** | Fighting styles + style specialization (ranger free slot; ambidexterity interaction). |
 | **5** | Special talents (fold `bought_ambidexterity` in). |
