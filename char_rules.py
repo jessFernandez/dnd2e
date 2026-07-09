@@ -756,6 +756,168 @@ WEAPONS = (
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Combat & Tactics — weapon groups and barred-weapon access (CT Chapters 4 & 7)
+#
+#  Phase 0 of docs/combat-tactics-chargen-plan.md: pure reference data. Nothing
+#  consumes it yet; the rung/proficiency engine lands on top of it.
+#
+#  CT sorts weapons into *tight* groups nested under *broad* groups
+#  (CT/DD02744). Only the tight groups are mechanically load-bearing: they drive
+#  **familiarity** (proficiency in one weapon of a tight group gives familiarity
+#  with the rest) and the 2-slot **weapon group proficiency**. Broad groups are
+#  informational.
+#
+#  Two subtleties that make this NOT a simple weapon->group dict:
+#   • A weapon belongs to SEVERAL tight groups — a short sword is Ancient,
+#     Middle Eastern *and* Short. Familiarity is the union over your weapons.
+#   • CT's "Unrelated:" lines are NOT a group. Those weapons (and any weapon
+#     absent from the listing) belong to *no* group: "If a weapon does not appear
+#     in the preceding listings, it belongs to no weapon group."
+#     For our roster that means Trident (listed Unrelated), plus Quarterstaff and
+#     Sling (absent entirely) — no familiarity, no group proficiency.
+# ═══════════════════════════════════════════════════════════════════════════
+
+TIGHT_TO_BROAD = {
+    "Axes":             "Axes, Picks, and Hammers",
+    "Hammers":          "Axes, Picks, and Hammers",
+    "Bows":             "Bows",
+    "Maces":            "Clubs, Maces, and Flails",
+    "Clubs":            "Clubs, Maces, and Flails",
+    "Flails":           "Clubs, Maces, and Flails",
+    "Crossbows":        "Crossbows",
+    "Daggers & Knives": "Daggers & Knives",
+    "Poleaxes":         "Polearms",
+    "Spears":           "Spears & Javelins",
+    "Javelins":         "Spears & Javelins",
+    "Ancient":          "Swords",
+    "Roman":            "Swords",
+    "Middle Eastern":   "Swords",
+    "Short":            "Swords",
+    "Medium":           "Swords",
+    "Large":            "Swords",
+}
+
+# Our roster mapped onto CT's tight groups. Transcribed from CT/DD02744; the
+# generic entries (Mace, Flail, Club, Spear) stand in for the book's named
+# variants (footman's/horseman's mace, etc.). () means "no weapon group".
+WEAPON_TIGHT_GROUPS = {
+    "Long Sword":       ("Medium",),
+    "Short Sword":      ("Ancient", "Middle Eastern", "Short"),
+    "Broad Sword":      ("Ancient", "Roman", "Medium"),      # CT spells it "broadsword"
+    "Bastard Sword":    ("Large",),
+    "Two-Handed Sword": ("Large",),
+    "Scimitar":         ("Middle Eastern",),
+    "Dagger":           ("Daggers & Knives", "Short"),
+    "Mace":             ("Maces",),
+    "Morning Star":     ("Clubs",),                          # CT files it under Clubs
+    "Warhammer":        ("Hammers",),
+    "Club":             ("Clubs",),
+    "Quarterstaff":     (),                                  # absent from CT's listing
+    "Flail":            ("Flails",),
+    "Battle Axe":       ("Axes",),
+    "Hand Axe":         ("Axes",),                           # CT: "hand/throwing axe"
+    "Spear":            ("Spears",),
+    "Halberd":          ("Poleaxes",),
+    "Trident":          (),                                  # CT lists it as "Unrelated"
+    "Sling":            (),                                  # absent from CT's listing
+    "Dart":             ("Javelins",),
+    "Short Bow":        ("Bows",),
+    "Long Bow":         ("Bows",),
+    "Light Crossbow":   ("Crossbows",),
+    "Heavy Crossbow":   ("Crossbows",),
+}
+
+
+def weapon_tight_groups(weapon: str) -> tuple:
+    """The tight groups a weapon belongs to; () when it belongs to none."""
+    return WEAPON_TIGHT_GROUPS.get(weapon, ())
+
+
+def weapon_broad_groups(weapon: str) -> tuple:
+    """The distinct broad groups a weapon's tight groups sit under."""
+    seen = []
+    for tight in weapon_tight_groups(weapon):
+        broad = TIGHT_TO_BROAD.get(tight)
+        if broad and broad not in seen:
+            seen.append(broad)
+    return tuple(seen)
+
+
+def weapon_group_members(tight_group: str) -> tuple:
+    """Every weapon on our roster belonging to a tight group, in WEAPONS order."""
+    return tuple(w for w in WEAPONS if tight_group in weapon_tight_groups(w))
+
+
+def is_familiar(weapon: str, proficient_weapons) -> bool:
+    """CT familiarity: the weapon shares a tight group with something you're already
+    proficient in (and you aren't already proficient in it). Group-less weapons —
+    Trident, Quarterstaff, Sling — can never be familiar."""
+    proficient = set(proficient_weapons)
+    if weapon in proficient:
+        return False
+    groups = set(weapon_tight_groups(weapon))
+    if not groups:
+        return False
+    return any(groups & set(weapon_tight_groups(w)) for w in proficient)
+
+
+# ── Barred weapons (CT/DD02624) ──────────────────────────────────────────────
+# CT prices a weapon by the *least restrictive* class group that may wield it,
+# then charges extra slots when you reach above your station:
+#   rogue/priest taking a warrior-only weapon           -> +1 slot
+#   wizard taking a priest/rogue weapon                 -> +1 slot
+#   wizard taking a warrior-only weapon                 -> +2 slots
+# Validated against CT's own worked example: a wizard pays 2 slots total for a
+# long sword (rogue-tier) and 3 for a two-handed sword (warrior-only).
+#
+# NOTE: this is CT's coarse three-tier model. It deliberately does NOT capture the
+# finer per-class PHB restrictions (e.g. clerics being limited to bludgeoning
+# weapons) — those stay DM-adjudicated, exactly as CT leaves them.
+WEAPON_ACCESS = {
+    # wizard-tier: the weapons a mage may natively wield
+    "Dagger": "wizard", "Dart": "wizard", "Quarterstaff": "wizard", "Sling": "wizard",
+    # priest/rogue-tier
+    "Club": "priest_rogue", "Mace": "priest_rogue", "Warhammer": "priest_rogue",
+    "Flail": "priest_rogue", "Morning Star": "priest_rogue", "Scimitar": "priest_rogue",
+    "Spear": "priest_rogue", "Short Sword": "priest_rogue", "Long Sword": "priest_rogue",
+    "Broad Sword": "priest_rogue", "Short Bow": "priest_rogue",
+    "Light Crossbow": "priest_rogue",
+    # warrior-only
+    "Bastard Sword": "warrior", "Two-Handed Sword": "warrior", "Battle Axe": "warrior",
+    "Hand Axe": "warrior", "Halberd": "warrior", "Trident": "warrior",
+    "Long Bow": "warrior", "Heavy Crossbow": "warrior",
+}
+
+_ACCESS_RANK = {"wizard": 0, "priest_rogue": 1, "warrior": 2}
+_GROUP_RANK = {"Wizard": 0, "Priest": 1, "Rogue": 1, "Warrior": 2}
+
+
+def barred_weapon_penalty(weapon: str, class_name: str) -> int:
+    """Extra proficiency slots to learn a weapon barred to your class group (0/1/2)."""
+    group = CLASSES[class_name].group
+    weapon_rank = _ACCESS_RANK[WEAPON_ACCESS.get(weapon, "warrior")]
+    return max(0, weapon_rank - _GROUP_RANK[group])
+
+
+# ── Shield proficiency (CT/DD02627) ──────────────────────────────────────────
+# 1 weapon slot. `attackers` is how many attacks the shield's bonus may apply to
+# in a round. Body shields list (melee, missile) bonuses.
+SHIELD_PROFICIENCY = {
+    "buckler": {"normal_ac": 1, "proficient_ac": 1, "attackers": 1},
+    "small":   {"normal_ac": 1, "proficient_ac": 2, "attackers": 2},
+    "medium":  {"normal_ac": 1, "proficient_ac": 3, "attackers": 3},
+    "body":    {"normal_ac": (1, 2), "proficient_ac": (3, 4), "attackers": 4},
+}
+
+# Our homebrew shields mapped onto CT's four types (DM ruling: the aspis, a large
+# round hoplite shield at +2 AC, is a CT "medium" shield).
+SHIELD_TYPES = {
+    "Shield, Buckler": "buckler",
+    "Shield, Aspis":   "medium",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Equipment — starting money, Armor Class, encumbrance
 #  (Item data itself lives in equipment.py; these are the rules that use it.)
 # ═══════════════════════════════════════════════════════════════════════════

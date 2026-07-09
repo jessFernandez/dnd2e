@@ -112,6 +112,73 @@ def test_racial_requirements_pass_and_fail():
     assert fails == [("Constitution", 11, 18, 9)]
 
 
+# ── Combat & Tactics: weapon groups + barred weapons (CT Ch4/Ch7) ────────────
+
+def test_every_weapon_has_group_and_access_data():
+    # data integrity: the CT tables must cover the whole roster, no strays
+    assert set(cr.WEAPON_TIGHT_GROUPS) == set(cr.WEAPONS)
+    assert set(cr.WEAPON_ACCESS) == set(cr.WEAPONS)
+    for w in cr.WEAPONS:
+        for tight in cr.weapon_tight_groups(w):
+            assert tight in cr.TIGHT_TO_BROAD, f"{w}: tight group {tight} has no broad group"
+
+
+def test_weapon_belongs_to_several_tight_groups():
+    # CT/DD02744: a short sword is Ancient, Middle Eastern and Short
+    assert cr.weapon_tight_groups("Short Sword") == ("Ancient", "Middle Eastern", "Short")
+    assert cr.weapon_tight_groups("Broad Sword") == ("Ancient", "Roman", "Medium")
+    assert cr.weapon_broad_groups("Short Sword") == ("Swords",)   # all three roll up to Swords
+
+
+def test_weapons_outside_any_group():
+    # "Unrelated" is not a group; absent weapons belong to none.
+    for w in ("Trident", "Quarterstaff", "Sling"):
+        assert cr.weapon_tight_groups(w) == ()
+        assert cr.weapon_broad_groups(w) == ()
+
+
+def test_weapon_group_members():
+    assert cr.weapon_group_members("Crossbows") == ("Light Crossbow", "Heavy Crossbow")
+    assert cr.weapon_group_members("Bows") == ("Short Bow", "Long Bow")
+    assert cr.weapon_group_members("Large") == ("Bastard Sword", "Two-Handed Sword")
+    assert cr.weapon_group_members("Nonexistent") == ()
+
+
+def test_familiarity_is_union_over_tight_groups():
+    # proficient in Short Sword -> familiar with everything sharing any of its
+    # three tight groups: Broad Sword (Ancient), Scimitar (Middle Eastern), Dagger (Short)
+    profs = ["Short Sword"]
+    for w in ("Broad Sword", "Scimitar", "Dagger"):
+        assert cr.is_familiar(w, profs), w
+    assert not cr.is_familiar("Short Sword", profs)      # already proficient
+    assert not cr.is_familiar("Halberd", profs)          # unrelated group
+    assert not cr.is_familiar("Quarterstaff", profs)     # group-less: never familiar
+    # crossbows are their own tight group
+    assert cr.is_familiar("Heavy Crossbow", ["Light Crossbow"])
+
+
+def test_barred_weapon_penalty_matches_ct_worked_example():
+    # CT/DD02624: a wizard pays 2 slots total for a long sword (available to rogues)
+    # and 3 for a two-handed sword (warrior-only). Base cost is 1 slot.
+    assert 1 + cr.barred_weapon_penalty("Long Sword", "Mage") == 2
+    assert 1 + cr.barred_weapon_penalty("Two-Handed Sword", "Mage") == 3
+    # rogues/priests reaching for a warrior weapon pay one extra slot
+    assert cr.barred_weapon_penalty("Two-Handed Sword", "Thief") == 1
+    assert cr.barred_weapon_penalty("Halberd", "Cleric") == 1
+    # nobody is barred from their own tier, and warriors are never barred
+    assert cr.barred_weapon_penalty("Dagger", "Mage") == 0
+    assert cr.barred_weapon_penalty("Long Sword", "Thief") == 0
+    for w in cr.WEAPONS:
+        assert cr.barred_weapon_penalty(w, "Fighter") == 0
+
+
+def test_shield_types_map_to_ct_table():
+    assert set(cr.SHIELD_TYPES.values()) <= set(cr.SHIELD_PROFICIENCY)
+    assert cr.SHIELD_TYPES["Shield, Aspis"] == "medium"          # DM ruling
+    assert cr.SHIELD_PROFICIENCY["medium"]["proficient_ac"] == 3
+    assert cr.SHIELD_PROFICIENCY["buckler"]["attackers"] == 1
+
+
 def test_race_base_movement():
     # PHB: humans/elves/half-elves move 12; dwarves/gnomes/halflings move 6.
     assert cr.RACES["Human"].movement == 12 and cr.RACES["Elf"].movement == 12

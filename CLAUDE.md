@@ -63,7 +63,10 @@ The builder currently makes **level-1, single-class PHB** characters, but
 `char_rules` is already fully parameterized by level. The top planned feature —
 character leveling / advancement — is scoped in
 [`docs/leveling-plan.md`](docs/leveling-plan.md), including which 2e tables are
-still missing from the engine.
+still missing from the engine. Adopting the *Combat & Tactics* character-building
+rules (weapon mastery ladder, fighting styles, special talents — but **not** its
+weapon list or spells) is scoped in
+[`docs/combat-tactics-chargen-plan.md`](docs/combat-tactics-chargen-plan.md).
 
 ### "Ask the Rules" (Jarvis)
 

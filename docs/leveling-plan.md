@@ -75,18 +75,26 @@ Paladin lay-on-hands & auras, Ranger species enemy / tracking / followers, Bard
 lore & influence, Druid shapechange, weapon specialization, strongholds/henchmen
 at name level.
 
-## Open design decision (blocks Phase 1)
+## Design decision: HP per level — **DECIDED 2026-07-09**
 
-**How is HP determined per level?** This drives the `Character` schema and the UI:
-- **Rolled & stored** — store each level's HD roll (a list); reroll button. Most
-  faithful; requires new persisted state.
-- **Average** — deterministic (e.g. HD/2+1 per level); simplest, no stored rolls.
-- **Max** — matches the existing level-1 best-case behaviour.
-- **Manual entry** — player types their real rolled total.
+**Max at 1st level, rolled & stored for 2nd+.** (Was the blocker on Phase 1; the
+recommendation below was accepted.)
 
-Recommendation: keep **max at 1st level** (matches today) and offer rolled/average
-for 2nd+, storing per-level values so Con changes recompute correctly. Confirm the
-campaign's house rule before building.
+- 1st level keeps today's best-case behaviour (`max_hp()` unchanged at level 1).
+- Each level from 2nd up **rolls its hit die and stores the result**, with a reroll
+  button in the UI.
+- Levels past `name_level` add the flat `hp_after` with **no die and no Con bonus**.
+- Because the per-level rolls are persisted, a later Constitution change (aging,
+  a magic item) recomputes total HP correctly — the Con bonus is applied *per hit
+  die* at display time rather than baked into the stored roll.
+
+**Schema impact (Phase 1):** `Character` gains `level`, `xp`, and `hp_rolls: list[int]`
+(one entry per level ≥ 2). `to_dict`/`from_dict` must persist them and **migrate
+legacy saves** that have none (treat as level 1, empty rolls).
+
+Alternatives considered and rejected: *average* (deterministic but unfaithful —
+the table rolls), *max at every level* (too generous), *manual entry* (no rules
+modelling; still worth offering as an override later).
 
 ## Suggested phasing
 
