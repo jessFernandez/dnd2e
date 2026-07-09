@@ -42,6 +42,12 @@ class Charactermancer:
         self._rng = rng                 # injectable for deterministic tests
         self.spell_catalog = []         # level-1 spells for this class (injected by app.py)
 
+    @property
+    def _roll(self) -> random.Random:
+        """The RNG every roll goes through: the injected one, else the `random`
+        module. Centralised so no call site has to repeat the fallback."""
+        return self._rng or random
+
     # ── step position ────────────────────────────────────────────────────────
     @property
     def step(self) -> str:
@@ -110,7 +116,7 @@ class Charactermancer:
     def roll(self):
         """Roll a fresh pool and lay it out high-to-low as a starting arrangement;
         the player then rearranges via the per-ability selectors."""
-        pool = self.character.roll_pool(self._rng)
+        pool = self.character.roll_pool(self._roll)
         for ability, score in zip(self.character.ability_names(), sorted(pool, reverse=True)):
             self.character.assign_ability(ability, score)
         self._revalidate()
@@ -143,19 +149,18 @@ class Charactermancer:
         max_level() would raise on the illegal pair. A no-op for the level-1 builds
         the builder makes today."""
         if self.character.char_class:
-            # set_level falls back to the `random` module when rng is None.
-            self.character.set_level(self.character.level, rng=self._rng)
+            self.character.set_level(self.character.level, rng=self._roll)
 
     # ── advancement ───────────────────────────────────────────────────────────
     def set_level(self, level: int) -> bool:
         """Set the character's level (clamped to the racial cap by Character)."""
         if not self.character.char_class or level < 1:
             return False
-        self.character.set_level(level, rng=self._rng)
+        self.character.set_level(level, rng=self._roll)
         return True
 
     def reroll_hp(self):
-        self.character.reroll_hp(rng=self._rng)
+        self.character.reroll_hp(rng=self._roll)
 
     def set_alignment(self, alignment: str):
         self.character.alignment = alignment
@@ -174,15 +179,13 @@ class Charactermancer:
 
     def roll_exceptional_strength(self):
         """Warriors with an 18 Strength roll d100 to set the 18/xx band (1–100)."""
-        import random as _random
         if self.character.rolls_exceptional_strength():
-            self.character.exceptional_str = (self._rng or _random).randint(1, 100)
+            self.character.exceptional_str = self._roll.randint(1, 100)
 
     def roll_handedness(self):
         """House rule: roll a d10 for handedness; a 10 means ambidextrous. Rangers
         are ambidextrous regardless."""
-        import random as _random
-        roll = (self._rng or _random).randint(1, 10)
+        roll = self._roll.randint(1, 10)
         self.character.handedness_roll = roll
         self.character.ambidextrous = cr.is_ambidextrous(
             self.character.race, self.character.char_class, roll, self.character.house_rules)
@@ -265,10 +268,9 @@ class Charactermancer:
     # ── equipment ─────────────────────────────────────────────────────────────
     def roll_money(self):
         """Roll (or re-roll) the class's starting purse, in copper pieces."""
-        import random as _random
         if self.character.char_class:
             self.character.money_cp = cr.roll_starting_money(
-                self.character.char_class, self._rng or _random)
+                self.character.char_class, self._roll)
 
     def buy_item(self, name: str):
         """Buy one of a catalog item if it's affordable (deducts its cp cost)."""

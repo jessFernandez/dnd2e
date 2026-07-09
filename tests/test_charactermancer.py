@@ -79,6 +79,25 @@ def test_changing_race_clears_illegal_class():
     assert cm.character.char_class is None
 
 
+def test_works_without_an_injected_rng():
+    # Every roll goes through Charactermancer._roll, which falls back to the
+    # `random` module. Tests always inject an rng, so this path was uncovered.
+    cm = Charactermancer()
+    for a in cm.character.ability_names():
+        cm.set_ability(a, 18)
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.roll_exceptional_strength()
+    cm.roll_handedness()
+    cm.roll_money()
+    cm.dispatch("level/5")
+    cm.dispatch("rerollhp")
+    c = cm.character
+    assert 1 <= c.exceptional_str <= 100
+    assert 1 <= c.handedness_roll <= 10
+    assert c.money_cp > 0
+    assert c.level == 5 and len(c.hp_rolls) == 4
+
+
 def test_dispatch_level_and_rerollhp():
     cm = _at_abilities_done()
     cm.set_race("Human"); cm.set_class("Fighter")
