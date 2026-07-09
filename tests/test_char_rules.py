@@ -279,6 +279,54 @@ def test_barred_weapon_penalty_matches_ct_worked_example():
         assert cr.barred_weapon_penalty(w, "Fighter") == 0
 
 
+def test_weapon_rung_ladder_is_class_and_level_gated():
+    # Only a single-class fighter climbs past specialisation, and only with levels.
+    assert cr.weapon_rung_ladder("Fighter", 1) == ("proficient", "specialist")
+    assert cr.weapon_rung_ladder("Fighter", 5) == ("proficient", "specialist", "master")
+    assert cr.weapon_rung_ladder("Fighter", 6)[-1] == "high_master"
+    assert cr.weapon_rung_ladder("Fighter", 9)[-1] == "grand_master"
+    # paladins and rangers take expertise instead, and stop there
+    for cls in ("Paladin", "Ranger"):
+        assert cr.weapon_rung_ladder(cls, 20) == ("proficient", "expert")
+    # everyone else stops at proficiency, however high they climb
+    for cls in ("Mage", "Cleric", "Thief", "Bard"):
+        assert cr.weapon_rung_ladder(cls, 20) == ("proficient",)
+    assert cr.max_weapon_rung("Fighter", 9) == "grand_master"
+
+
+def test_rung_costs_layer_house_rules_and_barred_penalty_on_ct():
+    # CT: proficiency 1 slot, expertise/specialisation 2, mastery 3, high 4, grand 5
+    for rung, total in (("proficient", 1), ("specialist", 2), ("master", 3),
+                        ("high_master", 4), ("grand_master", 5)):
+        assert cr.weapon_prof_cost("Long Sword", rung, "Fighter") == total
+    # house rules ride on top of the proficiency slot: crossbows free, bows cost 2
+    assert cr.weapon_prof_cost("Light Crossbow", "proficient", "Fighter") == 0
+    assert cr.weapon_prof_cost("Light Crossbow", "specialist", "Fighter") == 1
+    assert cr.weapon_prof_cost("Long Bow", "proficient", "Fighter") == 2
+    # ...and so does the barred-weapon penalty (a wizard's long sword costs 2)
+    assert cr.weapon_prof_cost("Long Sword", "proficient", "Mage") == 2
+
+
+def test_next_and_prev_rung_walk_the_ladder():
+    assert cr.next_weapon_rung("proficient", "Fighter", 1) == "specialist"
+    assert cr.next_weapon_rung("specialist", "Fighter", 1) is None      # needs 5th
+    assert cr.next_weapon_rung("specialist", "Fighter", 5) == "master"
+    assert cr.next_weapon_rung("expert", "Ranger", 20) is None          # top for a ranger
+    assert cr.prev_weapon_rung("master", "Fighter", 5) == "specialist"
+    assert cr.prev_weapon_rung("proficient", "Fighter", 5) is None
+
+
+def test_specialises_flags_the_mastery_rungs():
+    assert not cr.specialises("proficient") and not cr.specialises("expert")
+    for rung in ("specialist", "master", "high_master", "grand_master"):
+        assert cr.specialises(rung)
+
+
+def test_barred_penalty_is_zero_before_a_class_is_chosen():
+    assert cr.barred_weapon_penalty("Two-Handed Sword", None) == 0
+    assert cr.weapon_prof_cost("Two-Handed Sword", "proficient", None) == 1
+
+
 def test_shield_types_map_to_ct_table():
     assert set(cr.SHIELD_TYPES.values()) <= set(cr.SHIELD_PROFICIENCY)
     assert cr.SHIELD_TYPES["Shield, Aspis"] == "medium"          # DM ruling

@@ -1131,10 +1131,95 @@ _GROUP_RANK = {"Wizard": 0, "Priest": 1, "Rogue": 1, "Warrior": 2}
 
 
 def barred_weapon_penalty(weapon: str, class_name: str) -> int:
-    """Extra proficiency slots to learn a weapon barred to your class group (0/1/2)."""
+    """Extra proficiency slots to learn a weapon barred to your class group (0/1/2).
+    Zero before a class is chosen — nothing is barred to nobody."""
+    if class_name not in CLASSES:
+        return 0
     group = CLASSES[class_name].group
     weapon_rank = _ACCESS_RANK[WEAPON_ACCESS.get(weapon, "warrior")]
     return max(0, weapon_rank - _GROUP_RANK[group])
+
+
+# ── The weapon mastery ladder (CT Ch4, CT/DD02629-DD02644) ───────────────────
+#
+# The ladder is NOT linear. Expertise and specialisation both cost two slots and
+# sit at the same rung: expertise is the non-fighter's version (paladins, rangers
+# and multi-classed fighters), specialisation the single-class fighter's. Mastery
+# builds on specialisation, so only a single-class fighter ever climbs past it.
+#
+# `nonproficient` and `familiar` cost nothing and are never *bought* — familiarity
+# falls out of the tight weapon groups (see is_familiar), so neither appears in a
+# class's ladder.
+#
+# Level gates come from CT's own worked example: master at 5th, high master at 6th
+# ("has spent four slots ... and is at least 6th level"), and the third mastery
+# slot — grand mastery — no earlier than 9th.
+_RUNG_MIN_LEVEL = {"master": 5, "high_master": 6, "grand_master": 9}
+
+# Slots spent *beyond* the proficiency slot. Proficiency itself costs
+# weapon_slot_cost() (house rules apply) plus any barred-weapon penalty.
+_RUNG_EXTRA_SLOTS = {
+    "proficient": 0, "expert": 1, "specialist": 1,
+    "master": 2, "high_master": 3, "grand_master": 4,
+}
+
+RUNG_LABELS = {
+    "nonproficient": "Nonproficient", "familiar": "Familiar", "proficient": "Proficient",
+    "expert": "Expert", "specialist": "Specialist", "master": "Master",
+    "high_master": "High Master", "grand_master": "Grand Master",
+}
+
+
+def weapon_rung_ladder(class_name: str, level: int = 1) -> tuple:
+    """The rungs this class can climb, in order, at this level.
+
+    Single-class fighters specialise and go on to mastery; paladins and rangers
+    take expertise instead and stop there; everyone else stops at proficiency."""
+    if class_name == "Fighter":
+        ladder = ["proficient", "specialist"]
+        for rung in ("master", "high_master", "grand_master"):
+            if level >= _RUNG_MIN_LEVEL[rung]:
+                ladder.append(rung)
+        return tuple(ladder)
+    if class_name in ("Paladin", "Ranger"):
+        return ("proficient", "expert")
+    return ("proficient",)
+
+
+def max_weapon_rung(class_name: str, level: int = 1) -> str:
+    return weapon_rung_ladder(class_name, level)[-1]
+
+
+def next_weapon_rung(rung: str, class_name: str, level: int = 1):
+    """The rung above `rung` on this class's ladder, or None at the top."""
+    ladder = weapon_rung_ladder(class_name, level)
+    if rung not in ladder:
+        return None
+    i = ladder.index(rung)
+    return ladder[i + 1] if i + 1 < len(ladder) else None
+
+
+def prev_weapon_rung(rung: str, class_name: str, level: int = 1):
+    """The rung below `rung`, or None when `rung` is merely proficient."""
+    ladder = weapon_rung_ladder(class_name, level)
+    if rung not in ladder:
+        return None
+    i = ladder.index(rung)
+    return ladder[i - 1] if i > 0 else None
+
+
+def weapon_prof_cost(weapon: str, rung: str, class_name: str,
+                     house_rules: bool = True) -> int:
+    """Total slots invested in a weapon to sit at `rung`: the proficiency slot
+    (house-rule cost + barred-weapon penalty) plus the extra slots the rung needs."""
+    base = weapon_slot_cost(weapon, house_rules) + barred_weapon_penalty(weapon, class_name)
+    return base + _RUNG_EXTRA_SLOTS[rung]
+
+
+def specialises(rung: str) -> bool:
+    """Rungs that count as 'specialised in this weapon' — a single-class fighter may
+    hold only one at a time (CT: 'A fighter may only specialize in one weapon')."""
+    return rung in ("specialist", "master", "high_master", "grand_master")
 
 
 # ── Shield proficiency (CT/DD02627) ──────────────────────────────────────────

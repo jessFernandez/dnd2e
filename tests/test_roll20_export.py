@@ -16,7 +16,7 @@ def _cleric() -> Character:
     c.inventory = {armor: 1, "Dagger": 1}
     c.worn = [armor]
     c.nonweapon_profs = {"Healing": 1, "Anatomy": 1}
-    c.weapon_profs = ["Mace"]
+    c.weapon_profs = {"Mace": "proficient"}
     c.spells = {"Bless": 1}
     return c
 
@@ -39,7 +39,7 @@ def test_export_repeating_sections():
     d = rx.character_to_roll20(c, {"Bless": {"school": "Combat", "casting_time": "1 rd"}})
     dagger = next(w for w in d["weapons"] if w["name"] == "Dagger")
     assert dagger["damage"] == "1d4"                  # 'd4' normalized to '1d4'
-    assert "Mace" in d["weapon_profs"]
+    assert {"name": "Mace", "slots": 1, "rung": "proficient"} in d["weapon_profs"]
     healing = next(n for n in d["nwp"] if n["name"] == "Healing")
     assert healing["stat"] == "willpower"             # Wisdom-based prof -> willpower token
     assert healing["base"] == c.proficiency_skill("Healing") - c.final_abilities()["Wisdom"]

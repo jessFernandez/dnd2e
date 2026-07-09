@@ -213,14 +213,30 @@ class Charactermancer:
 
     # ── proficiencies ────────────────────────────────────────────────────────
     def add_weapon(self, weapon: str):
+        """Become proficient with a weapon. Cost includes the house-rule slot price
+        and any barred-weapon penalty for this class."""
         c = self.character
-        if weapon in cr.WEAPONS and weapon not in c.weapon_profs:
-            if cr.weapon_slot_cost(weapon, c.house_rules) <= c.weapon_slots_left():
-                c.weapon_profs.append(weapon)
+        if not c.char_class or weapon not in cr.WEAPONS or weapon in c.weapon_profs:
+            return
+        if c.weapon_prof_cost(weapon, "proficient") <= c.weapon_slots_left():
+            c.weapon_profs[weapon] = "proficient"
 
     def remove_weapon(self, weapon: str):
-        if weapon in self.character.weapon_profs:
-            self.character.weapon_profs.remove(weapon)
+        self.character.weapon_profs.pop(weapon, None)
+
+    def raise_weapon(self, weapon: str):
+        """Climb one rung of the mastery ladder with a weapon."""
+        c = self.character
+        if c.can_raise_weapon(weapon):
+            c.weapon_profs[weapon] = cr.next_weapon_rung(
+                c.weapon_profs[weapon], c.char_class, c.level)
+
+    def lower_weapon(self, weapon: str):
+        """Step back down one rung (refunding its extra slot)."""
+        c = self.character
+        if c.can_lower_weapon(weapon):
+            c.weapon_profs[weapon] = cr.prev_weapon_rung(
+                c.weapon_profs[weapon], c.char_class, c.level)
 
     def toggle_ambidexterity(self):
         c = self.character
@@ -397,6 +413,10 @@ class Charactermancer:
             self.add_weapon(tail); return True
         if verb == "rmweapon" and tail:
             self.remove_weapon(tail); return True
+        if verb == "wpnup" and tail:
+            self.raise_weapon(tail); return True
+        if verb == "wpndown" and tail:
+            self.lower_weapon(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
         if verb == "addprof" and tail:

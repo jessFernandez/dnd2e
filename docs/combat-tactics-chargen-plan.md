@@ -288,12 +288,12 @@ Each phase ships independently with tests. **Phases 1–6 are all reachable at l
 | Phase | Work |
 |---|---|
 | ~~**0**~~ | ✅ **Done.** `WEAPON_TIGHT_GROUPS`, `TIGHT_TO_BROAD`, `weapon_tight_groups/broad_groups/group_members`, `is_familiar`, `WEAPON_ACCESS`, `barred_weapon_penalty`, `SHIELD_PROFICIENCY`, `SHIELD_TYPES` — all in `char_rules.py`, tested, **nothing consumes them yet**. Armor-proficiency mapping deferred to phase 3 (each armor item is its own type). |
-| **1** | `weapon_profs` list→dict migration, `weapon_rung`, proficiency/expertise/specialization. Builder: slot steppers on weapons, like the NWP rows. |
+| ~~**1**~~ | ✅ **Done.** The rung ladder in `char_rules` (`weapon_rung_ladder`, `next/prev_weapon_rung`, `weapon_prof_cost`, `specialises`), `Character.weapon_profs` as `{weapon: rung}`, and mastery steppers on the Proficiencies step. **Deviation from this plan:** the state is the *rung*, not slots-invested — with the house-rule costs, "2 slots on a Long Bow" is indistinguishable from "expert with a dagger", so slots are derived from the rung instead. Level gates work (mastery 5th, high 6th, grand 9th) now that leveling Phase 1 landed. |
 | **2** | Weapon group proficiency + familiarity display. |
 | **3** | Shield & armor proficiency (+ encumbrance halving). |
 | **4** | Fighting styles + style specialization (ranger free slot; ambidexterity interaction). |
 | **5** | Special talents (fold `bought_ambidexterity` in). |
-| **6** | Barred-weapon slot penalty. |
+| ~~**6**~~ | ✅ **Done (fell out of phase 1).** `weapon_prof_cost` already adds `barred_weapon_penalty`, so a mage's long sword costs 2 slots and a two-handed sword 3. The buy list badges the penalty. Pleasingly, this reproduces CT's own remark that "the limited number of weapon proficiencies available for nonwarrior characters will tend to control character abuse of this rule" — a 3rd-level mage has one slot and simply cannot afford a barred long sword. |
 | **6.5** | **Ch5 unarmed**: Pummeling/Wrestling as pseudo-weapons on the ladder (rung caps), Overbearing as familiar-only, martial arts styles A–D + the 6 martial arts talents (with the "≥1 style" prerequisite). Depends on phase 1 (rung engine) and phase 5 (talents). |
 | **6.6** | **Ch8 siege proficiencies**: Artillerist, Vehicle Handling. Trivial — two rows in the existing nonweapon-proficiency table; no new machinery. Could ride along with phase 5. |
 | **7** | Mastery / high / grand mastery — **requires leveling** (5th/6th-level gates and the "can't outpace slot gain" rule). Lands with [`leveling-plan.md`](leveling-plan.md). |

@@ -96,8 +96,12 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
             })
     out["weapons"] = weapons
 
-    # Weapon proficiencies (the trained-with list) -> the sheet's WP section.
-    out["weapon_profs"] = list(c.weapon_profs)
+    # Weapon proficiencies -> the sheet's WP section. Each carries the slots it cost
+    # and its Combat & Tactics mastery rung, so the sheet's `wpsslots` column is real.
+    out["weapon_profs"] = [
+        {"name": name, "slots": c.weapon_prof_cost(name), "rung": rung}
+        for name, rung in c.weapon_profs.items()
+    ]
 
     # Nonweapon proficiencies: the sheet computes total = stat + base, so base is the
     # part of our skill that isn't the ability score itself.

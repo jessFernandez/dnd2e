@@ -68,7 +68,11 @@ class Character:
     handedness_roll: int = None
     age_level: int = 0            # house-rule aging: 0 = none, 1–3 (player-placed)
     # Proficiencies (spent at the Proficiencies step).
-    weapon_profs: list = field(default_factory=list)      # weapon names
+    # weapon name -> mastery rung ("proficient", "expert", "specialist", "master",
+    # "high_master", "grand_master"). The rung is the state; slots are derived from
+    # it (cr.weapon_prof_cost), because the house-rule costs mean slots-invested
+    # alone can't tell a 2-slot bow proficiency from an expert with a dagger.
+    weapon_profs: dict = field(default_factory=dict)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
     bought_ambidexterity: bool = False                    # purchased 1-slot ambidexterity
     # Equipment (Equipment step) and known spells (Spells step).
@@ -252,13 +256,60 @@ class Character:
         return cr.weapon_slots(self.char_class, self.level) if self.char_class else 0
 
     def weapon_slots_used(self) -> int:
-        used = sum(cr.weapon_slot_cost(w, self.house_rules) for w in self.weapon_profs)
+        used = sum(self.weapon_prof_cost(w) for w in self.weapon_profs)
         if self.bought_ambidexterity:
             used += cr.HOUSE_RULES.ambidexterity_slot_cost
         return used
 
     def weapon_slots_left(self) -> int:
         return self.weapon_slots_total() - self.weapon_slots_used()
+
+    # ── weapon mastery ladder (Combat & Tactics) ─────────────────────────────
+    def weapon_prof_cost(self, weapon: str, rung: str = None) -> int:
+        """Slots invested in a weapon at a rung (its current one by default)."""
+        rung = rung or self.weapon_profs.get(weapon, "proficient")
+        return cr.weapon_prof_cost(weapon, rung, self.char_class, self.house_rules)
+
+    def weapon_rung(self, weapon: str) -> str:
+        """The rung held with a weapon: an explicit one, else familiar (it shares a
+        tight group with something known), else nonproficient."""
+        if weapon in self.weapon_profs:
+            return self.weapon_profs[weapon]
+        if cr.is_familiar(weapon, self.weapon_profs):
+            return "familiar"
+        return "nonproficient"
+
+    def weapon_rung_ladder(self) -> tuple:
+        return cr.weapon_rung_ladder(self.char_class, self.level) if self.char_class else ()
+
+    def specialised_weapon(self):
+        """The one weapon a fighter has specialised in (or mastered), else None."""
+        for weapon, rung in self.weapon_profs.items():
+            if cr.specialises(rung):
+                return weapon
+        return None
+
+    def can_raise_weapon(self, weapon: str) -> bool:
+        """Whether the next rung with this weapon is reachable: it exists on the
+        class's ladder at this level, the slots are there, and — for specialisation
+        — no other weapon is already specialised."""
+        if not self.char_class or weapon not in self.weapon_profs:
+            return False
+        nxt = cr.next_weapon_rung(self.weapon_profs[weapon], self.char_class, self.level)
+        if nxt is None:
+            return False
+        if cr.specialises(nxt):
+            other = self.specialised_weapon()
+            if other is not None and other != weapon:
+                return False        # a fighter may only specialise in one weapon
+        extra = self.weapon_prof_cost(weapon, nxt) - self.weapon_prof_cost(weapon)
+        return extra <= self.weapon_slots_left()
+
+    def can_lower_weapon(self, weapon: str) -> bool:
+        rung = self.weapon_profs.get(weapon)
+        if not rung or not self.char_class:
+            return False
+        return cr.prev_weapon_rung(rung, self.char_class, self.level) is not None
 
     def nonweapon_slots_total(self) -> int:
         if not self.char_class:
@@ -390,7 +441,7 @@ class Character:
             "level": self.level, "xp": self.xp, "hp_rolls": list(self.hp_rolls),
             "ambidextrous": self.ambidextrous, "handedness_roll": self.handedness_roll,
             "age_level": self.age_level,
-            "weapon_profs": list(self.weapon_profs),
+            "weapon_profs": dict(self.weapon_profs),
             "nonweapon_profs": dict(self.nonweapon_profs),
             "bought_ambidexterity": self.bought_ambidexterity,
             "money_cp": self.money_cp,
@@ -403,7 +454,11 @@ class Character:
     def from_dict(cls, data: dict) -> "Character":
         d = dict(data)
         d["abilities"] = dict(d.get("abilities") or {})
-        d["weapon_profs"] = list(d.get("weapon_profs") or [])
+        # Weapon proficiencies were a flat name list before the mastery ladder; each
+        # of those was plain proficiency.
+        wprofs = d.get("weapon_profs") or {}
+        d["weapon_profs"] = ({w: "proficient" for w in wprofs} if isinstance(wprofs, list)
+                             else dict(wprofs))
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

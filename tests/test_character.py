@@ -381,9 +381,9 @@ def test_proficiency_slot_budgets():
     c.race, c.char_class = "Human", "Fighter"
     assert c.weapon_slots_total() == 4
     assert c.nonweapon_slots_total() == 3 + 3           # Fighter 3 + Int-13 bonus (3)
-    c.weapon_profs = ["Long Sword", "Light Crossbow"]   # 1 + 0 (crossbow free)
-    assert c.weapon_slots_used() == 1 and c.weapon_slots_left() == 3
-    c.weapon_profs.append("Long Bow")                   # +2 (house rule)
+    c.weapon_profs = {"Long Sword": "proficient", "Light Crossbow": "proficient"}
+    assert c.weapon_slots_used() == 1 and c.weapon_slots_left() == 3   # 1 + 0 (free)
+    c.weapon_profs["Long Bow"] = "proficient"           # +2 (house rule)
     assert c.weapon_slots_used() == 3
 
 
@@ -411,11 +411,11 @@ def test_can_buy_ambidexterity_warrior_or_rogue_only():
 def test_serialization_preserves_proficiencies():
     c = _with()
     c.race, c.char_class = "Human", "Fighter"
-    c.weapon_profs = ["Long Sword"]
+    c.weapon_profs = {"Long Sword": "proficient"}
     c.nonweapon_profs = {"Swimming": 2}
     c.bought_ambidexterity = True
     r = ch.Character.from_dict(c.to_dict())
-    assert r.weapon_profs == ["Long Sword"] and r.nonweapon_profs == {"Swimming": 2}
+    assert r.weapon_profs == {"Long Sword": "proficient"} and r.nonweapon_profs == {"Swimming": 2}
     assert r.bought_ambidexterity is True
 
 

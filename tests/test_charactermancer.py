@@ -731,6 +731,90 @@ def _cleric_at_profs() -> Charactermancer:
     return cm
 
 
+def test_weapon_mastery_ladder_climb_and_descend():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    c = cm.character
+    assert c.weapon_profs == {"Long Sword": "proficient"} and c.weapon_slots_used() == 1
+    cm.dispatch("wpnup/Long Sword")
+    assert c.weapon_profs["Long Sword"] == "specialist" and c.weapon_slots_used() == 2
+    cm.dispatch("wpnup/Long Sword")                  # mastery needs 5th level
+    assert c.weapon_profs["Long Sword"] == "specialist"
+    cm.dispatch("wpndown/Long Sword")
+    assert c.weapon_profs["Long Sword"] == "proficient" and c.weapon_slots_used() == 1
+    cm.dispatch("wpndown/Long Sword")                # can't go below proficient
+    assert c.weapon_profs["Long Sword"] == "proficient"
+
+
+def test_mastery_unlocks_with_level():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/9")                           # 6 weapon slots at 9th
+    cm.dispatch("addweapon/Long Sword")
+    for _ in range(4):
+        cm.dispatch("wpnup/Long Sword")
+    c = cm.character
+    assert c.weapon_profs["Long Sword"] == "grand_master"
+    assert c.weapon_slots_used() == 5                # 1 + 4 extra slots
+
+
+def test_a_fighter_may_specialise_in_only_one_weapon():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    cm.dispatch("addweapon/Dagger")
+    cm.dispatch("wpnup/Long Sword")
+    assert cm.character.weapon_profs["Long Sword"] == "specialist"
+    cm.dispatch("wpnup/Dagger")                      # refused: already specialised
+    assert cm.character.weapon_profs["Dagger"] == "proficient"
+    assert cm.character.specialised_weapon() == "Long Sword"
+
+
+def test_nonfighters_cannot_climb_past_their_rung():
+    cm = _cleric_at_profs()
+    cm.dispatch("addweapon/Mace")
+    cm.dispatch("wpnup/Mace")
+    assert cm.character.weapon_profs["Mace"] == "proficient"   # priests stop here
+
+
+def test_rung_climb_refused_when_slots_are_short():
+    cm = _fighter_at_profs()
+    for w in ("Long Sword", "Dagger", "Spear", "Club"):
+        cm.dispatch("addweapon/" + w)                # 4 slots, all spent
+    c = cm.character
+    assert c.weapon_slots_left() == 0
+    cm.dispatch("wpnup/Long Sword")                  # no slot for the extra rung
+    assert c.weapon_profs["Long Sword"] == "proficient"
+
+
+def test_familiarity_is_reported_for_untrained_weapons():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Short Sword")             # Ancient/Middle Eastern/Short
+    c = cm.character
+    assert c.weapon_rung("Scimitar") == "familiar"   # shares Middle Eastern
+    assert c.weapon_rung("Halberd") == "nonproficient"
+    assert c.weapon_rung("Quarterstaff") == "nonproficient"   # group-less
+    assert c.weapon_rung("Short Sword") == "proficient"
+
+
+def test_legacy_weapon_prof_list_migrates_to_rungs():
+    from character import Character
+    c = _fighter_at_profs().character
+    legacy = c.to_dict()
+    legacy["weapon_profs"] = ["Long Sword", "Dagger"]   # the old flat list
+    back = Character.from_dict(legacy)
+    assert back.weapon_profs == {"Long Sword": "proficient", "Dagger": "proficient"}
+
+
+def test_html_weapon_section_shows_rungs_and_steppers():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    html = cmh.generate(cm)
+    assert "dnd:///cm/wpnup/Long Sword" in html
+    assert "Proficient" in html and "Specialist" in html      # rung + ladder text
+    cm.dispatch("wpnup/Long Sword")
+    html = cmh.generate(cm)
+    assert "dnd:///cm/wpndown/Long Sword" in html
+
+
 def test_proficiency_class_availability_gating():
     cm = _fighter_at_profs()                             # Warrior
     cm.dispatch("addprof/Alchemy")                       # wizard-only -> rejected
@@ -782,11 +866,13 @@ def test_html_proficiencies_step_renders_with_house_rules():
 
 def test_html_review_lists_chosen_proficiencies():
     cm = _complete()
-    cm.character.weapon_profs = ["Long Sword"]
+    cm.character.weapon_profs = {"Long Sword": "specialist", "Dagger": "proficient"}
     cm.character.nonweapon_profs = {"Swimming": 1}
     cm.index = STEPS.index("review")
     html = cmh.generate(cm)
-    assert "Long Sword" in html and "Swimming" in html
+    assert "Long Sword (Specialist)" in html      # the rung is named on the sheet
+    assert "Dagger" in html and "Dagger (" not in html   # plain proficiency isn't
+    assert "Swimming" in html
 
 
 # ── Equipment + Spells steps ─────────────────────────────────────────────────

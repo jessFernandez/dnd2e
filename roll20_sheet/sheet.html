@@ -3599,8 +3599,12 @@ on("clicked:importall", function() {
                      wdambonus: num(w.dambonus, 0), wspeed: num(w.speed, 0),
                      wtype: w.type || "", wrange: w.range || "" };
         });
-        addRows(data.weapon_profs, "wps", function(name) {
-            return { wpsname: name || "", wpsslots: 1 };
+        addRows(data.weapon_profs, "wps", function(w) {
+            // Each entry is {name, slots, rung}; the rung is appended to the name
+            // since the sheet's WP section has no column for it.
+            var label = (w.name || "") + (w.rung && w.rung !== "proficient"
+                ? " (" + w.rung.replace("_", " ") + ")" : "");
+            return { wpsname: label, wpsslots: num(w.slots, 1) };
         });
         addRows(data.nwp, "nwp", function(n) {
             return { nwpname: n.name || "", nwpattr: "@{" + (n.stat || "strength") + "}",

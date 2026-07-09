@@ -522,7 +522,10 @@ def _review_age_row(c) -> str:
 
 
 def _review_profs(c) -> str:
-    weapons = list(c.weapon_profs) + (["Ambidexterity"] if c.bought_ambidexterity else [])
+    weapons = [w if rung == "proficient" else f"{w} ({cr.RUNG_LABELS[rung]})"
+               for w, rung in c.weapon_profs.items()]
+    if c.bought_ambidexterity:
+        weapons.append("Ambidexterity")
     wp = ", ".join(_esc(w) for w in weapons) or "none"
     nwp = ""
     for name in c.nonweapon_profs:
@@ -712,20 +715,48 @@ def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> 
     )
 
 
+def _weapon_row(cm, weapon: str, rung: str) -> str:
+    """A trained weapon: its rung, the slots it costs, and the mastery steppers."""
+    c = cm.character
+    cost = c.weapon_prof_cost(weapon)
+    top = cr.next_weapon_rung(rung, c.char_class, c.level) is None
+
+    down = (f'<a class="slot-btn" href="dnd:///cm/wpndown/{weapon}">&minus;</a>'
+            if c.can_lower_weapon(weapon) else '<span class="slot-btn off">&minus;</span>')
+    up = (f'<a class="slot-btn" href="dnd:///cm/wpnup/{weapon}">+</a>'
+          if c.can_raise_weapon(weapon) else '<span class="slot-btn off">+</span>')
+
+    detail = f'{cr.RUNG_LABELS[rung]} &middot; {_slot_cost_label(cost)} slot'
+    detail += "s" if cost != 1 else ""
+    if top and cr.specialises(rung):
+        detail += ' &middot; <span class="hint">top of the ladder</span>'
+    groups = cr.weapon_tight_groups(weapon)
+    if groups:
+        detail += f' &middot; {_esc(", ".join(groups))}'
+
+    return (
+        '<div class="prof-row">'
+        f'<a class="pr-rm" href="dnd:///cm/rmweapon/{weapon}" title="Remove">✕</a>'
+        f'<div class="pr-main"><span class="pr-name">{_esc(weapon)}</span>'
+        f'<span class="pr-detail">{detail}</span></div>'
+        f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
+        '</div>')
+
+
 def _weapon_section(cm) -> str:
     c = cm.character
     total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
 
-    chosen = ""
-    for w in c.weapon_profs:
-        cost = cr.weapon_slot_cost(w, c.house_rules)
-        chosen += (f'<a class="chip-x" href="dnd:///cm/rmweapon/{w}">{w}'
-                   f'<span class="cx-cost">{_slot_cost_label(cost)}</span>✕</a>')
+    chosen = "".join(_weapon_row(cm, w, rung) for w, rung in c.weapon_profs.items())
     if c.bought_ambidexterity:
-        chosen += ('<a class="chip-x" href="dnd:///cm/ambi">Ambidexterity'
-                   '<span class="cx-cost">1</span>✕</a>')
-    if not chosen:
-        chosen = '<span class="hint">No weapons chosen yet.</span>'
+        chosen += (
+            '<div class="prof-row">'
+            '<a class="pr-rm" href="dnd:///cm/ambi" title="Remove">✕</a>'
+            '<div class="pr-main"><span class="pr-name">Ambidexterity</span>'
+            '<span class="pr-detail">Special talent &middot; 1 slot</span></div>'
+            f'<div class="pr-slots"><span class="pr-sn">'
+            f'{cr.HOUSE_RULES.ambidexterity_slot_cost}</span></div></div>')
+    chosen = chosen or '<span class="hint">No weapons chosen yet.</span>'
 
     opts = ""
     if c.can_buy_ambidexterity() and not c.bought_ambidexterity:
@@ -736,18 +767,34 @@ def _weapon_section(cm) -> str:
     for w in cr.WEAPONS:
         if w in c.weapon_profs:
             continue
-        cost = cr.weapon_slot_cost(w, c.house_rules)
+        cost = c.weapon_prof_cost(w, "proficient")
         dis = "" if cost <= left else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/addweapon/{w}"><span class="opt-name">{w}</span>'
+        # Flag the two things that change a weapon's price for this character.
+        barred = cr.barred_weapon_penalty(w, c.char_class) if c.char_class else 0
+        meta = ""
+        if barred:
+            meta = f'<span class="opt-meta" title="Barred to your class">+{barred}</span>'
+        elif c.weapon_rung(w) == "familiar":
+            meta = '<span class="opt-meta" title="Same weapon group as one you know">fam</span>'
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addweapon/{w}">'
+                 f'<span class="opt-name">{w}</span>{meta}'
                  f'<span class="opt-cost">{_slot_cost_label(cost)}</span></a>')
+
+    ladder = c.weapon_rung_ladder()
+    ladder_txt = " &rarr; ".join(cr.RUNG_LABELS[r] for r in ladder) if ladder else ""
+    guide = (f'<div class="hint">House rules: crossbows are free, bows cost 2 slots. '
+             f'Mastery ladder for a {_esc(c.char_class or "character")}: {ladder_txt}. '
+             'Weapons sharing a tight group make you <i>familiar</i> with the rest.'
+             '</div>' if ladder else
+             '<div class="hint">House rules: crossbows are free, bows cost 2 slots.</div>')
 
     return (
         '<section class="prof-sec">'
         '<h3 class="prof-h">Weapon Proficiencies</h3>'
         f'{_handedness_field(cm)}'
         f'{_budget_bar(used, total, "Weapon slots")}'
-        '<div class="hint">House rules: crossbows are free, bows cost 2 slots.</div>'
-        f'<div class="chosen">{chosen}</div>'
+        f'{guide}'
+        f'<div class="chosen-list">{chosen}</div>'
         f'<div class="opt-grid">{opts}</div>'
         '</section>'
     )
