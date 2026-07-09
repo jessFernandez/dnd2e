@@ -31,6 +31,66 @@ def _exstr_label(roll: int) -> str:
     return "18/00" if roll in (0, 100) else f"18/{roll:02d}"
 
 
+def _ordinal(n: int) -> str:
+    """1 -> '1st', 7 -> '7th', 12 -> '12th', 21 -> '21st'."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _next_level_xp(c):
+    """XP needed for the next level, or None past the tabulated range."""
+    try:
+        return cr.xp_for_level(c.char_class, c.level + 1)
+    except (ValueError, KeyError):
+        return None
+
+
+def _attacks_label(c) -> str:
+    """'1' / '3/2' / '2' attacks per round."""
+    atks = c.attacks_per_round()
+    if not atks:
+        return "&mdash;"
+    n, rounds = atks
+    return str(n) if rounds == 1 else f"{n}/{rounds}"
+
+
+def _level_field(cm) -> str:
+    """Level stepper + the stored hit-die rolls. Rendered on the Class step (so the
+    slot budgets downstream are already right) and again on the finished sheet."""
+    c = cm.character
+    if not c.char_class:
+        return ""
+    cap = c.max_level()
+    at_cap = cap is not None and c.level >= cap
+    minus = (f'<a class="slot-btn" href="dnd:///cm/level/{c.level - 1}">&minus;</a>'
+             if c.level > 1 else '<span class="slot-btn off">&minus;</span>')
+    plus = ('<span class="slot-btn off">+</span>' if at_cap else
+            f'<a class="slot-btn" href="dnd:///cm/level/{c.level + 1}">+</a>')
+    cap_txt = "unlimited" if cap is None else str(cap)
+
+    nxt = _next_level_xp(c)
+    xp_note = (f'Next level at {nxt:,} XP.' if nxt and not at_cap
+               else ('At the racial level limit.' if at_cap else ""))
+
+    rolls = ""
+    if c.hp_rolls:
+        vals = ", ".join(str(r) for r in c.hp_rolls)
+        rolls = ('<div class="hint">Hit dice rolled after 1st: '
+                 f'{vals} &middot; <a class="reroll" href="dnd:///cm/rerollhp">reroll</a></div>')
+
+    return (
+        '<div class="field"><label>Level '
+        f'<span class="hint">(max {cap_txt})</span></label>'
+        f'<div class="hand-row"><div class="pr-slots">{minus}'
+        f'<span class="pr-sn">{c.level}</span>{plus}</div>'
+        f'<span class="hint" style="margin-left:14px">{xp_note}</span></div>'
+        f'{rolls}</div>'
+    )
+
+
 def _ability_summary(ability: str, score: int, exceptional: int = None) -> str:
     """A compact, human-readable line of what a score buys, from char_rules."""
     if ability == "Strength" and score == 18 and exceptional is not None:
@@ -241,12 +301,13 @@ def _derived_block(cm) -> str:
     maxlvl_txt = "unlimited" if maxlvl is None else str(maxlvl)
     xp = '<span class="badge">+10% XP</span>' if c.xp_bonus() else ""
     return (
-        '<div class="side-sub">At 1st level</div>'
+        f'<div class="side-sub">At {_ordinal(c.level)} level</div>'
         '<div class="dstats">'
         f'<div class="ds"><span>Hit Die</span><span>d{c.hit_die()}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{c.max_hp()}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{c.attack_bonus():+d}</span></div>'
         f'<div class="ds"><span>THAC0</span><span>{c.thac0()}</span></div>'
+        f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Wpn slots</span><span>{c.weapon_slots()}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{c.nonweapon_slots()}</span></div>'
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}</span></div>'
@@ -348,7 +409,9 @@ def _class_card(cm, class_name) -> str:
 
 def _class_body(cm, saved=None) -> str:
     cards = "".join(_class_card(cm, k) for k in cr.CLASSES)
-    return f'<div class="pick-grid">{cards}</div>{_exstr_callout(cm)}'
+    # Level lives here, not on Details: it sets the proficiency-slot budgets that
+    # the later Proficiencies step spends.
+    return f'<div class="pick-grid">{cards}</div>{_exstr_callout(cm)}{_level_field(cm)}'
 
 
 # ── Alignment step ───────────────────────────────────────────────────────────
@@ -523,15 +586,17 @@ def _review_body(cm, saved=None):
     sheet = (
         '<div class="sheet">'
         f'<div class="sheet-head"><div class="sheet-name">{_esc(c.name) or "Unnamed"}</div>'
-        f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · {c.alignment or "—"}</div></div>'
+        f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · '
+        f'{_ordinal(c.level)} level · {c.alignment or "—"}</div></div>'
         f'<div class="rv-abgrid">{ab}</div>'
         '<div class="rv-cols">'
-        '<div class="rv-block"><div class="rv-h">Combat (1st level)</div>'
+        f'<div class="rv-block"><div class="rv-h">Combat ({_ordinal(c.level)} level)</div>'
         f'<div class="ds"><span>Hit Die</span><span>{"d" + str(hd) if hd else "—"}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{_f(c.max_hp())}</span></div>'
         f'<div class="ds"><span>Armor Class</span><span>{_f(c.armor_class())}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{_f(c.attack_bonus(), sign=True)}</span></div>'
         f'<div class="ds"><span>THAC0</span><span>{_f(c.thac0())}</span></div>'
+        f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Weapon slots</span><span>{_f(c.weapon_slots())}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{_f(c.nonweapon_slots())}</span></div>'
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}{xp}</span></div>'
@@ -553,6 +618,10 @@ def _review_body(cm, saved=None):
         '</div>'
     )
 
+    # Level up the finished character in place (same widget as the Class step).
+    advance = f'<div class="saved-box" style="margin-bottom:16px">{_level_field(cm)}</div>' \
+        if c.char_class else ""
+
     save_label = "💾 Update saved" if cm.saved_id else "💾 Save character"
     saved_note = '<span class="saved-ok">Saved ✓</span>' if cm.saved_id else ""
     actions = (
@@ -562,7 +631,7 @@ def _review_body(cm, saved=None):
         '<a class="nav-btn" href="dnd:///cm/restart">＋ New character</a>'
         '</div>'
     )
-    return sheet + actions + _saved_list(saved, heading="Saved characters")
+    return sheet + advance + actions + _saved_list(saved, heading="Saved characters")
 
 
 # ── saved-character list (shared: review + abilities entry) ──────────────────
@@ -940,10 +1009,17 @@ def _spells_body(cm, saved=None) -> str:
              "Choose the 1st-level priest spells you'll memorize; Wisdom grants bonus slots.")
     full_note = ('<div class="hint">Spell limit reached — remove one to choose another.</div>'
                  if full and limit else "")
+    # Spell progression above 1st level isn't modelled yet (leveling phase 2), so be
+    # explicit rather than quietly showing 1st-level slots for a high-level caster.
+    level_note = (
+        f'<div class="callout warn2">✦ <b>{_ordinal(c.level)}-level {group}.</b> '
+        'Spell progression above 1st level isn\'t modelled yet — the spells and slot '
+        'limits below are still the 1st-level ones. Add the rest by hand for now.</div>'
+        if c.level > 1 else "")
     return (
         '<section class="prof-sec">'
         f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; 1st level</span></h3>'
-        f'{budget}'
+        f'{level_note}{budget}'
         f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
         '<div class="side-sub">Chosen</div>'
         f'<div class="chosen-list">{chosen}</div>'

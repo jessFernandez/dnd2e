@@ -110,8 +110,15 @@ modelling; still worth offering as an override later).
 - ✅ **Phase 1 — advance the core stats (all classes): DONE.** `level`/`xp`/`hp_rolls`
   state, HP accumulation, un-hardcoded slot budgets, Roll20 `player_level` + `xp`,
   racial caps enforced in `set_level`, warrior multiple-attacks.
-  **Not yet exposed in the UI** — the builder still makes level-1 characters; a
-  level control on the Details/Review step is the natural follow-up.
+- ✅ **Phase 1b — builder level control: DONE.** A level stepper (`cm/level/<n>`,
+  `cm/rerollhp`) on the **Class step** — deliberately *not* Details, because the
+  level sets the proficiency-slot budgets that the later Proficiencies step spends
+  — and again on the finished **Review** sheet so a saved character can level up in
+  place. The `+` disables at the racial cap; the stored hit dice are listed with a
+  reroll link; the side rail and sheet now read "At *N*th level" and show
+  attacks/round. The Spells step **warns explicitly** when level > 1 that spell
+  progression above 1st isn't modelled yet (see Phase 2) rather than quietly
+  showing 1st-level slots.
 - **Phase 2 — casters:** Wizard Table 21 + Priest Table 24 (+ specialist / Ranger
   @8 / Paladin @9 / Bard hooks); extend the Spells step beyond level 1.
 - **Phase 3 — Thief skills** subsystem and Turn Undead.

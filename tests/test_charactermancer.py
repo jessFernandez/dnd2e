@@ -79,6 +79,73 @@ def test_changing_race_clears_illegal_class():
     assert cm.character.char_class is None
 
 
+def test_dispatch_level_and_rerollhp():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    assert cm.dispatch("level/7")
+    assert cm.character.level == 7 and len(cm.character.hp_rolls) == 6
+    before = list(cm.character.hp_rolls)
+    assert cm.dispatch("rerollhp")
+    assert cm.character.hp_rolls != before and len(cm.character.hp_rolls) == 6
+    assert not cm.dispatch("level/0")            # below 1 is refused
+    assert not cm.dispatch("level/abc")          # non-numeric is refused
+    assert cm.character.level == 7
+
+
+def test_dispatch_level_clamps_to_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Dwarf"); cm.set_class("Fighter")
+    cm.dispatch("level/20")
+    assert cm.character.level == 15               # dwarf fighter cap
+
+
+def test_html_class_step_has_level_control():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.index = STEPS.index("class")
+    html = cmh.generate(cm)
+    assert 'href="dnd:///cm/level/2"' in html      # step up
+    assert "At 1st level" in html                  # side-rail header is level-aware
+    cm.dispatch("level/7")
+    html = cmh.generate(cm)
+    assert "At 7th level" in html
+    assert "dnd:///cm/rerollhp" in html            # rolled hit dice can be rerolled
+
+
+def test_html_level_control_disables_plus_at_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Dwarf"); cm.set_class("Fighter")
+    cm.dispatch("level/15")
+    cm.index = STEPS.index("class")                  # where the level field lives
+    html = cmh.generate(cm)
+    assert 'href="dnd:///cm/level/16"' not in html   # cannot exceed the cap
+    assert "racial level limit" in html
+
+
+def test_html_review_shows_level_and_advance_control():
+    cm = _complete()
+    cm.dispatch("level/9")
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "Combat (9th level)" in html
+    assert "Attacks/round" in html and "3/2" in html   # warrior 3/2 from 7th
+    assert "dnd:///cm/level/" in html                  # level up from the sheet
+
+
+def test_html_spells_step_warns_above_first_level():
+    cm = _cleric_at_profs()
+    cm.dispatch("level/5")
+    cm.index = STEPS.index("spells")
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat"}]
+    html = cmh.generate(cm)
+    assert "5th-level priest" in html and "1st level" in html   # honest about the gap
+
+
+def test_ordinal_suffixes():
+    assert [cmh._ordinal(n) for n in (1, 2, 3, 4, 11, 12, 13, 21, 22)] == \
+        ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd"]
+
+
 def test_changing_race_reclamps_level_to_the_new_racial_cap():
     cm = _at_abilities_done()
     cm.set_race("Human"); cm.set_class("Fighter")

@@ -319,6 +319,8 @@ class Character:
             wis = self.final_abilities().get("Wisdom")
             if wis is None:
                 return 0
+            # Class level 1 is deliberate: only level-1 priest slots are tabulated
+            # (leveling phase 2 fills Table 24). The Spells step says so on screen.
             return cr.priest_spell_slots(1, wis).get(1, 0)
         return None
 

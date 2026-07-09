@@ -146,6 +146,17 @@ class Charactermancer:
             # set_level falls back to the `random` module when rng is None.
             self.character.set_level(self.character.level, rng=self._rng)
 
+    # ── advancement ───────────────────────────────────────────────────────────
+    def set_level(self, level: int) -> bool:
+        """Set the character's level (clamped to the racial cap by Character)."""
+        if not self.character.char_class or level < 1:
+            return False
+        self.character.set_level(level, rng=self._rng)
+        return True
+
+    def reroll_hp(self):
+        self.character.reroll_hp(rng=self._rng)
+
     def set_alignment(self, alignment: str):
         self.character.alignment = alignment
 
@@ -347,6 +358,13 @@ class Charactermancer:
             self.set_name(tail); return True
         if verb == "gender":
             self.set_gender(tail); return True
+        if verb == "level" and tail:
+            try:
+                return self.set_level(int(tail))
+            except ValueError:
+                return False
+        if verb == "rerollhp":
+            self.reroll_hp(); return True
         if verb == "handedness":
             self.roll_handedness(); return True
         if verb == "exstr":
