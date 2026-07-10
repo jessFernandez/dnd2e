@@ -103,6 +103,8 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         for name, rung in c.weapon_profs.items()
     ]
 
+    out["thief_skills"] = _thief_skills(c)
+
     # Nonweapon proficiencies: the sheet computes total = stat + base, so base is the
     # part of our skill that isn't the ability score itself.
     nwp = []
@@ -173,3 +175,43 @@ def _norm_damage(dmg) -> str:
 def _int_or_zero(v) -> int:
     m = re.match(r"\s*(\d+)", str(v or ""))
     return int(m.group(1)) if m else 0
+
+
+#: Sheet suffixes for its "OG" (2e PHB) thief table: thiefO<key>{B,A,Ar,P} are
+#: base / race+Dex adjustment / armor adjustment / discretionary points, and the
+#: sheet's own `C` column sums them.
+_THIEF_SHEET_KEYS = {
+    "Pick Pockets": "PP",
+    "Open Locks": "OL",
+    "Find/Remove Traps": "FRT",
+    "Move Silently": "MS",
+    "Hide in Shadows": "HS",
+    "Detect Noise": "DN",
+    "Climb Walls": "CW",
+    "Read Languages": "RL",
+}
+
+
+def _thief_skills(c) -> list:
+    """The four columns of the sheet's thief table, one row per skill this class has.
+
+    Empty for every class but Thief and Bard. The armor column is the adjustment
+    for what the character is *currently wearing*; the sheet's own "Armor Equiped"
+    dropdown would recompute it, so the import deliberately leaves that alone.
+    """
+    if not c.has_thief_skills():
+        return []
+    dex = c.final_abilities().get("Dexterity") or 0
+    armor_kind = c.thief_armor_kind()
+    rows = []
+    for skill in c.thief_skill_names():
+        rows.append({
+            "key": _THIEF_SHEET_KEYS[skill],
+            "name": skill,
+            "base": cr.thief_skill_base(c.char_class, skill),
+            "adj": (cr.thief_racial_adjustment(c.race, skill)
+                    + cr.thief_dex_adjustment(dex, skill)),
+            "armor": cr.thief_armor_adjustment(armor_kind, skill),
+            "points": c.thief_points_in(skill),
+        })
+    return rows

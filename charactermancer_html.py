@@ -16,7 +16,7 @@ import html
 import json
 
 import char_rules as cr
-from charactermancer import STEPS, STEP_TITLES
+from charactermancer import STEPS, STEP_TITLES, THIEF_POINT_STEP
 
 ACCENT = "#c9a84c"
 
@@ -584,6 +584,45 @@ def _review_spells(c) -> str:
     return out or '<span class="hint">none chosen</span>'
 
 
+def _review_thief_skills(c) -> str:
+    """A thief's or bard's percentage skills, only for the classes that have them."""
+    if not c.has_thief_skills():
+        return ""
+    rows = "".join(
+        f'<div class="ds"><span>{_esc(skill)}</span><span>{score}%</span></div>'
+        for skill, score in c.thief_skill_scores().items())
+    left = c.thief_points_left()
+    note = (f'<div class="hint">{left} discretionary points still unspent.</div>'
+            if left else "")
+    return ('<div class="rv-block"><div class="rv-h">Thieving Skills</div>'
+            f'{rows}{note}</div>')
+
+
+def _review_turn_undead(c) -> str:
+    """The character's row of PHB Table 61, for clerics and paladins of 3rd or better."""
+    results = c.turn_undead()
+    if not results:
+        return ""
+    rows = ""
+    for kind, result in results.items():
+        if result is None:
+            shown = '<span class="hint">&mdash;</span>'
+        elif result == "D*":
+            shown = 'D <span class="badge">+2d4</span>'
+        elif result in ("T", "D"):
+            shown = result
+        else:
+            shown = f"{result}+"
+        rows += f'<div class="ds"><span>{_esc(kind)}</span><span>{shown}</span></div>'
+    turns_as = c.turn_undead_level()
+    aside = (f" (as a {_ordinal(turns_as)}-level priest)"
+             if c.char_class == "Paladin" else "")
+    return ('<div class="rv-block"><div class="rv-h">Turn Undead</div>'
+            f'<div class="hint">Roll d20 and meet the number{aside}. '
+            'T turns automatically, D destroys.</div>'
+            f'{rows}</div>')
+
+
 def _review_body(cm, saved=None):
     c = cm.character
     final = c.final_abilities()
@@ -641,6 +680,8 @@ def _review_body(cm, saved=None):
         '<div class="rv-block"><div class="rv-h">Spells</div>'
         f'{_review_spells(c)}'
         '</div>'
+        f'{_review_thief_skills(c)}'
+        f'{_review_turn_undead(c)}'
         '</div>'
         '</div>'
     )
@@ -1235,9 +1276,88 @@ def _weapons_body(cm, saved=None) -> str:
     return f'<div class="prof-wrap">{_weapon_section(cm)}</div>'
 
 
+_THIEF_SKILL_PAGES = {
+    "base": "PHB/DD01501.htm",
+    "racial": "PHB/DD01502.htm",
+    "dex": "PHB/DD01503.htm",
+    "armor": "PHB/DD01504.htm",
+    "explanations": "PHB/DD01505.htm",
+}
+
+_ARMOR_KIND_LABELS = {
+    "none": "no armor",
+    "leather": "leather",
+    "elven_chain": "elven chain",
+    "padded_studded": "padded, hide or studded leather",
+    "chain_ring": "chain or ring mail",
+}
+
+
+def _thief_skill_breakdown(c, skill: str) -> str:
+    """Where a skill's percentage came from, as a plain-text hover title."""
+    dex = c.final_abilities().get("Dexterity") or 0
+    parts = [f"base {cr.thief_skill_base(c.char_class, skill)}%"]
+    for label, adj in (
+        (str(c.race), cr.thief_racial_adjustment(c.race, skill)),
+        (f"Dex {dex}", cr.thief_dex_adjustment(dex, skill)),
+        (_ARMOR_KIND_LABELS[c.thief_armor_kind()], cr.thief_armor_adjustment(c.thief_armor_kind(), skill)),
+    ):
+        if adj:
+            parts.append(f"{label} {adj:+d}%")
+    spent = c.thief_points_in(skill)
+    if spent:
+        parts.append(f"{spent} points spent")
+    return _esc(", ".join(parts))
+
+
+def _thief_skills_block(cm) -> str:
+    """Thief/Bard only: spread the discretionary percentage points (PHB Tables 26-29)."""
+    c = cm.character
+    if not c.has_thief_skills():
+        return ""
+    total, used, left = c.thief_points_total(), c.thief_points_used(), c.thief_points_left()
+    cap = cr.thief_max_points_in_skill(c.char_class, c.level)
+    step = THIEF_POINT_STEP
+
+    rows = ""
+    for skill in c.thief_skill_names():
+        spent = c.thief_points_in(skill)
+        score = c.thief_skill_score(skill)
+        capped = score >= cr.THIEF_SKILL_MAX
+        minus = (f'<a class="slot-btn" href="dnd:///cm/thiefdown/{skill}">&minus;</a>'
+                 if c.can_remove_thief_point(skill, step) else '<span class="slot-btn off">&minus;</span>')
+        plus = (f'<a class="slot-btn" href="dnd:///cm/thiefup/{skill}">+</a>'
+                if c.can_add_thief_point(skill, step) else '<span class="slot-btn off">+</span>')
+        note = " &middot; at the 95% ceiling" if capped else ""
+        rows += (
+            '<div class="prof-row">'
+            f'<div class="pr-main"><span class="pr-name">{_esc(skill)}</span>'
+            f'<span class="pr-detail" title="{_thief_skill_breakdown(c, skill)}">'
+            f'{score}% &middot; {spent} of {cap} points{note}</span></div>'
+            f'<div class="pr-slots">{minus}<span class="pr-sn">{spent}</span>{plus}</div>'
+            '</div>'
+        )
+
+    armor = _ARMOR_KIND_LABELS[c.thief_armor_kind()]
+    return (
+        '<section class="prof-sec">'
+        '<h3 class="prof-h">Thieving Skills '
+        f'<span class="prof-src">PHB Tables 26&ndash;29</span></h3>'
+        f'{_budget_bar(used, total, "Discretionary points", unit="points spent")}'
+        f'<div class="hint">Points go in blocks of {step}, at most {cap} into any one skill, '
+        f'and no skill may pass {cr.THIEF_SKILL_MAX}%. Scores already include your race, '
+        f'your Dexterity, and the armor you are wearing (currently {armor}) &mdash; '
+        'hover a score to see the arithmetic. '
+        f'<a href="dnd:///{_THIEF_SKILL_PAGES["explanations"]}">What each skill does &rarr;</a>'
+        '</div>'
+        f'<div class="chosen-list">{rows}</div>'
+        '</section>'
+    )
+
+
 def _nonweapon_body(cm, saved=None) -> str:
-    """The nonweapon-slot budget: the campaign's skills."""
-    return f'<div class="prof-wrap">{_nonweapon_section(cm)}</div>'
+    """The nonweapon-slot budget: the campaign's skills, plus a thief's percentage skills."""
+    return f'<div class="prof-wrap">{_nonweapon_section(cm)}{_thief_skills_block(cm)}</div>'
 
 
 # ── equipment step ───────────────────────────────────────────────────────────
@@ -1513,6 +1633,11 @@ _STEP_REFS = {
         ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
         ("Proficiency Groups (Table 37)", "PHB/DD01538.htm", "phb"),
         ("Siege Proficiencies", "CT/DD02824.htm", "ct"),
+        ("Thieving Skills", "PHB/DD01505.htm", "phb"),
+        ("Thief Base Scores (Table 26)", "PHB/DD01501.htm", "phb"),
+        ("Thief Racial Adj. (Table 27)", "PHB/DD01502.htm", "phb"),
+        ("Thief Dexterity Adj. (Table 28)", "PHB/DD01503.htm", "phb"),
+        ("Thief Armor Adj. (Table 29)", "PHB/DD01504.htm", "phb"),
     ],
     "equipment": [
         ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book

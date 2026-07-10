@@ -1856,3 +1856,282 @@ def eligible_classes(abilities: dict, race: str = None) -> list:
 def eligible_races(abilities: dict) -> list:
     """Every race whose Table 7 requirements the given abilities satisfy."""
     return [name for name in RACES if not meets_racial_requirements(name, abilities)]
+
+
+# ---------------------------------------------------------------------------
+# Thieving skills -- PHB Tables 26 (base), 27 (race), 28 (Dexterity), 29 (armor)
+#
+# The base scores on Table 26 assume the thief is wearing *leather* armor, so
+# Table 29 is a set of adjustments away from that baseline -- "leather" is the
+# zero column and does not appear in the book's table at all.
+#
+# Bards run the same machinery over a four-skill subset with their own base
+# scores (Table 33) and their own, smaller, pool of discretionary points.
+# ---------------------------------------------------------------------------
+
+THIEF_SKILLS = (
+    "Pick Pockets",
+    "Open Locks",
+    "Find/Remove Traps",
+    "Move Silently",
+    "Hide in Shadows",
+    "Detect Noise",
+    "Climb Walls",
+    "Read Languages",
+)
+
+#: No skill may exceed this, "including all adjustments for Dexterity, race,
+#: and armor" (PHB, Thief).
+THIEF_SKILL_MAX = 95
+
+_THIEF_BASE = {                                     # Table 26
+    "Pick Pockets": 15,
+    "Open Locks": 10,
+    "Find/Remove Traps": 5,
+    "Move Silently": 10,
+    "Hide in Shadows": 5,
+    "Detect Noise": 15,
+    "Climb Walls": 60,
+    "Read Languages": 0,
+}
+
+_BARD_SKILLS = ("Climb Walls", "Detect Noise", "Pick Pockets", "Read Languages")
+_BARD_BASE = {                                      # Table 33
+    "Climb Walls": 50,
+    "Detect Noise": 20,
+    "Pick Pockets": 10,
+    "Read Languages": 5,
+}
+
+_THIEF_RACIAL = {                                   # Table 27 (Human: all zero)
+    "Dwarf":    {"Open Locks": 10, "Find/Remove Traps": 15, "Climb Walls": -10,
+                 "Read Languages": -5},
+    "Elf":      {"Pick Pockets": 5, "Open Locks": -5, "Move Silently": 5,
+                 "Hide in Shadows": 10, "Detect Noise": 5},
+    "Gnome":    {"Open Locks": 5, "Find/Remove Traps": 10, "Move Silently": 5,
+                 "Hide in Shadows": 5, "Detect Noise": 10, "Climb Walls": -15},
+    "Half-Elf": {"Pick Pockets": 10, "Hide in Shadows": 5},
+    "Halfling": {"Pick Pockets": 5, "Open Locks": 5, "Find/Remove Traps": 5,
+                 "Move Silently": 10, "Hide in Shadows": 15, "Detect Noise": 5,
+                 "Climb Walls": -15, "Read Languages": -5},
+}
+
+#: Table 28, keyed by Dexterity. Only five skills are affected; scores below 9
+#: and above 19 clamp to the ends of the table.
+_THIEF_DEX = {
+    #      PP,  OL, FRT,  MS,  HS
+    9:  (-15, -10, -10, -20, -10),
+    10: (-10,  -5, -10, -15,  -5),
+    11: (-5,    0,  -5, -10,   0),
+    12: (0,     0,   0,  -5,   0),
+    13: (0,     0,   0,   0,   0),
+    14: (0,     0,   0,   0,   0),
+    15: (0,     0,   0,   0,   0),
+    16: (0,     5,   0,   0,   0),
+    17: (5,    10,   0,   5,   5),
+    18: (10,   15,   5,  10,  10),
+    19: (15,   20,  10,  15,  15),
+}
+_THIEF_DEX_SKILLS = ("Pick Pockets", "Open Locks", "Find/Remove Traps",
+                     "Move Silently", "Hide in Shadows")
+
+#: Table 29. ``leather`` is the baseline the Table 26 scores already assume.
+THIEF_ARMOR_KINDS = ("none", "leather", "elven_chain", "padded_studded", "chain_ring")
+_THIEF_ARMOR = {
+    #                    none, elven_chain, padded_studded, chain_ring
+    "Pick Pockets":      (5,  -20, -30, -25),
+    "Open Locks":        (0,   -5, -10, -10),
+    "Find/Remove Traps": (0,   -5, -10, -10),
+    "Move Silently":     (10, -10, -20, -15),
+    "Hide in Shadows":   (5,  -10, -20, -15),
+    "Detect Noise":      (0,   -5, -10,  -5),
+    "Climb Walls":       (10, -20, -30, -25),
+    "Read Languages":    (0,    0,   0,   0),
+}
+_ARMOR_COLUMN = {"none": 0, "elven_chain": 1, "padded_studded": 2, "chain_ring": 3}
+
+#: Worst armor worn wins, so rank the kinds by how much they hurt.
+_ARMOR_SEVERITY = {kind: i for i, kind in enumerate(THIEF_ARMOR_KINDS)}
+
+
+def thief_skill_class(class_name) -> str:
+    """``"Thief"``, ``"Bard"``, or ``None`` -- who has thieving skills at all."""
+    return class_name if class_name in ("Thief", "Bard") else None
+
+
+def thief_skills_for_class(class_name) -> tuple:
+    """The skills this class may use. Empty for everyone but Thief and Bard."""
+    if class_name == "Thief":
+        return THIEF_SKILLS
+    if class_name == "Bard":
+        return _BARD_SKILLS
+    return ()
+
+
+def thief_skill_base(class_name: str, skill: str) -> int:
+    """Table 26 (thief) or Table 33 (bard) base score for one skill."""
+    table = _BARD_BASE if class_name == "Bard" else _THIEF_BASE
+    return table[skill]
+
+
+def thief_racial_adjustment(race, skill: str) -> int:
+    """Table 27. Bards read off the same table ("as given in the Thief description")."""
+    return _THIEF_RACIAL.get(race, {}).get(skill, 0)
+
+
+def thief_dex_adjustment(dex: int, skill: str) -> int:
+    """Table 28, clamped at both ends. Skills the table ignores return 0."""
+    if skill not in _THIEF_DEX_SKILLS:
+        return 0
+    row = _THIEF_DEX[max(9, min(19, int(dex)))]
+    return row[_THIEF_DEX_SKILLS.index(skill)]
+
+
+def thief_armor_kind(item_names) -> str:
+    """Classify worn body armor into a Table 29 column.
+
+    Helms and shields are not body armor and are ignored. Plate is not armor a
+    thief may legally wear; it lands in the harshest column rather than raising.
+    """
+    body_armor = set(armor_items())
+    worst = "none"
+    for name in item_names:
+        if name not in body_armor or name.startswith("Helm"):
+            continue
+        if name.startswith("Gambeson"):
+            kind = "padded_studded"
+        elif name.startswith("Leather"):
+            kind = "leather"
+        else:                                       # Chain, Plate
+            kind = "chain_ring"
+        if _ARMOR_SEVERITY[kind] > _ARMOR_SEVERITY[worst]:
+            worst = kind
+    return worst
+
+
+def thief_armor_adjustment(armor_kind: str, skill: str) -> int:
+    """Table 29. ``leather`` is the baseline and adjusts nothing."""
+    if armor_kind == "leather":
+        return 0
+    return _THIEF_ARMOR[skill][_ARMOR_COLUMN[armor_kind]]
+
+
+def thief_discretionary_points(class_name, level: int) -> int:
+    """Points to spread across the skills: 60 + 30/level (thief), 20 + 15 (bard)."""
+    level = max(1, int(level))
+    if class_name == "Thief":
+        return 60 + 30 * (level - 1)
+    if class_name == "Bard":
+        return 20 + 15 * (level - 1)
+    return 0
+
+
+def thief_max_points_in_skill(class_name, level: int) -> int:
+    """Cap on points sunk into any *one* skill: 30 at 1st, +15 per level after.
+
+    The book states this cap for thieves only; bards inherit it here so that a
+    1st-level bard cannot dump all 20 points into Climb Walls, which the thief
+    rule plainly means to forbid.
+    """
+    if thief_skill_class(class_name) is None:
+        return 0
+    return 30 + 15 * (max(1, int(level)) - 1)
+
+
+def thief_skill_score(class_name: str, race, dex: int, armor_kind: str,
+                      skill: str, allocated: int = 0) -> int:
+    """Final percentage for one skill, capped at :data:`THIEF_SKILL_MAX`."""
+    total = (thief_skill_base(class_name, skill)
+             + thief_racial_adjustment(race, skill)
+             + thief_dex_adjustment(dex, skill)
+             + thief_armor_adjustment(armor_kind, skill)
+             + int(allocated))
+    return max(0, min(THIEF_SKILL_MAX, total))
+
+
+# ---------------------------------------------------------------------------
+# Turning undead -- PHB Table 61
+#
+# An entry is the d20 roll the priest must meet or beat. "T" turns automatically,
+# "D" destroys automatically, "D*" destroys and takes 2d4 extra creatures with
+# it, and None means this priest cannot affect that kind of undead at all.
+#
+# The table is a perfect diagonal: every row is the row above it shifted one
+# column right. ``test_char_rules`` asserts that, which is what catches a typo
+# in the transcription below.
+# ---------------------------------------------------------------------------
+
+TURN_UNDEAD_TYPES = (
+    "Skeleton or 1 HD",
+    "Zombie",
+    "Ghoul or 2 HD",
+    "Shadow or 3-4 HD",
+    "Wight or 5 HD",
+    "Ghast",
+    "Wraith or 6 HD",
+    "Mummy or 7 HD",
+    "Spectre or 8 HD",
+    "Vampire or 9 HD",
+    "Ghost or 10 HD",
+    "Lich or 11+ HD",
+    "Special",
+)
+
+_T, _D, _DS, _X = "T", "D", "D*", None
+
+#: Columns are priest levels 1..9, then 10-11, 12-13, 14+.
+_TURN_UNDEAD = {
+    "Skeleton or 1 HD": (10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS, _DS, _DS),
+    "Zombie":           (13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS, _DS),
+    "Ghoul or 2 HD":    (16, 13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS),
+    "Shadow or 3-4 HD": (19, 16, 13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS),
+    "Wight or 5 HD":    (20, 19, 16, 13, 10,  7,  4, _T, _T, _D, _D, _DS),
+    "Ghast":            (_X, 20, 19, 16, 13, 10,  7,  4, _T, _T, _D, _D),
+    "Wraith or 6 HD":   (_X, _X, 20, 19, 16, 13, 10,  7,  4, _T, _T, _D),
+    "Mummy or 7 HD":    (_X, _X, _X, 20, 19, 16, 13, 10,  7,  4, _T, _T),
+    "Spectre or 8 HD":  (_X, _X, _X, _X, 20, 19, 16, 13, 10,  7,  4, _T),
+    "Vampire or 9 HD":  (_X, _X, _X, _X, _X, 20, 19, 16, 13, 10,  7,  4),
+    "Ghost or 10 HD":   (_X, _X, _X, _X, _X, _X, 20, 19, 16, 13, 10,  7),
+    "Lich or 11+ HD":   (_X, _X, _X, _X, _X, _X, _X, 20, 19, 16, 13, 10),
+    "Special":          (_X, _X, _X, _X, _X, _X, _X, _X, 20, 19, 16, 13),
+}
+
+
+def turn_undead_level(class_name, level: int):
+    """The level a character *turns as*, or ``None`` if they cannot turn at all.
+
+    Clerics turn from 1st level at their own level. Paladins "turn undead as
+    priests who are two levels lower", which is why they start at 3rd. Druids
+    and every non-priest class never turn.
+    """
+    level = int(level)
+    if class_name == "Cleric":
+        return level
+    if class_name == "Paladin":
+        effective = level - 2
+        return effective if effective >= 1 else None
+    return None
+
+
+def _turn_column(priest_level: int) -> int:
+    """Table 61's columns collapse above 9th: 10-11, 12-13, 14+."""
+    if priest_level <= 9:
+        return priest_level - 1
+    if priest_level <= 11:
+        return 9
+    if priest_level <= 13:
+        return 10
+    return 11
+
+
+def turn_undead(class_name, level: int):
+    """Map every undead type to this character's Table 61 result, or ``None``.
+
+    Values are an ``int`` (the d20 roll needed), ``"T"``, ``"D"``, ``"D*"``, or
+    ``None`` for undead this character cannot turn.
+    """
+    priest_level = turn_undead_level(class_name, level)
+    if priest_level is None:
+        return None
+    column = _turn_column(priest_level)
+    return {kind: row[column] for kind, row in _TURN_UNDEAD.items()}

@@ -3636,6 +3636,18 @@ on("clicked:importall", function() {
             rows[pfx + "spellMaterial"] = s.material ? "{{m=1}}" : "";
         });
 
+        // Thief/bard percentage skills fill the four editable columns of the sheet's
+        // "OG" thief table; its C column is a formula that sums them. The "Armor
+        // Equiped" dropdown is deliberately left alone -- changing it fires a worker
+        // that would overwrite the armor column we just wrote.
+        (data.thief_skills || []).forEach(function(t) {
+            var k = "thiefO" + t.key;
+            scalars[k + "B"] = num(t.base, 0);
+            scalars[k + "A"] = num(t.adj, 0);
+            scalars[k + "Ar"] = num(t.armor, 0);
+            scalars[k + "P"] = num(t.points, 0);
+        });
+
         // 3) Apply: scalars, then rows, then clear the paste box.
         setAttrs(scalars, {}, function() {
             setAttrs(rows, {}, function() {

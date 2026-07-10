@@ -101,6 +101,9 @@ class Character:
     inventory: dict = field(default_factory=dict)        # item name -> quantity
     worn: list = field(default_factory=list)             # equipped armor item names (⊆ inventory)
     spells: dict = field(default_factory=dict)           # spell name -> its spell level
+    # Thief/Bard only: skill name -> discretionary percentage points spent on it.
+    # The *score* is this plus the base and the race/Dex/armor adjustments.
+    thief_skills: dict = field(default_factory=dict)
 
     # ── ability scores ──────────────────────────────────────────────────────
     def ability_names(self) -> list:
@@ -612,6 +615,65 @@ class Character:
         score = self.final_abilities().get(talent.ability)
         return None if score is None else score + talent.modifier
 
+    # ── thieving skills (PHB Tables 26-29; bards use Table 33's bases) ───────
+    def has_thief_skills(self) -> bool:
+        return cr.thief_skill_class(self.char_class) is not None
+
+    def thief_skill_names(self) -> tuple:
+        return cr.thief_skills_for_class(self.char_class)
+
+    def thief_armor_kind(self) -> str:
+        """The Table 29 column the currently worn armor falls in."""
+        return cr.thief_armor_kind(self.worn)
+
+    def thief_points_total(self) -> int:
+        return cr.thief_discretionary_points(self.char_class, self.level)
+
+    def thief_points_used(self) -> int:
+        return sum(self.thief_skills.values())
+
+    def thief_points_left(self) -> int:
+        return self.thief_points_total() - self.thief_points_used()
+
+    def thief_points_in(self, skill: str) -> int:
+        return self.thief_skills.get(skill, 0)
+
+    def thief_skill_score(self, skill: str):
+        """Final percentage, or ``None`` if this class has no thieving skills."""
+        if skill not in self.thief_skill_names():
+            return None
+        dex = self.final_abilities().get("Dexterity") or 0
+        return cr.thief_skill_score(self.char_class, self.race, dex,
+                                    self.thief_armor_kind(), skill,
+                                    self.thief_points_in(skill))
+
+    def thief_skill_scores(self) -> dict:
+        return {s: self.thief_skill_score(s) for s in self.thief_skill_names()}
+
+    def can_add_thief_point(self, skill: str, points: int = 5) -> bool:
+        """Enough points left, and the per-skill cap not yet reached."""
+        if skill not in self.thief_skill_names() or points <= 0:
+            return False
+        cap = cr.thief_max_points_in_skill(self.char_class, self.level)
+        return (points <= self.thief_points_left()
+                and self.thief_points_in(skill) + points <= cap)
+
+    def can_remove_thief_point(self, skill: str, points: int = 5) -> bool:
+        return skill in self.thief_skill_names() and self.thief_points_in(skill) >= points
+
+    # ── turning undead (PHB Table 61) ───────────────────────────────────────
+    def turns_undead(self) -> bool:
+        return cr.turn_undead_level(self.char_class, self.level) is not None
+
+    def turn_undead_level(self):
+        """The level this character *turns as* — a paladin's is two lower."""
+        return cr.turn_undead_level(self.char_class, self.level)
+
+    def turn_undead(self):
+        """Undead type -> d20 roll needed / "T" / "D" / "D*" / None. None overall
+        if this character cannot turn at all."""
+        return cr.turn_undead(self.char_class, self.level)
+
     # ── fighting styles (Combat & Tactics) ───────────────────────────────────
     def knows_style(self, style: str) -> bool:
         return cr.knows_styles_free(self.char_class) or style in self.fighting_styles
@@ -729,6 +791,7 @@ class Character:
             "inventory": dict(self.inventory),
             "worn": list(self.worn),
             "spells": dict(self.spells),
+            "thief_skills": dict(self.thief_skills),
         }
 
     @classmethod
@@ -766,5 +829,6 @@ class Character:
         d["level"] = int(d.get("level") or 1)
         d["xp"] = int(d.get("xp") or 0)
         d["hp_rolls"] = list(d.get("hp_rolls") or [])
+        d["thief_skills"] = {k: int(v) for k, v in (d.get("thief_skills") or {}).items()}
         return cls(**{k: v for k, v in d.items()
                       if k in cls.__dataclass_fields__ and k != "rolled_pool"})

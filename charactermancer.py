@@ -36,6 +36,10 @@ STEP_TITLES = {
     "review": "Review",
 }
 
+#: Thieving-skill points are spent and refunded in blocks of this size, so
+#: distributing sixty of them is a handful of clicks rather than sixty.
+THIEF_POINT_STEP = 5
+
 
 class Charactermancer:
     def __init__(self, character: Character = None, rng: random.Random = None):
@@ -154,6 +158,9 @@ class Charactermancer:
         the builder makes today."""
         if self.character.char_class:
             self.character.set_level(self.character.level, rng=self._roll)
+            # the new racial cap may have just lowered the level out from under
+            # any thieving-skill points already spent
+            self._reclaim_thief_points()
 
     # ── advancement ───────────────────────────────────────────────────────────
     def set_level(self, level: int) -> bool:
@@ -161,6 +168,7 @@ class Charactermancer:
         if not self.character.char_class or level < 1:
             return False
         self.character.set_level(level, rng=self._roll)
+        self._reclaim_thief_points()
         return True
 
     def reroll_hp(self):
@@ -214,6 +222,26 @@ class Charactermancer:
             for name in [n for n in c.nonweapon_profs
                          if not cr.proficiency_available(n, c.char_class)]:
                 self.remove_proficiency(name)
+        # thieving-skill points survive only while the class still has the skills
+        self._reclaim_thief_points()
+
+    def _reclaim_thief_points(self):
+        """Drop thieving-skill points the build can no longer justify — a class change
+        away from Thief, or a level lowered back down under the spent points."""
+        c = self.character
+        skills = c.thief_skill_names()
+        for skill in [s for s in c.thief_skills if s not in skills]:
+            del c.thief_skills[skill]
+        cap = cr.thief_max_points_in_skill(c.char_class, c.level)
+        for skill, points in list(c.thief_skills.items()):
+            if points > cap:
+                c.thief_skills[skill] = cap
+        # still over budget after the per-skill cap? shave the biggest piles first
+        while c.thief_points_left() < 0 and c.thief_skills:
+            skill = max(c.thief_skills, key=lambda s: c.thief_skills[s])
+            c.thief_skills[skill] -= min(THIEF_POINT_STEP, c.thief_skills[skill])
+            if c.thief_skills[skill] <= 0:
+                del c.thief_skills[skill]
 
     # ── proficiencies ────────────────────────────────────────────────────────
     def add_weapon(self, weapon: str):
@@ -321,6 +349,24 @@ class Charactermancer:
         # A warrior knows every style anyway, so an empty entry is just noise.
         if c.fighting_styles[style] == 0 and cr.knows_styles_free(c.char_class):
             c.fighting_styles.pop(style)
+
+    # ── thieving skills ──────────────────────────────────────────────────────
+    def add_thief_points(self, skill: str, points: int = THIEF_POINT_STEP):
+        """Spend a block of discretionary points on a thieving skill."""
+        c = self.character
+        if c.can_add_thief_point(skill, points):
+            c.thief_skills[skill] = c.thief_points_in(skill) + points
+
+    def remove_thief_points(self, skill: str, points: int = THIEF_POINT_STEP):
+        """Take a block of points back off a thieving skill."""
+        c = self.character
+        if not c.can_remove_thief_point(skill, points):
+            return
+        remaining = c.thief_points_in(skill) - points
+        if remaining > 0:
+            c.thief_skills[skill] = remaining
+        else:
+            c.thief_skills.pop(skill, None)
 
     def toggle_ambidexterity(self):
         """Ambidexterity is CT's special talent; the house rule prices it the same."""
@@ -580,6 +626,10 @@ class Charactermancer:
             self.remove_talent(tail); return True
         if verb == "ambi":
             self.toggle_ambidexterity(); return True
+        if verb == "thiefup" and tail:
+            self.add_thief_points(tail); return True
+        if verb == "thiefdown" and tail:
+            self.remove_thief_points(tail); return True
         if verb == "addprof" and tail:
             self.add_proficiency(tail); return True
         if verb == "rmprof" and tail:

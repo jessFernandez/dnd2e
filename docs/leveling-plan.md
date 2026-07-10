@@ -1,6 +1,6 @@
 # Feature plan: character leveling / advancement
 
-Status: **Phases 1 + 2 done**; Phase 3 planned · Last updated: 2026-07-09
+Status: **complete** (phases 1, 1b, 2, 3) · Last updated: 2026-07-10
 
 Turn the character builder from a level-1 generator into a real character manager
 that can set a character's level (or track XP and level up) and recompute every
@@ -72,10 +72,14 @@ gone:
 
 ### 🟡 Substantial subsystems (in-scope classes, real work)
 
-4. **Thief skills (Table 29)** — Thief/Bard get 30%/level across 8 skills, with
-   Dex (Table 27), race (Table 28), and armor adjustments. **Completely
-   unmodeled today.** A Thief level-up without this is a major omission.
-5. **Turn Undead (Table 61)** — Cleric from 1st, Paladin from 3rd (as cleric −2).
+4. ✅ **Thief skills — DONE (Phase 3).** Base scores (Table 26) plus race
+   (Table 27), Dexterity (Table 28) and armor (Table 29) adjustments, then the
+   discretionary points: 60 at 1st and +30 per level (bards 20/+15, over their
+   four skills from Table 33), at most 30 + 15/level into any one skill, and no
+   skill above 95%. Note the numbering — an earlier draft of this plan had
+   Tables 27/28/29 mislabelled.
+5. ✅ **Turn Undead (Table 61) — DONE (Phase 3).** Cleric from 1st, Paladin from
+   3rd (as a priest two levels lower). Druids never turn.
 6. ✅ **Sub-caster progressions — DONE (Phase 2).** Ranger @8th, Paladin @9th, Bard
    @2nd, each with its own capped table. `spellcasting_group()` now reports what a
    class *ever* casts (bards → wizard, paladins/rangers → priest) while
@@ -128,7 +132,19 @@ modelling; still worth offering as an override later).
   cleric picks 1st-, 2nd- and 3rd-level spells against separate budgets), and the
   "progression isn't modelled" warning is gone. `Character.spells` became
   `{name: spell_level}`; legacy saves holding a flat name list migrate to `{n: 1}`.
-- **Phase 3 — Thief skills** subsystem and Turn Undead.
+- ✅ **Phase 3 — Thief skills and Turn Undead: DONE.** `char_rules` holds Tables
+  26–29 and 61; `Character` grew `thief_skills` (skill → points spent) with the
+  budget/cap/95% ceiling around it, plus `turn_undead()`. The Nonweapon
+  Proficiencies step gained a Thieving Skills block (points spend in blocks of 5,
+  each score hovers to show its arithmetic), and the Review sheet shows the skills
+  and the character's row of Table 61. Lowering a level or changing class reclaims
+  points that no longer exist. The Roll20 export fills the sheet's "OG" thief
+  table (`thiefO<key>{B,A,Ar,P}`); the sheet has no turning fields, so turning
+  stays in the builder.
+
+  Table 61 is transcribed by hand, so `test_thief_skills.py` asserts the diagonal
+  property the real table has (each row is the one above, shifted a column) —
+  that's what catches a typo.
 
 ## Conventions to follow (per CLAUDE.md)
 

@@ -59,14 +59,15 @@ app.py               MainWindow — Qt shell that wires the above to the UI
 from `char_rules` rather than reimplementing them, so the calculator, the builder,
 and the Roll20 sheet can never disagree. Preserve that — don't duplicate a rule.
 
-The builder currently makes **level-1, single-class PHB** characters, but
-`char_rules` is already fully parameterized by level. The top planned feature —
-character leveling / advancement — is scoped in
-[`docs/leveling-plan.md`](docs/leveling-plan.md), including which 2e tables are
-still missing from the engine. Adopting the *Combat & Tactics* character-building
-rules (weapon mastery ladder, fighting styles, special talents — but **not** its
-weapon list or spells) is scoped in
-[`docs/combat-tactics-chargen-plan.md`](docs/combat-tactics-chargen-plan.md).
+The builder makes **single-class PHB** characters at any level their race allows:
+hit points, THAC0, saves, attacks/round, spell progressions, thief skills and
+turning undead are all parameterized by level. That work is recorded in
+[`docs/leveling-plan.md`](docs/leveling-plan.md) (complete). So is the adoption of
+the *Combat & Tactics* character-building rules — weapon mastery ladder, weapon
+groups, fighting styles, unarmed disciplines, special talents, but **not** its
+weapon list or spells — in
+[`docs/combat-tactics-chargen-plan.md`](docs/combat-tactics-chargen-plan.md)
+(complete). Multi-classing and dual-classing remain unmodeled.
 
 ### "Ask the Rules" (Jarvis)
 
