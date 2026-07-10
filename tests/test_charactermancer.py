@@ -207,45 +207,37 @@ def test_keeps_scroll_only_for_in_place_actions():
     assert not cmh.keeps_scroll("addweapon/Club", "proficiencies", "equipment")
 
 
-def test_with_scroll_restore_positions_before_the_first_paint():
-    html = "<html><head></head><body><p>hi</p></body></html>"
-    assert cmh.with_scroll_restore(html, 0) == html          # nothing to restore
-    out = cmh.with_scroll_restore(html, 420)
-    assert "Y=420" in out                                    # the target offset
-    # the document is hidden in <head> so the top of the page is never painted...
-    assert 'id="cm-scroll-hide"' in out
-    assert out.index("cm-scroll-hide") < out.index("<body")
-    # ...and revealed by a script at the very end of the body, after the layout
-    assert out.index("<script>") > out.index("<p>hi</p>")
-    assert out.endswith("</body></html>")
-    # Chromium must not fight us over the restored offset
-    assert "history.scrollRestoration='manual'" in out
-    # a load listener and a hard timeout both reveal, as fallbacks
-    assert "addEventListener('load'" in out and "setTimeout(reveal" in out
-    # a page whose script never runs must not stay hidden
-    assert "<noscript>" in out
+def test_swap_wrap_js_replaces_the_node_in_the_live_document():
+    wrap = cmh.generate_wrap(_complete())
+    js = cmh.swap_wrap_js(wrap, scroll_to_top=False)
+    assert "document.querySelector('.wrap')" in js
+    assert "w.outerHTML=" in js
+    assert "window.scrollTo(0,0)" not in js          # staying put
+    assert "return false" in js                       # signals "not the builder page"
+    # the markup is JSON-encoded, so quotes and newlines in it can't break the script
+    assert '\\"' in js or "\n" in js
 
 
-def test_with_scroll_restore_handles_a_headless_document():
-    out = cmh.with_scroll_restore("<html><body><p>hi</p></body></html>", 30)
-    assert out.index("cm-scroll-hide") < out.index("<body")   # still hides first
+def test_swap_wrap_js_can_reset_to_the_top():
+    js = cmh.swap_wrap_js("<div class=\"wrap\"></div>", scroll_to_top=True)
+    assert "window.scrollTo(0,0)" in js
 
 
-def test_with_scroll_restore_on_a_real_builder_page():
-    out = cmh.with_scroll_restore(cmh.generate(_complete()), 17)
-    assert "Y=17" in out
-    assert out.index("cm-scroll-hide") < out.index("<body")
-    assert out.rstrip().endswith("</html>")
+def test_generate_wrap_is_the_body_of_the_full_page():
+    cm = _complete()
+    wrap = cmh.generate_wrap(cm)
+    assert wrap.startswith('<div class="wrap">') and wrap.endswith("</div>")
+    assert wrap in cmh.generate(cm)                   # the full page embeds it verbatim
 
 
-def test_cm_action_preserves_scroll_in_place_and_resets_on_step_change():
-    win = _win(scroll_y=350)
+def test_cm_action_swaps_in_place_and_resets_on_step_change():
+    win = _win()
     win._cm = _fighter_at_profs()
     app.MainWindow._cm_action(win, "addweapon/Long Sword")
-    assert win._render_calls == [350]                         # stayed put
+    assert win._render_calls == [False]                # in place, scroll untouched
     win._render_calls.clear()
-    app.MainWindow._cm_action(win, "next")                    # moves to equipment
-    assert win._render_calls == [0]                           # back to the top
+    app.MainWindow._cm_action(win, "next")             # moves to equipment
+    assert win._render_calls == [True]                 # back to the top
 
 
 def test_ordinal_suffixes():
@@ -460,11 +452,11 @@ from types import SimpleNamespace
 import app
 
 
-def _win(scroll_y=0, **over):
+def _win(**over):
     calls = []
     win = SimpleNamespace(_cm=None,
-                          _render_charactermancer=lambda y=0: calls.append(y),
-                          _cm_scroll_y=lambda: scroll_y,
+                          _render_charactermancer=lambda: calls.append("full"),
+                          _cm_rerender=lambda scroll_to_top: calls.append(scroll_to_top),
                           _set_spell_catalog=lambda: None)
     win._render_calls = calls
     for k, v in over.items():
@@ -477,7 +469,7 @@ def test_cm_action_creates_dispatches_and_rerenders():
     app.MainWindow._cm_action(win, "assign/Strength/15")
     assert isinstance(win._cm, Charactermancer)
     assert win._cm.character.abilities.get("Strength") == 15
-    assert win._render_calls == [0]                       # rendered once, from the top
+    assert win._render_calls == [False]                   # swapped in place, same step
 
 
 def test_cm_action_unquotes_path():
@@ -597,8 +589,8 @@ def _win_with_db(cm, user_db=None):
     user_db = user_db or db.connect(":memory:")
     win = SimpleNamespace(_cm=cm, user_db=user_db,
                           _char_library=CharacterLibrary(user_db),
-                          _render_charactermancer=lambda y=0: None,
-                          _cm_scroll_y=lambda: 0,
+                          _render_charactermancer=lambda: None,
+                          _cm_rerender=lambda scroll_to_top: None,
                           _set_spell_catalog=lambda: None)
     win._cm_save = lambda: app.MainWindow._cm_save(win)
     win._cm_load = lambda cid: app.MainWindow._cm_load(win, cid)

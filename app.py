@@ -1363,30 +1363,40 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"  {cr.PROFICIENCY_BOOK}  ·  Nonweapon Proficiencies")
         return True
 
-    def _render_charactermancer(self, scroll_y: int = 0) -> bool:
-        """Render the interactive character builder's current step. The build is
-        window-level state (self._cm) so leaving and returning keeps your progress.
-
-        `scroll_y` re-instates the reader's place after an in-place action (see
-        _cm_action); 0 means start at the top, which is what changing step wants."""
+    def _render_charactermancer(self) -> bool:
+        """Load the builder as a fresh document. The build is window-level state
+        (self._cm) so leaving and returning keeps your progress."""
         if self._cm is None:
             self._cm = Charactermancer()
         saved = self._char_library.all()
         self._set_spell_catalog()
-        html = charactermancer_html.generate(self._cm, saved)
-        self.content._view.setHtml(charactermancer_html.with_scroll_restore(html, scroll_y))
+        self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
+        self._cm_status()
+        return True
+
+    def _cm_status(self):
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title("Character Builder")
         self.status.showMessage(f"  Character Builder  ·  {self._cm.title}")
-        return True
 
-    def _cm_scroll_y(self) -> int:
-        """The builder view's current vertical scroll offset (0 without WebEngine)."""
+    def _cm_rerender(self, scroll_to_top: bool):
+        """Re-render the builder after an action, *without* reloading the document.
+
+        `setHtml` tears the page down and rebuilds it, so the view blanks and
+        repaints — that's the flicker. Replacing the `.wrap` node inside the live
+        document leaves the scroll offset untouched and never blanks. If the current
+        document isn't the builder (nothing to swap) the JS returns false and we
+        fall back to a full load."""
         if not HAS_WEBENGINE:
-            return 0
-        page = self.content._view.page()
-        return int(page.scrollPosition().y()) if page is not None else 0
+            self._render_charactermancer()
+            return
+        self._set_spell_catalog()
+        wrap = charactermancer_html.generate_wrap(self._cm, self._char_library.all())
+        js = charactermancer_html.swap_wrap_js(wrap, scroll_to_top)
+        self.content._view.page().runJavaScript(
+            js, lambda swapped: None if swapped else self._render_charactermancer())
+        self._cm_status()
 
     def _set_spell_catalog(self):
         """Load the spell list for the build's class onto the controller so the Spells
@@ -1412,9 +1422,7 @@ class MainWindow(QMainWindow):
         if self._cm is None:
             self._cm = Charactermancer()
         self._set_spell_catalog()          # so addspell validates against the class
-        # Remember where the reader was: setHtml re-renders the whole document, which
-        # would otherwise snap them back to the top on every click.
-        step_before, scroll_y = self._cm.step, self._cm_scroll_y()
+        step_before = self._cm.step
         if path == "restart":
             self._cm = Charactermancer()
         elif path == "save":
@@ -1429,7 +1437,7 @@ class MainWindow(QMainWindow):
         else:
             self._cm.dispatch(unquote(path))
         keep = charactermancer_html.keeps_scroll(path, step_before, self._cm.step)
-        self._render_charactermancer(scroll_y if keep else 0)
+        self._cm_rerender(scroll_to_top=not keep)
 
     def _cm_export_roll20(self):
         """Build the Roll20 import JSON for the current character (enriching its

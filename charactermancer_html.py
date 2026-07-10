@@ -13,6 +13,7 @@ Layout note: QtWebEngine (Chromium 87) mis-renders flexbox `gap`, so spacing use
 CSS grid `gap` (which works) or explicit margins — never flex `gap`.
 """
 import html
+import json
 
 import char_rules as cr
 from charactermancer import STEPS, STEP_TITLES
@@ -1537,85 +1538,11 @@ def keeps_scroll(path: str, step_before: str, step_after: str) -> bool:
     return path.split("/", 1)[0] not in _SCROLL_TO_TOP_VERBS
 
 
-# Hides the document until the restore script has scrolled it. Without this the
-# page paints at the top and *then* jumps, which reads as a jarring flash. The
-# <noscript> guard means a page whose script never runs can't stay hidden.
-_SCROLL_HIDE_STYLE = ('<style id="cm-scroll-hide">html{visibility:hidden}</style>'
-                      '<noscript><style>html{visibility:visible!important}</style></noscript>')
+def generate_wrap(cm, saved=None) -> str:
+    """The builder's content — everything inside `<div class="wrap">`.
 
-# Scrolls to __Y__ and only then reveals the document.
-#
-# The subtlety: a script at the end of <body> runs before the first paint, but the
-# layout may not have settled — QtWebEngine can still be growing the document. A
-# bare scrollTo then clamps against a too-short scrollHeight, lands short, and the
-# later `load` handler corrects it *after* the page is visible. That correction was
-# the intermittent flash.
-#
-# So retry on each animation frame (which also runs before paint) until we land on
-# the target, and reveal only then.
-#
-# The "page is too short to reach Y" escape has to be careful: a still-growing
-# document is *also* momentarily scrolled to its bottom. Bailing out there reveals
-# a half-laid-out page at the wrong offset, which the load handler then corrects —
-# the exact intermittent flash. So we only accept "cannot scroll further" once the
-# document height has stopped changing between frames.
-#
-# Every exit path reveals: the target, a settled short page, the frame budget, the
-# load event, and a hard timeout. The document can never stay hidden.
-_SCROLL_RESTORE_JS = """(function(){
-var Y=__Y__,frames=0,lastH=-1,done=false;
-function reveal(){if(done){return;}done=true;
-var s=document.getElementById('cm-scroll-hide');
-if(s&&s.parentNode){s.parentNode.removeChild(s);}}
-function docHeight(){var d=document.documentElement,b=document.body;
-return Math.max(d.scrollHeight,b?b.scrollHeight:0);}
-function settle(){
-try{window.scrollTo(0,Y);}catch(e){reveal();return;}
-var here=window.pageYOffset||document.documentElement.scrollTop||0;
-if(Math.abs(here-Y)<2){reveal();return;}
-var h=docHeight();
-if(here>=h-window.innerHeight-2&&h===lastH){reveal();return;}
-lastH=h;
-if(++frames>30){reveal();return;}
-window.requestAnimationFrame(settle);}
-try{if('scrollRestoration' in history){history.scrollRestoration='manual';}}catch(e){}
-window.requestAnimationFrame?window.requestAnimationFrame(settle):settle();
-window.addEventListener('load',function(){window.scrollTo(0,Y);reveal();});
-window.setTimeout(reveal,600);
-})();"""
-
-
-def with_scroll_restore(html: str, scroll_y) -> str:
-    """Re-instate a vertical scroll offset after the page reloads.
-
-    Every builder action re-renders the whole document via `setHtml`, which drops
-    the scroll position — so clicking a weapon near the bottom of the Proficiencies
-    step used to snap you back to the top.
-
-    Restoring on `load` still flashed: the browser painted the top of the page
-    before the handler ran. So instead the document is hidden by a stylesheet in
-    `<head>`, and a script at the very end of `<body>` — which runs after the whole
-    layout exists but *before* the first paint — scrolls and then reveals it. A
-    `load` listener repeats both as a belt-and-braces fallback, in case a late
-    reflow (a web font, say) moved things or the inline script never ran."""
-    if not scroll_y:
-        return html
-    y = int(scroll_y)
-    script = "<script>" + _SCROLL_RESTORE_JS.replace("__Y__", str(y)) + "</script>"
-
-    if "</head>" in html:
-        html = html.replace("</head>", _SCROLL_HIDE_STYLE + "</head>", 1)
-    elif "<body" in html:
-        html = html.replace("<body", _SCROLL_HIDE_STYLE + "<body", 1)
-    else:
-        html = _SCROLL_HIDE_STYLE + html
-
-    if "</body>" in html:
-        return html.replace("</body>", script + "</body>", 1)
-    return html + script
-
-
-def generate(cm, saved=None) -> str:
+    Split out from `generate()` so an in-place action can replace just this node in
+    the live document (see `swap_wrap_js`) instead of reloading the whole page."""
     body = _BODIES.get(cm.step, _placeholder_body)(cm, saved)
     step = (f'<section class="step"><h2 class="step-h">{STEP_TITLES[cm.step]}</h2>'
             f'{body}</section>')
@@ -1625,6 +1552,34 @@ def generate(cm, saved=None) -> str:
         step_block = step
     else:
         step_block = f'<div class="step-layout">{step}{_side_rail(cm)}</div>'
+    return f"""<div class="wrap">
+  <header class="head">
+    <div class="tag">2nd Edition · Character Builder</div>
+    <h1>Create a Character</h1>
+  </header>
+  {_rail(cm)}
+  {step_block}
+  {_footer(cm)}
+</div>"""
+
+
+def swap_wrap_js(wrap_html: str, scroll_to_top: bool) -> str:
+    """JS that replaces the live document's `.wrap` node with fresh markup.
+
+    Re-rendering with `setHtml` tears the document down and rebuilds it, so the view
+    blanks and repaints — the flicker no amount of scroll juggling can hide. Swapping
+    one node inside the *existing* document leaves the scroll offset alone, keeps the
+    page's `cm()` helpers defined, and never blanks.
+
+    Returns `false` when the current document isn't the builder, so the caller can
+    fall back to a full render."""
+    payload = json.dumps(wrap_html)
+    scroll = "window.scrollTo(0,0);" if scroll_to_top else ""
+    return ("(function(){var w=document.querySelector('.wrap');"
+            f"if(!w){{return false;}}w.outerHTML={payload};{scroll}return true;}})();")
+
+
+def generate(cm, saved=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1633,15 +1588,7 @@ def generate(cm, saved=None) -> str:
 <style>{_CSS}</style>
 </head>
 <body>
-<div class="wrap">
-  <header class="head">
-    <div class="tag">2nd Edition · Character Builder</div>
-    <h1>Create a Character</h1>
-  </header>
-  {_rail(cm)}
-  {step_block}
-  {_footer(cm)}
-</div>
+{generate_wrap(cm, saved)}
 <script>
   function cm(path) {{ if (path.endsWith('/')) return; window.location.href = 'dnd:///cm/' + path; }}
   function cmText(verb, v) {{ window.location.href = 'dnd:///cm/' + verb + '/' + encodeURIComponent(v); }}
