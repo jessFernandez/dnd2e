@@ -51,9 +51,17 @@ character.py         Character — the mutable in-progress build; derives everyt
                      by delegating to char_rules (can't disagree with the rulebook)
 charactermancer.py   Charactermancer — the step-flow controller (state machine)
 character_library.py CharacterLibrary — save/load/delete builds + Roll20 payload
-charactermancer_html.py   the builder's HTML view (string templating)
+charactermancer_html.py   the builder's HTML view (string templating): document
+                     shell, progress rail, and every step but the two below
+charactermancer_profs_html.py   the Weapon/Nonweapon Proficiency steps — the CT
+                     mastery ladder, groups, styles, unarmed, talents, thief skills
+charactermancer_common.py   the few primitives both views need (esc, budget_bar),
+                     so neither imports the other
 app.py               MainWindow — Qt shell that wires the above to the UI
 ```
+
+Don't confuse `charactermancer_profs_html.py` (a builder step) with
+`proficiencies_html.py` (the *Codex of Worldly Craft* reference screen).
 
 `roll20_export.py` and `calculator.py` **re-export** the house-rule conversions
 from `char_rules` rather than reimplementing them, so the calculator, the builder,
