@@ -6,9 +6,10 @@ system (attack bonus + ascending AC), per the Combat house rules:
   * THAC0 is removed; attack bonus = 20 − THAC0        (house rule)
   * roll d20 + bonus, meet/beat the target's AC;
     ascending AC = 20 − descending AC                  (house rule)
-  * crit on a natural 18+ that beats AC by 5+
+  * crit on a natural 18+ that beats AC by 5+          (house rule)
 
-It opens as a floating, always-on-top tool window that stays put while you
+All of those rules live in char_rules; this module is the Qt window that displays
+them. It opens as a floating, always-on-top tool window that stays put while you
 navigate pages, and can be resized or closed.
 """
 
@@ -19,22 +20,15 @@ from PyQt5.QtCore import Qt
 
 
 # ── Pure conversion helpers ───────────────────────────────────────────────────
-# The THAC0⇄bonus and descending⇄ascending AC conversions are the campaign's core
-# combat house rule. They live in char_rules (the single source of truth the
-# charactermancer also uses) and are re-exported here so this converter and the
-# character builder can never disagree. (Unit-tested in tests/test_calculator.py.)
-from char_rules import thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc
-
-
-def to_hit_need(attack_bonus: int, target_asc_ac: int) -> int:
-    """The raw d20 result needed to hit (before nat-1/nat-20 clamping)."""
-    return target_asc_ac - attack_bonus
-
-
-def hit_chance(need: int) -> int:
-    """Percent chance to hit on a d20 (a natural 1 always misses, 20 always hits)."""
-    eff = max(2, min(20, need))
-    return (21 - eff) * 5
+# Every rule this window applies — the THAC0⇄bonus and descending⇄ascending AC
+# conversions, the to-hit math, and the house-rule critical — lives in char_rules
+# (the single source of truth the charactermancer also uses) so this converter and
+# the character builder can never disagree. This module is pure display on top.
+# (The rules themselves are unit-tested in tests/test_char_rules.py.)
+from char_rules import (
+    thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc,
+    to_hit_need, hit_chance, is_critical, CRIT_MIN_ROLL, CRIT_MIN_MARGIN,
+)
 
 
 _STYLE = """
@@ -135,11 +129,20 @@ class HouseRuleCalculator(QWidget):
         self._guard = False
 
     def _update_hit(self):
-        need = to_hit_need(self.hb.value(), self.ha.value())
+        bonus, target = self.hb.value(), self.ha.value()
+        need = to_hit_need(bonus, target)
         chance = hit_chance(need)
         if need <= 1:
-            self.result.setText(f"Hits on 2+ on d20  ·  {chance}% (only a natural 1 misses)")
+            text = f"Hits on 2+ on d20  ·  {chance}% (only a natural 1 misses)"
         elif need > 20:
-            self.result.setText("Can't hit by the numbers  ·  5% (only a natural 20)")
+            text = "Can't hit by the numbers  ·  5% (only a natural 20)"
         else:
-            self.result.setText(f"Need {need}+ on d20  ·  {chance}% to hit")
+            text = f"Need {need}+ on d20  ·  {chance}% to hit"
+        # The lowest natural die that both shows CRIT_MIN_ROLL+ and clears AC by the
+        # crit margin — computed from the rule, not hard-coded, so the two can't drift.
+        crit_from = next((r for r in range(CRIT_MIN_ROLL, 21)
+                          if is_critical(r, bonus, target)), None)
+        if crit_from is not None:
+            span = f"{crit_from}+" if crit_from < 20 else "20"
+            text += f"  ·  crit on {span}"
+        self.result.setText(text)

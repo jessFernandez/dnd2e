@@ -439,9 +439,11 @@ def test_rogue_attacks_at_priest_rate_under_house_rules():
 def test_attack_bonus_is_20_minus_thac0():
     assert cr.attack_bonus("Fighter", 1) == 0
     assert cr.attack_bonus("Fighter", 11) == 10        # THAC0 10 -> +10
-    # unify: char_rules and calculator agree on the conversion
+    # unify: the calculator re-exports char_rules' combat math rather than owning it
     import calculator
-    assert calculator.thac0_to_bonus(15) == cr.thac0_to_bonus(15) == 5
+    for name in ("thac0_to_bonus", "bonus_to_thac0", "desc_to_asc", "asc_to_desc",
+                 "to_hit_need", "hit_chance", "is_critical"):
+        assert getattr(calculator, name) is getattr(cr, name), name
 
 
 def test_proficiency_slots():

@@ -53,6 +53,33 @@ def asc_to_desc(asc_ac: int) -> int:
     return 20 - asc_ac
 
 
+def to_hit_need(attack_bonus: int, target_asc_ac: int) -> int:
+    """The raw d20 result needed to hit under the house rule (before nat-1/nat-20
+    clamping): roll d20 + attack bonus and meet or beat the target's ascending AC."""
+    return target_asc_ac - attack_bonus
+
+
+def hit_chance(need: int) -> int:
+    """Percent chance a d20 meets ``need``, clamped: a natural 1 always misses and a
+    natural 20 always hits, so the chance is bounded to 5%–95%."""
+    eff = max(2, min(20, need))
+    return (21 - eff) * 5
+
+
+#: The house-rule critical: a natural 18+ that also beats the target's AC by 5+.
+CRIT_MIN_ROLL = 18
+CRIT_MIN_MARGIN = 5
+
+
+def is_critical(nat_roll: int, attack_bonus: int, target_asc_ac: int) -> bool:
+    """Whether an attack is a critical hit under the house rule: the natural die is
+    ``CRIT_MIN_ROLL`` or more *and* the total beats the target's ascending AC by at
+    least ``CRIT_MIN_MARGIN``. (A high roll that only just connects is not a crit.)"""
+    if nat_roll < CRIT_MIN_ROLL:
+        return False
+    return (nat_roll + attack_bonus) - target_asc_ac >= CRIT_MIN_MARGIN
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Ability-score modifier tables (PHB Tables 1–6)
 #  Stored as (low, high, mods) bands matching the printed rows; look up by score.
