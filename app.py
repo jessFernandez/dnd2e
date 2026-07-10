@@ -28,6 +28,7 @@ from charactermancer import Charactermancer
 from character_library import CharacterLibrary
 from rules_agent import AskWorker, ollama_status
 from ask_controller import Conversation, resolve_model, page_state
+import session
 from calculator import HouseRuleCalculator
 
 from PyQt5.QtWidgets import (
@@ -1856,9 +1857,7 @@ class MainWindow(QMainWindow):
         geo = self._settings.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
-        entries = self._settings.value("openTabs")
-        if isinstance(entries, str):
-            entries = [entries]
+        entries = session.normalize_open_tabs(self._settings.value("openTabs"))
         if not entries:
             self._show_splash()
         else:
@@ -1868,11 +1867,9 @@ class MainWindow(QMainWindow):
                 else:
                     self._content_tabs.setCurrentIndex(0)
                 self._navigate(entry)   # a saved history entry is a destination
-            try:
-                active = int(self._settings.value("activeTab", 0))
-            except (TypeError, ValueError):
-                active = 0
-            if 0 <= active < self._content_tabs.count():
+            active = session.active_tab_index(self._settings.value("activeTab", 0),
+                                              self._content_tabs.count())
+            if active is not None:
                 self._content_tabs.setCurrentIndex(active)
         self._apply_zoom_all()
         # QSplitter re-shows its panes on first display, so force the book browser

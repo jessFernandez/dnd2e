@@ -42,6 +42,7 @@ a = Analysis(
         'character_library',
         'char_rules',
         'ask_controller',
+        'session',
         'proficiencies_html',
         'roll20_export',
         'nonweapon_book',
