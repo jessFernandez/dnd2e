@@ -992,6 +992,23 @@ def test_wizards_may_learn_a_style_but_never_specialise():
     assert not cr.can_specialise_styles("Mage")
 
 
+def test_one_handed_and_two_weapon_styles_take_a_second_slot():
+    # CT: one-handed weapon style's second slot raises the AC bonus from +1 to +2;
+    # two-weapon's allows two weapons of equal size. Every other style caps at one.
+    assert cr.max_style_specialisation("One-Handed Weapon") == 2
+    assert cr.max_style_specialisation("Two-Weapon") == 2
+    for style in ("Weapon and Shield", "Two-Handed Weapon", "Missile or Thrown Weapon"):
+        assert cr.max_style_specialisation(style) == 1
+    cm = _fighter_at_profs()
+    cm.dispatch("level/7")                             # enough slots
+    c = cm.character
+    cm.dispatch("styleup/One-Handed Weapon")
+    cm.dispatch("styleup/One-Handed Weapon")
+    assert c.fighting_styles["One-Handed Weapon"] == 2
+    cm.dispatch("styleup/One-Handed Weapon")           # ...and no further
+    assert c.fighting_styles["One-Handed Weapon"] == 2
+
+
 def test_rangers_get_the_first_two_weapon_specialisation_free():
     cm = _at_abilities_done()
     cm.set_race("Human"); cm.set_class("Ranger")
@@ -1245,16 +1262,22 @@ def test_ct_sections_have_what_it_does_blocks():
     assert html.count("What it does") >= 5             # styles, unarmed, both talent kinds
     for name in ("Two-Weapon", "Pummeling", "Martial Arts: Style A",
                  "Ambidexterity", "Flying Kick"):
-        assert cr.ct_description(name)[:30] in html    # the rulebook prose is inlined
-        assert f"newtab/{cr.ct_page(name)}" in html    # ...with a link to its page
+        assert cr.ct_summary(name)[:40] in html        # the mechanical summary, not prose
+        assert f"newtab/{cr.ct_page(name)}" in html    # ...and a link to the full rule
+    assert "Read the full rule" in html
 
 
-def test_ct_text_covers_every_style_discipline_and_talent():
+def test_ct_rules_cover_every_style_discipline_and_talent():
     named = (set(cr.FIGHTING_STYLES) | set(cr.UNARMED_DISCIPLINES) | set(cr.TALENTS))
-    missing = sorted(n for n in named if not cr.ct_description(n))
-    assert missing == [], f"no Combat & Tactics text for: {missing}"
+    missing = sorted(n for n in named if not cr.ct_summary(n))
+    assert missing == [], f"no Combat & Tactics summary for: {missing}"
     for name in named:
         assert cr.ct_page(name).startswith("CT/")
+        summary = cr.ct_summary(name)
+        # a summary is a summary, not the whole page
+        assert 40 < len(summary) < 460, name
+        # the block escapes its text, so markdown emphasis would render literally
+        assert "*" not in summary, name
 
 
 def test_combat_and_tactics_references_are_not_badged_as_phb():

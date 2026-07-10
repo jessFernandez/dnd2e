@@ -732,25 +732,27 @@ def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> 
 
 def _ct_description_html(name: str) -> str:
     """An expandable "What it does" block for a Combat & Tactics style, discipline or
-    talent — the same affordance the nonweapon proficiencies have. Ends with a link
-    into the rulebook page the text came from."""
-    desc = cr.ct_description(name)
-    if not desc:
+    talent — the same affordance the nonweapon proficiencies have.
+
+    Shows a summary of the mechanical effect rather than the rulebook's prose (which
+    spends most of its words on flavour and edge cases), then links out to the full
+    rule for anyone who wants the rest."""
+    summary = cr.ct_summary(name)
+    if not summary:
         return ""
-    paras = "".join(f"<p>{_esc(par)}</p>" for par in desc.split("\n\n") if par.strip())
     page = cr.ct_page(name)
     link = (f'<p><a class="reroll" href="dnd:///newtab/{page}">'
             f'Read the full rule &rarr;</a></p>' if page else "")
     return (f'<details class="pr-desc"><summary>What it does</summary>'
-            f'<div class="pr-desc-body">{paras}{link}</div></details>')
+            f'<div class="pr-desc-body"><p>{_esc(summary)}</p>{link}</div></details>')
 
 
 def _ct_tooltip(name: str) -> str:
     """A one-line hover summary for a buy-list chip."""
-    desc = " ".join(cr.ct_description(name).split())
-    if not desc:
+    summary = " ".join(cr.ct_summary(name).split())
+    if not summary:
         return ""
-    return _esc(desc if len(desc) <= 280 else desc[:277].rstrip() + "…")
+    return _esc(summary if len(summary) <= 280 else summary[:277].rstrip() + "…")
 
 
 def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:

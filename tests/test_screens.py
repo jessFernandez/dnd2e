@@ -148,3 +148,14 @@ def test_every_step_reference_points_at_a_real_page():
             if not conn.execute("SELECT 1 FROM pages WHERE page_url = ?", (url,)).fetchone():
                 dead.append(f"{step}: {label} -> {url}")
     assert dead == [], "dead reference links: " + "; ".join(dead)
+
+
+@needs_db
+def test_every_combat_and_tactics_summary_links_to_a_real_page():
+    """Each 'Read the full rule' link must resolve, or the summary is a dead end."""
+    import sqlite3
+    import char_rules as cr
+    conn = sqlite3.connect(RULES_DB)
+    dead = [f"{name} -> {page}" for name, (page, _) in cr.CT_RULES.items()
+            if not conn.execute("SELECT 1 FROM pages WHERE page_url = ?", (page,)).fetchone()]
+    assert dead == [], "dead 'full rule' links: " + "; ".join(dead)
