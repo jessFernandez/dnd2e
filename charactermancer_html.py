@@ -758,15 +758,28 @@ def _slot_cost_label(cost: int) -> str:
     return "free" if cost == 0 else str(cost)
 
 
-def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> str:
+#: Shown under an overspent slot bar. Only a level drop can get you here.
+_OVER_NOTE = ("Your level affords fewer slots than you have spent. "
+              "Give some back to continue.")
+
+
+def _budget_bar(used: int, total: int, label: str, unit: str = "slots used",
+                over_note: str = "") -> str:
+    """A spent/remaining bar. Going over budget is reachable by dropping a level,
+    so the bar turns red and explains itself rather than quietly reading "-2 left"."""
     left = total - used
     pct = 0 if total <= 0 else min(100, round(used / total * 100))
+    over = left < 0
+    cls = " over" if over else ""
+    note = (f'<div class="budget-over">Over budget by {-left}. '
+            f'{over_note}</div>') if over and over_note else ""
     return (
-        '<div class="budget">'
+        f'<div class="budget{cls}">'
         f'<div class="budget-top"><span>{label}</span>'
         f'<span class="budget-num">{left} left</span></div>'
         f'<div class="bar"><div class="bar-fill" style="width:{pct}%"></div></div>'
         f'<div class="budget-sub">{used} of {total} {unit}</div>'
+        f'{note}'
         '</div>'
     )
 
@@ -1181,7 +1194,7 @@ def _weapon_section(cm) -> str:
         '<section class="prof-sec">'
         '<h3 class="prof-h">Weapon Proficiencies</h3>'
         f'{_handedness_field(cm)}'
-        f'{_budget_bar(used, total, "Weapon slots")}'
+        f'{_budget_bar(used, total, "Weapon slots", over_note=_OVER_NOTE)}'
         f'{guide}'
         f'<div class="chosen-list">{chosen}</div>'
         f'<div class="opt-grid">{opts}</div>'
@@ -1261,7 +1274,7 @@ def _nonweapon_section(cm) -> str:
         '<section class="prof-sec">'
         f'<h3 class="prof-h">Nonweapon Proficiencies '
         f'<span class="prof-src">from {_esc(cr.PROFICIENCY_BOOK)}</span></h3>'
-        f'{_budget_bar(used, total, "Nonweapon slots")}'
+        f'{_budget_bar(used, total, "Nonweapon slots", over_note=_OVER_NOTE)}'
         '<div class="hint">House rule: each extra slot on a proficiency adds +2 to its check. '
         'Only skills your class can learn are shown; hover a skill for its rules.</div>'
         f'<div class="chosen-list">{chosen}</div>'
@@ -1983,6 +1996,9 @@ _CSS = f"""
   .bar {{ height: 7px; background: #23263a; border-radius: 4px; overflow: hidden; }}
   .bar-fill {{ height: 100%; background: {ACCENT}; border-radius: 4px; transition: width .15s; }}
   .budget-sub {{ font-size: 10.5px; color: #7b83a6; margin-top: 4px; }}
+  .budget.over .budget-num {{ color: #e06c75; }}
+  .budget.over .bar-fill {{ background: #e06c75; }}
+  .budget-over {{ font-size: 11px; color: #e06c75; margin-top: 5px; }}
   .chosen {{ display: flex; flex-wrap: wrap; margin: 10px 0; }}
   .chip-x {{ display: inline-flex; align-items: center; text-decoration: none; background: {ACCENT}18;
             border: 1px solid {ACCENT}55; color: #e6e9f6; border-radius: 20px; padding: 3px 10px;

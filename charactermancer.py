@@ -84,7 +84,13 @@ class Charactermancer:
             return bool(c.alignment) and c.alignment in c.eligible_alignments()
         if step == "details":
             return bool(c.name.strip())
-        # the two proficiency steps (optional) and review are always passable
+        # Spending the slots is optional, but overspending them is not allowed to
+        # stand: dropping a level shrinks the budget under what's already bought,
+        # and only the player can say which proficiency to give back.
+        if step == "weapons":
+            return c.weapon_slots_left() >= 0
+        if step == "nonweapon":
+            return c.nonweapon_slots_left() >= 0
         return True
 
     def can_advance(self) -> bool:

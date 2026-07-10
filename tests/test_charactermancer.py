@@ -1510,3 +1510,53 @@ def test_changing_to_a_non_caster_empties_the_spellbook():
     assert cm.character.spells
     cm.set_class("Fighter")
     assert cm.character.spells == {}
+
+
+def _overspent_fighter():
+    """A 13th-level fighter who spent six weapon slots, then dropped to 1st."""
+    cm = _fighter_at_profs()
+    cm.set_level(13)
+    for w in ["Long Sword", "Dagger", "Spear", "Battle Axe", "Club", "Mace"]:
+        cm.add_weapon(w)
+    cm.set_level(1)
+    return cm
+
+
+def test_an_overspent_slot_budget_blocks_the_step():
+    cm = _overspent_fighter()
+    c = cm.character
+    assert c.weapon_slots_left() == -2                 # the level drop shrank it
+    assert not cm.is_complete("weapons")
+    cm.index = STEPS.index("weapons")
+    assert not cm.can_advance()
+    assert not cm.goto("review")                       # and the rail won't skip past
+
+    cm.remove_weapon("Mace")
+    cm.remove_weapon("Club")
+    assert c.weapon_slots_left() == 0
+    assert cm.is_complete("weapons") and cm.can_advance()
+
+
+def test_an_overspent_budget_says_so_in_the_bar():
+    cm = _overspent_fighter()
+    cm.index = STEPS.index("weapons")
+    html = cmh.generate(cm)
+    assert 'class="budget over"' in html
+    assert "Over budget by 2" in html
+
+
+def test_a_budget_within_its_means_is_not_flagged():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("weapons")
+    assert cm.is_complete("weapons")
+    assert "budget over" not in cmh.generate(cm)
+
+
+def test_the_nonweapon_step_gates_on_its_own_budget():
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert cm.is_complete("nonweapon")
+    # Spend one slot more than the level affords, the way a level drop would.
+    c.nonweapon_profs = {"Riding, Land-Based": c.nonweapon_slots_total() + 1}
+    assert c.nonweapon_slots_left() == -1
+    assert not cm.is_complete("nonweapon")
