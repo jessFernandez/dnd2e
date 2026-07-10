@@ -438,7 +438,9 @@ def test_html_class_summary_shows_combat_stats_once_chosen():
     cm.set_race("Human"); cm.set_class("Fighter")
     cm.index = STEPS.index("class")
     html = cmh.generate(cm)
-    assert "Attack bonus" in html and "THAC0" in html
+    # The house rule removes THAC0; the panel shows the attack bonus and AC instead.
+    assert "Attack bonus" in html and "Armor Class" in html
+    assert "THAC0" not in html
     assert "Saving throws" in html
     assert "Max HP" in html
 
@@ -558,6 +560,23 @@ def test_html_review_renders_sheet_and_save():
     assert "Human Fighter" in html and "Lawful Good" in html
     assert "Attack bonus" in html and "Saving throws" in html
     assert "dnd:///cm/save" in html and "dnd:///cm/restart" in html
+
+
+def test_review_shows_armor_class_not_thac0_with_a_breakdown():
+    cm = _complete()
+    c = cm.character
+    armor = cr.items_in_category("Armor")[0]["name"]
+    c.inventory = {armor: 1}
+    c.worn = [armor]                                     # so the breakdown has an armor term
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "THAC0" not in html                           # dropped: redundant with attack bonus
+    assert "Armor Class" in html
+    # The AC value carries a hover breakdown of its components.
+    base, worn, dex = c.ac_components()
+    assert f"{base} base" in html
+    assert f"{worn:+d} armor &amp; shield" in html       # worn armor is accounted for
+    assert str(c.armor_class()) in html
 
 
 def test_html_saved_list_on_review_and_abilities():

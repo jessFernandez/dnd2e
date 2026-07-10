@@ -761,6 +761,15 @@ class Character:
         dex = self.final_abilities().get("Dexterity")
         return cr.armor_class(self.worn_ac_bonus(), dex, self.house_rules)
 
+    def ac_components(self):
+        """The pieces ascending AC is built from — (base, worn armor & shield bonus,
+        Dexterity adjustment). Always sums to armor_class(); with no Dexterity yet the
+        Dexterity term is 0, exactly as armor_class() treats it. This is what lets the
+        sheet show *why* the AC is what it is."""
+        dex = self.final_abilities().get("Dexterity")
+        dex_bonus = -cr.dexterity_mods(dex).defensive_ac if dex is not None else 0
+        return (10, self.worn_ac_bonus(), dex_bonus)
+
     def total_weight(self) -> float:
         """Total encumbering weight (lb). Armor you have an armor proficiency in
         counts half (CT/DD02628)."""

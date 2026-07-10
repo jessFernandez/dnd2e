@@ -421,6 +421,32 @@ def test_serialization_preserves_proficiencies():
 
 # ── equipment & spells ───────────────────────────────────────────────────────
 
+def test_ac_components_sum_to_the_armor_class():
+    c = _with(Dexterity=16)
+    c.race, c.char_class = "Human", "Fighter"
+    # Unarmored: base 10 + Dexterity only.
+    base, worn, dex = c.ac_components()
+    assert base == 10 and worn == 0
+    assert base + worn + dex == c.armor_class()
+    # Now wear armor: the worn component picks it up and the pieces still sum to AC.
+    armor = cr.items_in_category("Armor")[0]["name"]
+    c.inventory = {armor: 1}
+    c.worn = [armor]
+    base, worn, dex = c.ac_components()
+    assert worn == c.worn_ac_bonus() != 0
+    assert base + worn + dex == c.armor_class()
+
+
+def test_ac_components_stay_consistent_with_no_dexterity():
+    # Before abilities are rolled there's no Dex, so its term is 0 -- but the pieces
+    # still sum to armor_class(), which treats a missing Dex the same way.
+    c = ch.Character()
+    c.race, c.char_class = "Human", "Fighter"
+    base, worn, dex = c.ac_components()
+    assert (base, worn, dex) == (10, 0, 0)
+    assert base + worn + dex == c.armor_class() == 10
+
+
 def test_equipment_derived_stats():
     c = _with(Dexterity=16)
     c.race, c.char_class = "Human", "Fighter"

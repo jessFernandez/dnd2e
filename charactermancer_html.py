@@ -293,6 +293,27 @@ def _summary_panel(cm) -> str:
     )
 
 
+def _ac_breakdown(c) -> str:
+    """A plain-text hover title spelling out what an AC is made of: base, worn armor
+    and shield, and the Dexterity adjustment (the last two shown only when nonzero)."""
+    base, worn, dex = c.ac_components()
+    bits = [f"{base} base"]
+    if worn:
+        bits.append(f"{worn:+d} armor &amp; shield")
+    if dex:
+        bits.append(f"{dex:+d} Dexterity")
+    return ", ".join(bits)
+
+
+def _ac_row(c, label="Armor Class") -> str:
+    """An Armor Class stat cell, with the component breakdown on hover."""
+    ac = c.armor_class()
+    title = _ac_breakdown(c)
+    tip = f' title="{title}"' if title else ""
+    shown = "&mdash;" if ac is None else ac
+    return f'<div class="ds"><span>{label}</span><span{tip}>{shown}</span></div>'
+
+
 def _derived_block(cm) -> str:
     c = cm.character
     if not c.char_class:
@@ -310,7 +331,7 @@ def _derived_block(cm) -> str:
         f'<div class="ds"><span>Hit Die</span><span>d{c.hit_die()}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{c.max_hp()}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{c.attack_bonus():+d}</span></div>'
-        f'<div class="ds"><span>THAC0</span><span>{c.thac0()}</span></div>'
+        f'{_ac_row(c)}'
         f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Wpn slots</span><span>{c.weapon_slots()}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{c.nonweapon_slots()}</span></div>'
@@ -631,9 +652,8 @@ def _review_body(cm, saved=None):
         f'<div class="rv-block"><div class="rv-h">Combat ({_ordinal(c.level)} level)</div>'
         f'<div class="ds"><span>Hit Die</span><span>{"d" + str(hd) if hd else "—"}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{_f(c.max_hp())}</span></div>'
-        f'<div class="ds"><span>Armor Class</span><span>{_f(c.armor_class())}</span></div>'
+        f'{_ac_row(c)}'
         f'<div class="ds"><span>Attack bonus</span><span>{_f(c.attack_bonus(), sign=True)}</span></div>'
-        f'<div class="ds"><span>THAC0</span><span>{_f(c.thac0())}</span></div>'
         f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Weapon slots</span><span>{_f(c.weapon_slots())}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{_f(c.nonweapon_slots())}</span></div>'
