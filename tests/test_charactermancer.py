@@ -207,15 +207,33 @@ def test_keeps_scroll_only_for_in_place_actions():
     assert not cmh.keeps_scroll("addweapon/Club", "proficiencies", "equipment")
 
 
-def test_with_scroll_restore_injects_a_load_handler():
-    html = "<html><body><p>hi</p></body></html>"
+def test_with_scroll_restore_positions_before_the_first_paint():
+    html = "<html><head></head><body><p>hi</p></body></html>"
     assert cmh.with_scroll_restore(html, 0) == html          # nothing to restore
     out = cmh.with_scroll_restore(html, 420)
     assert "window.scrollTo(0,420)" in out
-    assert out.endswith("</body></html>")                     # injected before </body>
+    # the document is hidden in <head> so the top of the page is never painted...
+    assert 'id="cm-scroll-hide"' in out
+    assert out.index("cm-scroll-hide") < out.index("<body")
+    # ...and revealed by a script at the very end of the body, after the layout
     assert out.index("<script>") > out.index("<p>hi</p>")
-    # a real builder page keeps rendering
-    assert "window.scrollTo(0,17)" in cmh.with_scroll_restore(cmh.generate(_complete()), 17)
+    assert out.endswith("</body></html>")
+    # Chromium must not fight us over the restored offset
+    assert "history.scrollRestoration='manual'" in out
+    # a load listener repeats it as a fallback
+    assert "addEventListener('load'" in out
+
+
+def test_with_scroll_restore_handles_a_headless_document():
+    out = cmh.with_scroll_restore("<html><body><p>hi</p></body></html>", 30)
+    assert out.index("cm-scroll-hide") < out.index("<body")   # still hides first
+
+
+def test_with_scroll_restore_on_a_real_builder_page():
+    out = cmh.with_scroll_restore(cmh.generate(_complete()), 17)
+    assert "window.scrollTo(0,17)" in out
+    assert out.index("cm-scroll-hide") < out.index("<body")
+    assert out.rstrip().endswith("</html>")
 
 
 def test_cm_action_preserves_scroll_in_place_and_resets_on_step_change():

@@ -1537,17 +1537,45 @@ def keeps_scroll(path: str, step_before: str, step_after: str) -> bool:
     return path.split("/", 1)[0] not in _SCROLL_TO_TOP_VERBS
 
 
+# Hides the document until the restore script has scrolled it. Without this the
+# page paints at the top and *then* jumps, which reads as a jarring flash. The
+# <noscript> guard means a page whose script never runs can't stay hidden.
+_SCROLL_HIDE_STYLE = ('<style id="cm-scroll-hide">html{visibility:hidden}</style>'
+                      '<noscript><style>html{visibility:visible!important}</style></noscript>')
+
+
 def with_scroll_restore(html: str, scroll_y) -> str:
     """Re-instate a vertical scroll offset after the page reloads.
 
     Every builder action re-renders the whole document via `setHtml`, which drops
     the scroll position — so clicking a weapon near the bottom of the Proficiencies
-    step used to snap you back to the top. The scroll is applied on `load` (not
-    inline) so the body has its final height by the time we jump."""
+    step used to snap you back to the top.
+
+    Restoring on `load` still flashed: the browser painted the top of the page
+    before the handler ran. So instead the document is hidden by a stylesheet in
+    `<head>`, and a script at the very end of `<body>` — which runs after the whole
+    layout exists but *before* the first paint — scrolls and then reveals it. A
+    `load` listener repeats both as a belt-and-braces fallback, in case a late
+    reflow (a web font, say) moved things or the inline script never ran."""
     if not scroll_y:
         return html
-    script = ('<script>window.addEventListener("load",function(){'
-              f'window.scrollTo(0,{int(scroll_y)});}});</script>')
+    y = int(scroll_y)
+    script = (
+        "<script>(function(){"
+        "var reveal=function(){var s=document.getElementById('cm-scroll-hide');"
+        "if(s&&s.parentNode){s.parentNode.removeChild(s);}};"
+        "try{if('scrollRestoration' in history){history.scrollRestoration='manual';}"
+        f"window.scrollTo(0,{y});}}finally{{reveal();}}"
+        f"window.addEventListener('load',function(){{window.scrollTo(0,{y});reveal();}});"
+        "})();</script>")
+
+    if "</head>" in html:
+        html = html.replace("</head>", _SCROLL_HIDE_STYLE + "</head>", 1)
+    elif "<body" in html:
+        html = html.replace("<body", _SCROLL_HIDE_STYLE + "<body", 1)
+    else:
+        html = _SCROLL_HIDE_STYLE + html
+
     if "</body>" in html:
         return html.replace("</body>", script + "</body>", 1)
     return html + script
