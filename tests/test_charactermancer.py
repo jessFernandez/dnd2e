@@ -1334,6 +1334,29 @@ def test_html_weapons_step_renders_with_house_rules():
     assert "dnd:///cm/addprof/Swimming" not in html    # nonweapon skills moved out
 
 
+def test_specialising_a_weapon_shows_what_the_rung_does():
+    cm = _fighter_at_profs()
+    cm.set_level(9)                                    # so mastery rungs are reachable
+    cm.dispatch("addweapon/Long Sword")
+    for rung in ("specialist", "master", "high_master", "grand_master"):
+        cm.dispatch("wpnup/Long Sword")
+        assert cm.character.weapon_rung("Long Sword") == rung
+        html = cmh.generate(cm)
+        label = cr.RUNG_LABELS[rung]
+        assert f"What {label} does" in html
+        # the full mechanical précis, HTML-escaped as it appears in the page
+        assert __import__("html").escape(cr.rung_summary(rung)) in html
+        assert f"newtab/{cr.rung_page(rung)}" in html   # ...and the full-rule link
+
+
+def test_a_plainly_proficient_weapon_has_no_rung_block():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")                 # stays proficient
+    html = cmh.generate(cm)
+    assert "Long Sword" in html
+    assert "What Proficient does" not in html          # nothing to explain at proficiency
+
+
 def test_ct_sections_have_what_it_does_blocks():
     cm = _fighter_at_profs()
     for verb in ("styleup/Two-Weapon", "addunarmed/Pummeling",
