@@ -770,6 +770,24 @@ class Character:
         dex_bonus = -cr.dexterity_mods(dex).defensive_ac if dex is not None else 0
         return (10, self.worn_ac_bonus(), dex_bonus)
 
+    def conditional_ac_bonuses(self) -> list:
+        """Situational AC bonuses the character has earned that base AC deliberately
+        leaves out, because each applies only in a specific combat stance — and some
+        (unarmoured martial arts, one-handed-with-no-shield) exclude the very armor or
+        shield the base AC counts, so they could never simply be added on top. Each is
+        (bonus, condition, source); the UI lists them next to the AC."""
+        out = []
+        one_handed = self.style_specialisation("One-Handed Weapon")
+        if one_handed:                                   # +1 per specialisation slot, max +2
+            out.append((one_handed, "wielding a one-handed weapon, no shield or off-hand",
+                        "One-Handed Weapon style"))
+        if self.style_specialisation("Missile or Thrown Weapon"):
+            out.append((1, "against missile fire while shooting",
+                        "Missile or Thrown Weapon style"))
+        if "Martial Arts: Style D" in self.martial_art_styles_known():
+            out.append((2, "while unarmed and unarmoured", "Martial Arts: Style D"))
+        return out
+
     def total_weight(self) -> float:
         """Total encumbering weight (lb). Armor you have an armor proficiency in
         counts half (CT/DD02628)."""

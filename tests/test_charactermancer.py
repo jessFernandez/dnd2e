@@ -562,6 +562,25 @@ def test_html_review_renders_sheet_and_save():
     assert "dnd:///cm/save" in html and "dnd:///cm/restart" in html
 
 
+def test_review_lists_conditional_ac_bonuses_below_the_ac():
+    cm = _complete()                                     # Human Fighter
+    c = cm.character
+    c.fighting_styles = {"One-Handed Weapon": 2}
+    c.unarmed_profs = {"Martial Arts: Style D": "specialist"}
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert '<div class="ac-conds">' in html               # the notes block is present
+    assert "+2 AC" in html
+    assert "unarmed and unarmoured" in html
+    assert "One-Handed Weapon style" in html
+
+
+def test_review_has_no_ac_notes_block_without_conditional_bonuses():
+    cm = _complete()                                     # a plain fighter earns none
+    cm.index = STEPS.index("review")
+    assert '<div class="ac-conds">' not in cmh.generate(cm)
+
+
 def test_review_shows_armor_class_not_thac0_with_a_breakdown():
     cm = _complete()
     c = cm.character

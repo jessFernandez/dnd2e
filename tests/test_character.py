@@ -437,6 +437,41 @@ def test_ac_components_sum_to_the_armor_class():
     assert base + worn + dex == c.armor_class()
 
 
+def test_conditional_ac_bonuses_are_listed_not_folded_into_ac():
+    c = _with(Dexterity=15)
+    c.race, c.char_class, c.level = "Human", "Fighter", 7
+    base_ac = c.armor_class()
+    c.fighting_styles = {"One-Handed Weapon": 2, "Missile or Thrown Weapon": 1}
+    c.unarmed_profs = {"Martial Arts: Style D": "specialist"}
+    # The base AC does NOT change -- these bonuses are situational, so they stay out.
+    assert c.armor_class() == base_ac
+    bonuses = {src: (bonus, cond) for bonus, cond, src in c.conditional_ac_bonuses()}
+    assert bonuses["One-Handed Weapon style"][0] == 2      # +1 per specialisation slot
+    assert bonuses["Missile or Thrown Weapon style"][0] == 1
+    assert bonuses["Martial Arts: Style D"][0] == 2
+    # Each carries the stance it depends on.
+    assert "unarmed and unarmoured" in bonuses["Martial Arts: Style D"][1]
+
+
+def test_one_handed_ac_bonus_tracks_specialisation_slots():
+    c = _with(Dexterity=15)
+    c.race, c.char_class, c.level = "Human", "Fighter", 7
+    assert c.conditional_ac_bonuses() == []                # merely knowing it grants nothing
+    c.fighting_styles = {"One-Handed Weapon": 1}
+    assert c.conditional_ac_bonuses()[0][0] == 1           # one slot -> +1
+    c.fighting_styles = {"One-Handed Weapon": 2}
+    assert c.conditional_ac_bonuses()[0][0] == 2           # second slot -> +2
+
+
+def test_only_style_d_martial_art_grants_ac():
+    c = _with(Dexterity=15)
+    c.race, c.char_class, c.level = "Human", "Fighter", 7
+    c.unarmed_profs = {"Martial Arts: Style A": "specialist"}
+    assert c.conditional_ac_bonuses() == []                # A is hands, no AC
+    c.unarmed_profs = {"Martial Arts: Style D": "specialist"}
+    assert c.conditional_ac_bonuses()[0][0] == 2
+
+
 def test_ac_components_stay_consistent_with_no_dexterity():
     # Before abilities are rolled there's no Dex, so its term is 0 -- but the pieces
     # still sum to armor_class(), which treats a missing Dex the same way.

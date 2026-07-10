@@ -314,6 +314,19 @@ def _ac_row(c, label="Armor Class") -> str:
     return f'<div class="ds"><span>{label}</span><span{tip}>{shown}</span></div>'
 
 
+def _conditional_ac_notes(c) -> str:
+    """Situational AC bonuses listed under the AC — the ones base AC can't include
+    because they depend on a stance (and some exclude wearing armor or a shield)."""
+    bonuses = c.conditional_ac_bonuses()
+    if not bonuses:
+        return ""
+    rows = "".join(
+        f'<div class="ac-cond"><span class="ac-cond-b">{bonus:+d} AC</span> '
+        f'{esc(condition)} <span class="hint">({esc(source)})</span></div>'
+        for bonus, condition, source in bonuses)
+    return f'<div class="ac-conds">{rows}</div>'
+
+
 def _derived_block(cm) -> str:
     c = cm.character
     if not c.char_class:
@@ -660,6 +673,7 @@ def _review_body(cm, saved=None):
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}{xp}</span></div>'
         f'<div class="ds"><span>Handedness</span><span>{hand}</span></div>'
         f'{_review_age_row(c)}'
+        f'{_conditional_ac_notes(c)}'
         '</div>'
         '<div class="rv-block"><div class="rv-h">Saving throws</div>'
         f'<div class="saves">{save_cells}</div>'
@@ -1270,6 +1284,9 @@ _CSS = f"""
   .ds {{ display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }}
   .ds span:first-child {{ color: #8b93b8; }}
   .ds span:last-child {{ color: #e6e9f6; font-weight: 700; }}
+  .ac-conds {{ margin: 4px 0 2px; padding-left: 4px; border-left: 2px solid #2f3350; }}
+  .ac-cond {{ font-size: 11px; color: #9aa2c4; padding: 1px 0; line-height: 1.45; }}
+  .ac-cond-b {{ color: {ACCENT}; font-weight: 700; }}
   .saves {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }}
   .sv {{ text-align: center; background: #23263a; border: 1px solid #2f3346; border-radius: 6px;
         padding: 4px 2px; }}
