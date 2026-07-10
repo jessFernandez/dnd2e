@@ -195,6 +195,39 @@ def test_spell_added_at_its_own_level_and_budgeted_separately():
     assert cm.character.can_add_spell(1) and not cm.character.can_add_spell(3)
 
 
+def test_keeps_scroll_only_for_in_place_actions():
+    # Picking things leaves you where you were...
+    for path in ("addweapon/Long Sword", "wpnup/Long Sword", "addspell/Bless",
+                 "level/5", "rerollhp", "save", "delete/3", "ambi"):
+        assert cmh.keeps_scroll(path, "proficiencies", "proficiencies")
+    # ...but changing step, loading, or starting over goes to the top.
+    for path in ("next", "back", "goto/review", "restart", "load/2"):
+        assert not cmh.keeps_scroll(path, "proficiencies", "proficiencies")
+    # and any action that moved the step resets regardless
+    assert not cmh.keeps_scroll("addweapon/Club", "proficiencies", "equipment")
+
+
+def test_with_scroll_restore_injects_a_load_handler():
+    html = "<html><body><p>hi</p></body></html>"
+    assert cmh.with_scroll_restore(html, 0) == html          # nothing to restore
+    out = cmh.with_scroll_restore(html, 420)
+    assert "window.scrollTo(0,420)" in out
+    assert out.endswith("</body></html>")                     # injected before </body>
+    assert out.index("<script>") > out.index("<p>hi</p>")
+    # a real builder page keeps rendering
+    assert "window.scrollTo(0,17)" in cmh.with_scroll_restore(cmh.generate(_complete()), 17)
+
+
+def test_cm_action_preserves_scroll_in_place_and_resets_on_step_change():
+    win = _win(scroll_y=350)
+    win._cm = _fighter_at_profs()
+    app.MainWindow._cm_action(win, "addweapon/Long Sword")
+    assert win._render_calls == [350]                         # stayed put
+    win._render_calls.clear()
+    app.MainWindow._cm_action(win, "next")                    # moves to equipment
+    assert win._render_calls == [0]                           # back to the top
+
+
 def test_ordinal_suffixes():
     assert [cmh._ordinal(n) for n in (1, 2, 3, 4, 11, 12, 13, 21, 22)] == \
         ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd"]
@@ -407,9 +440,11 @@ from types import SimpleNamespace
 import app
 
 
-def _win(**over):
+def _win(scroll_y=0, **over):
     calls = []
-    win = SimpleNamespace(_cm=None, _render_charactermancer=lambda: calls.append("render"),
+    win = SimpleNamespace(_cm=None,
+                          _render_charactermancer=lambda y=0: calls.append(y),
+                          _cm_scroll_y=lambda: scroll_y,
                           _set_spell_catalog=lambda: None)
     win._render_calls = calls
     for k, v in over.items():
@@ -422,7 +457,7 @@ def test_cm_action_creates_dispatches_and_rerenders():
     app.MainWindow._cm_action(win, "assign/Strength/15")
     assert isinstance(win._cm, Charactermancer)
     assert win._cm.character.abilities.get("Strength") == 15
-    assert win._render_calls == ["render"]
+    assert win._render_calls == [0]                       # rendered once, from the top
 
 
 def test_cm_action_unquotes_path():
@@ -542,7 +577,8 @@ def _win_with_db(cm, user_db=None):
     user_db = user_db or db.connect(":memory:")
     win = SimpleNamespace(_cm=cm, user_db=user_db,
                           _char_library=CharacterLibrary(user_db),
-                          _render_charactermancer=lambda: None,
+                          _render_charactermancer=lambda y=0: None,
+                          _cm_scroll_y=lambda: 0,
                           _set_spell_catalog=lambda: None)
     win._cm_save = lambda: app.MainWindow._cm_save(win)
     win._cm_load = lambda cid: app.MainWindow._cm_load(win, cid)

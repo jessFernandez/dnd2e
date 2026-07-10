@@ -1363,19 +1363,30 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"  {cr.PROFICIENCY_BOOK}  ·  Nonweapon Proficiencies")
         return True
 
-    def _render_charactermancer(self) -> bool:
+    def _render_charactermancer(self, scroll_y: int = 0) -> bool:
         """Render the interactive character builder's current step. The build is
-        window-level state (self._cm) so leaving and returning keeps your progress."""
+        window-level state (self._cm) so leaving and returning keeps your progress.
+
+        `scroll_y` re-instates the reader's place after an in-place action (see
+        _cm_action); 0 means start at the top, which is what changing step wants."""
         if self._cm is None:
             self._cm = Charactermancer()
         saved = self._char_library.all()
         self._set_spell_catalog()
-        self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
+        html = charactermancer_html.generate(self._cm, saved)
+        self.content._view.setHtml(charactermancer_html.with_scroll_restore(html, scroll_y))
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title("Character Builder")
         self.status.showMessage(f"  Character Builder  ·  {self._cm.title}")
         return True
+
+    def _cm_scroll_y(self) -> int:
+        """The builder view's current vertical scroll offset (0 without WebEngine)."""
+        if not HAS_WEBENGINE:
+            return 0
+        page = self.content._view.page()
+        return int(page.scrollPosition().y()) if page is not None else 0
 
     def _set_spell_catalog(self):
         """Load the spell list for the build's class onto the controller so the Spells
@@ -1401,6 +1412,9 @@ class MainWindow(QMainWindow):
         if self._cm is None:
             self._cm = Charactermancer()
         self._set_spell_catalog()          # so addspell validates against the class
+        # Remember where the reader was: setHtml re-renders the whole document, which
+        # would otherwise snap them back to the top on every click.
+        step_before, scroll_y = self._cm.step, self._cm_scroll_y()
         if path == "restart":
             self._cm = Charactermancer()
         elif path == "save":
@@ -1414,7 +1428,8 @@ class MainWindow(QMainWindow):
             return
         else:
             self._cm.dispatch(unquote(path))
-        self._render_charactermancer()
+        keep = charactermancer_html.keeps_scroll(path, step_before, self._cm.step)
+        self._render_charactermancer(scroll_y if keep else 0)
 
     def _cm_export_roll20(self):
         """Build the Roll20 import JSON for the current character (enriching its

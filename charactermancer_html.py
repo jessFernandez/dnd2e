@@ -1522,6 +1522,37 @@ def _next_hint(cm) -> str:
     }.get(cm.step, "")
 
 
+# Actions that always want the top of the page: they replace the character or move
+# to a different step, so the reader's old position means nothing.
+_SCROLL_TO_TOP_VERBS = frozenset({"restart", "load", "next", "back", "goto"})
+
+
+def keeps_scroll(path: str, step_before: str, step_after: str) -> bool:
+    """Whether a builder action should preserve the reader's scroll position.
+
+    Picking a weapon or stepping a rung leaves you exactly where you were; changing
+    step, loading a character or starting over should land you at the top."""
+    if step_before != step_after:
+        return False
+    return path.split("/", 1)[0] not in _SCROLL_TO_TOP_VERBS
+
+
+def with_scroll_restore(html: str, scroll_y) -> str:
+    """Re-instate a vertical scroll offset after the page reloads.
+
+    Every builder action re-renders the whole document via `setHtml`, which drops
+    the scroll position — so clicking a weapon near the bottom of the Proficiencies
+    step used to snap you back to the top. The scroll is applied on `load` (not
+    inline) so the body has its final height by the time we jump."""
+    if not scroll_y:
+        return html
+    script = ('<script>window.addEventListener("load",function(){'
+              f'window.scrollTo(0,{int(scroll_y)});}});</script>')
+    if "</body>" in html:
+        return html.replace("</body>", script + "</body>", 1)
+    return html + script
+
+
 def generate(cm, saved=None) -> str:
     body = _BODIES.get(cm.step, _placeholder_body)(cm, saved)
     step = (f'<section class="step"><h2 class="step-h">{STEP_TITLES[cm.step]}</h2>'
