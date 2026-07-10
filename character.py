@@ -509,6 +509,31 @@ class Character:
         left = self.spells_left(spell_level)
         return left is None or left > 0
 
+    def unspent_resources(self) -> list:
+        """Build resources this character still has to spend, as (kind, count) — the
+        things it's easy to reach Review without having spent. `kind` is one of
+        "weapon_slots", "nonweapon_slots", "spells", "thief_points"; the UI maps it to
+        a label and the step it's spent on. Empty when the build is fully committed.
+
+        Money is deliberately absent: leftover coin is kept, not wasted. Over-budget
+        slots (a negative balance after a level drop) aren't "unspent" either, so only
+        a positive remainder counts."""
+        out = []
+        if self.weapon_slots_left() > 0:
+            out.append(("weapon_slots", self.weapon_slots_left()))
+        if self.nonweapon_slots_left() > 0:
+            out.append(("nonweapon_slots", self.nonweapon_slots_left()))
+        # Castable slots not yet filled — not spellbook capacity. A wizard can hold far
+        # more spells than he can cast; the nudge is "you can cast N but chose fewer",
+        # which is the same measure for priests (whose limit already is their slots).
+        spells = sum(max(0, count - len(self.spells_at(lvl)))
+                     for lvl, count in self.spell_slots().items())
+        if spells:
+            out.append(("spells", spells))
+        if self.thief_points_left() > 0:
+            out.append(("thief_points", self.thief_points_left()))
+        return out
+
     def movement(self) -> int:
         """Base movement rate (PHB). Demihumans (dwarf/gnome/halfling) are 6, the
         rest 12; defaults to 12 before a race is chosen."""
@@ -760,6 +785,33 @@ class Character:
         """Ascending AC from worn armor + Dexterity (None until Dex is set)."""
         dex = self.final_abilities().get("Dexterity")
         return cr.armor_class(self.worn_ac_bonus(), dex, self.house_rules)
+
+    def ac_components(self):
+        """The pieces ascending AC is built from — (base, worn armor & shield bonus,
+        Dexterity adjustment). Always sums to armor_class(); with no Dexterity yet the
+        Dexterity term is 0, exactly as armor_class() treats it. This is what lets the
+        sheet show *why* the AC is what it is."""
+        dex = self.final_abilities().get("Dexterity")
+        dex_bonus = -cr.dexterity_mods(dex).defensive_ac if dex is not None else 0
+        return (10, self.worn_ac_bonus(), dex_bonus)
+
+    def conditional_ac_bonuses(self) -> list:
+        """Situational AC bonuses the character has earned that base AC deliberately
+        leaves out, because each applies only in a specific combat stance — and some
+        (unarmoured martial arts, one-handed-with-no-shield) exclude the very armor or
+        shield the base AC counts, so they could never simply be added on top. Each is
+        (bonus, condition, source); the UI lists them next to the AC."""
+        out = []
+        one_handed = self.style_specialisation("One-Handed Weapon")
+        if one_handed:                                   # +1 per specialisation slot, max +2
+            out.append((one_handed, "wielding a one-handed weapon, no shield or off-hand",
+                        "One-Handed Weapon style"))
+        if self.style_specialisation("Missile or Thrown Weapon"):
+            out.append((1, "against missile fire while shooting",
+                        "Missile or Thrown Weapon style"))
+        if "Martial Arts: Style D" in self.martial_art_styles_known():
+            out.append((2, "while unarmed and unarmoured", "Martial Arts: Style D"))
+        return out
 
     def total_weight(self) -> float:
         """Total encumbering weight (lb). Armor you have an armor proficiency in

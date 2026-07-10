@@ -293,6 +293,40 @@ def _summary_panel(cm) -> str:
     )
 
 
+def _ac_breakdown(c) -> str:
+    """A plain-text hover title spelling out what an AC is made of: base, worn armor
+    and shield, and the Dexterity adjustment (the last two shown only when nonzero)."""
+    base, worn, dex = c.ac_components()
+    bits = [f"{base} base"]
+    if worn:
+        bits.append(f"{worn:+d} armor &amp; shield")
+    if dex:
+        bits.append(f"{dex:+d} Dexterity")
+    return ", ".join(bits)
+
+
+def _ac_row(c, label="Armor Class") -> str:
+    """An Armor Class stat cell, with the component breakdown on hover."""
+    ac = c.armor_class()
+    title = _ac_breakdown(c)
+    tip = f' title="{title}"' if title else ""
+    shown = "&mdash;" if ac is None else ac
+    return f'<div class="ds"><span>{label}</span><span{tip}>{shown}</span></div>'
+
+
+def _conditional_ac_notes(c) -> str:
+    """Situational AC bonuses listed under the AC — the ones base AC can't include
+    because they depend on a stance (and some exclude wearing armor or a shield)."""
+    bonuses = c.conditional_ac_bonuses()
+    if not bonuses:
+        return ""
+    rows = "".join(
+        f'<div class="ac-cond"><span class="ac-cond-b">{bonus:+d} AC</span> '
+        f'{esc(condition)} <span class="hint">({esc(source)})</span></div>'
+        for bonus, condition, source in bonuses)
+    return f'<div class="ac-conds">{rows}</div>'
+
+
 def _derived_block(cm) -> str:
     c = cm.character
     if not c.char_class:
@@ -310,7 +344,7 @@ def _derived_block(cm) -> str:
         f'<div class="ds"><span>Hit Die</span><span>d{c.hit_die()}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{c.max_hp()}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{c.attack_bonus():+d}</span></div>'
-        f'<div class="ds"><span>THAC0</span><span>{c.thac0()}</span></div>'
+        f'{_ac_row(c)}'
         f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Wpn slots</span><span>{c.weapon_slots()}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{c.nonweapon_slots()}</span></div>'
@@ -563,11 +597,9 @@ def _review_thief_skills(c) -> str:
     rows = "".join(
         f'<div class="ds"><span>{esc(skill)}</span><span>{score}%</span></div>'
         for skill, score in c.thief_skill_scores().items())
-    left = c.thief_points_left()
-    note = (f'<div class="hint">{left} discretionary points still unspent.</div>'
-            if left else "")
+    # Unspent points are reported once, in the "still to spend" panel at the top.
     return ('<div class="rv-block"><div class="rv-h">Thieving Skills</div>'
-            f'{rows}{note}</div>')
+            f'{rows}</div>')
 
 
 def _review_turn_undead(c) -> str:
@@ -592,6 +624,38 @@ def _review_turn_undead(c) -> str:
     return ('<div class="rv-block"><div class="rv-h">Turn Undead</div>'
             f'<div class="hint">Roll d20 and meet the number{aside}. '
             'T turns automatically, D destroys.</div>'
+            f'{rows}</div>')
+
+
+# kind -> (singular, plural, step, where it's spent). Keeps Character free of UI text.
+_UNSPENT_LABELS = {
+    "weapon_slots":    ("weapon proficiency slot", "weapon proficiency slots",
+                        "weapons", "Weapon Proficiencies"),
+    "nonweapon_slots": ("nonweapon proficiency slot", "nonweapon proficiency slots",
+                        "nonweapon", "Nonweapon Proficiencies"),
+    "spells":          ("spell still to choose", "spells still to choose",
+                        "spells", "Spells"),
+    "thief_points":    ("thieving-skill point", "thieving-skill points",
+                        "nonweapon", "Nonweapon Proficiencies"),
+}
+
+
+def _unspent_panel(cm) -> str:
+    """A "still to spend" checklist at the top of the finished sheet: build resources
+    the character hasn't committed, each linking back to the step it's spent on. Shown
+    only when something is unspent; a fully-committed build has no panel."""
+    items = cm.character.unspent_resources()
+    if not items:
+        return ""
+    rows = ""
+    for kind, count in items:
+        singular, plural, step, where = _UNSPENT_LABELS[kind]
+        noun = singular if count == 1 else plural
+        rows += (f'<a class="unspent-item" href="dnd:///cm/goto/{step}">'
+                 f'<span class="unspent-n">{count}</span> {noun}'
+                 f'<span class="unspent-go">in {esc(where)} &rarr;</span></a>')
+    return ('<div class="unspent">'
+            '<div class="unspent-h">You still have resources to spend</div>'
             f'{rows}</div>')
 
 
@@ -626,20 +690,21 @@ def _review_body(cm, saved=None):
         f'<div class="sheet-head"><div class="sheet-name">{esc(c.name) or "Unnamed"}</div>'
         f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · '
         f'{_ordinal(c.level)} level · {c.alignment or "—"}</div></div>'
+        f'{_unspent_panel(cm)}'
         f'<div class="rv-abgrid">{ab}</div>'
         '<div class="rv-cols">'
         f'<div class="rv-block"><div class="rv-h">Combat ({_ordinal(c.level)} level)</div>'
         f'<div class="ds"><span>Hit Die</span><span>{"d" + str(hd) if hd else "—"}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{_f(c.max_hp())}</span></div>'
-        f'<div class="ds"><span>Armor Class</span><span>{_f(c.armor_class())}</span></div>'
+        f'{_ac_row(c)}'
         f'<div class="ds"><span>Attack bonus</span><span>{_f(c.attack_bonus(), sign=True)}</span></div>'
-        f'<div class="ds"><span>THAC0</span><span>{_f(c.thac0())}</span></div>'
         f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Weapon slots</span><span>{_f(c.weapon_slots())}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{_f(c.nonweapon_slots())}</span></div>'
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}{xp}</span></div>'
         f'<div class="ds"><span>Handedness</span><span>{hand}</span></div>'
         f'{_review_age_row(c)}'
+        f'{_conditional_ac_notes(c)}'
         '</div>'
         '<div class="rv-block"><div class="rv-h">Saving throws</div>'
         f'<div class="saves">{save_cells}</div>'
@@ -726,26 +791,30 @@ def _cost_label(cp: int) -> str:
     return f"{cp}cp"
 
 
-def _eq_item_detail(it: dict) -> str:
+def _eq_item_bits(it: dict) -> list:
+    """The stat pieces shown for an item: AC (armor), damage and speed factor
+    (weapons), and weight. Raw strings — the caller escapes and joins them."""
     bits = []
     if it.get("category") == "Armor" and it.get("ac_bonus"):
         bits.append(f'+{it["ac_bonus"]} AC')
-    if it.get("category") == "Weapon" and it.get("damage"):
-        bits.append(f'{esc(it["damage"])} dmg')
+    if it.get("category") == "Weapon":
+        if it.get("damage"):
+            bits.append(f'{it["damage"]} dmg')
+        if it.get("speed"):
+            bits.append(f'SF {it["speed"]}')      # weapon speed factor (lower is faster)
     if it.get("weight"):
         bits.append(f'{it["weight"]:g} lb')
-    return " &middot; ".join(bits) if bits else esc(it.get("category", ""))
+    return bits
+
+
+def _eq_item_detail(it: dict) -> str:
+    bits = _eq_item_bits(it)
+    return " &middot; ".join(esc(b) for b in bits) if bits else esc(it.get("category", ""))
 
 
 def _eq_item_plain(it: dict) -> str:
     """Plain-text stat line (no HTML entities) for an item's hover title=."""
-    bits = []
-    if it.get("category") == "Armor" and it.get("ac_bonus"):
-        bits.append(f'+{it["ac_bonus"]} AC')
-    if it.get("category") == "Weapon" and it.get("damage"):
-        bits.append(f'{it["damage"]} dmg')
-    if it.get("weight"):
-        bits.append(f'{it["weight"]:g} lb')
+    bits = _eq_item_bits(it)
     return " · ".join(bits) if bits else str(it.get("category", ""))
 
 
@@ -788,21 +857,35 @@ def _equipment_body(cm, saved=None) -> str:
             f'{wear}</div>')
     owned = owned or '<span class="hint">Nothing bought yet.</span>'
 
+    # The buy-list is long, so each category is collapsed by default and expands on
+    # click. Which are open lives in cm state (not the DOM), so it survives the
+    # in-place re-render every purchase triggers — expand a category, buy several
+    # things from it, and it stays open.
     cat_html = ""
     for cat in cr.ITEM_CATEGORY_ORDER:
         items = cr.items_in_category(cat)
         if not items:
             continue
-        chips = ""
-        for it in items:
-            dis = "" if it["cost_cp"] <= money else " dis"
-            wt = f'{it["weight"]:g} lb' if it.get("weight") else ""
-            meta = f'<span class="opt-meta">{wt}</span>' if wt else ""
-            tip = esc(it.get("notes") or "")
-            chips += (f'<a class="opt{dis}" href="dnd:///cm/buy/{it["name"]}" title="{tip}">'
-                      f'<span class="opt-name">{esc(it["name"])}</span>{meta}'
-                      f'<span class="opt-cost">{_cost_label(it["cost_cp"])}</span></a>')
-        cat_html += f'<div class="grp-label">{cat}</div><div class="opt-grid">{chips}</div>'
+        is_open = cat in cm.expanded_categories
+        owned_here = sum(1 for n in c.inventory if (cr.item(n) or {}).get("category") == cat)
+        owned_tag = f'<span class="eq-cat-owned">{owned_here} owned</span>' if owned_here else ""
+        arrow = "▾" if is_open else "▸"
+        header = (f'<a class="eq-cat-h" href="dnd:///cm/eqcat/{cat}">'
+                  f'<span class="eq-cat-ar">{arrow}</span> {esc(cat)}'
+                  f'<span class="eq-cat-n">{len(items)}</span>{owned_tag}</a>')
+        body = ""
+        if is_open:
+            chips = ""
+            for it in items:
+                dis = "" if it["cost_cp"] <= money else " dis"
+                wt = f'{it["weight"]:g} lb' if it.get("weight") else ""
+                meta = f'<span class="opt-meta">{wt}</span>' if wt else ""
+                tip = esc(it.get("notes") or "")
+                chips += (f'<a class="opt{dis}" href="dnd:///cm/buy/{it["name"]}" title="{tip}">'
+                          f'<span class="opt-name">{esc(it["name"])}</span>{meta}'
+                          f'<span class="opt-cost">{_cost_label(it["cost_cp"])}</span></a>')
+            body = f'<div class="opt-grid">{chips}</div>'
+        cat_html += f'<div class="eq-cat">{header}{body}</div>'
 
     return (
         '<section class="prof-sec">'
@@ -1250,6 +1333,9 @@ _CSS = f"""
   .ds {{ display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }}
   .ds span:first-child {{ color: #8b93b8; }}
   .ds span:last-child {{ color: #e6e9f6; font-weight: 700; }}
+  .ac-conds {{ margin: 4px 0 2px; padding-left: 4px; border-left: 2px solid #2f3350; }}
+  .ac-cond {{ font-size: 11px; color: #9aa2c4; padding: 1px 0; line-height: 1.45; }}
+  .ac-cond-b {{ color: {ACCENT}; font-weight: 700; }}
   .saves {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }}
   .sv {{ text-align: center; background: #23263a; border: 1px solid #2f3346; border-radius: 6px;
         padding: 4px 2px; }}
@@ -1289,6 +1375,14 @@ _CSS = f"""
   .sheet-head {{ border-bottom: 1px solid #2a2e3e; padding-bottom: 12px; margin-bottom: 14px; }}
   .sheet-name {{ font-size: 1.5em; font-weight: 800; color: #e6e9f6; }}
   .sheet-sub {{ font-size: 12.5px; color: {ACCENT}; font-weight: 600; margin-top: 2px; }}
+  .unspent {{ background: #241f16; border: 1px solid #6b5426; border-radius: 8px;
+             padding: 10px 12px; margin-bottom: 16px; }}
+  .unspent-h {{ color: {ACCENT}; font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }}
+  .unspent-item {{ display: flex; align-items: baseline; text-decoration: none;
+                  color: #d8dcf0; font-size: 12px; padding: 3px 0; }}
+  .unspent-item:hover {{ color: #fff; }}
+  .unspent-n {{ color: {ACCENT}; font-weight: 800; min-width: 18px; margin-right: 6px; }}
+  .unspent-go {{ margin-left: auto; color: #8a90a8; font-size: 11px; }}
   .rv-abgrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }}
   .rv-ab {{ background: #23263a; border: 1px solid #2f3346; border-radius: 8px; padding: 8px 10px; }}
   .rv-abn {{ font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -1355,6 +1449,14 @@ _CSS = f"""
   .opt-meta {{ flex: 0 0 auto; margin-left: 6px; color: #7b83a6; font-size: 10px; }}
   .grp-label {{ font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
                color: #7b83a6; margin: 14px 0 4px; }}
+  .eq-cat {{ margin-top: 6px; }}
+  .eq-cat-h {{ display: flex; align-items: center; text-decoration: none;
+              background: #1b1e2b; border: 1px solid #2f3346; border-radius: 8px;
+              padding: 8px 11px; color: #d8dcf0; font-size: 12.5px; font-weight: 600; }}
+  .eq-cat-h:hover {{ background: #23263a; border-color: #3a3f58; }}
+  .eq-cat-ar {{ color: {ACCENT}; font-size: 10px; margin-right: 8px; }}
+  .eq-cat-n {{ color: #7b83a6; font-size: 11px; font-weight: 700; margin-left: 8px; }}
+  .eq-cat-owned {{ color: {ACCENT}; font-size: 11px; font-weight: 700; margin-left: auto; }}
   .chosen-list {{ display: grid; gap: 6px; margin: 10px 0; }}
   .prof-row {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
               border-radius: 8px; padding: 6px 10px; }}

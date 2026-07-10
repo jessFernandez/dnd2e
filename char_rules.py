@@ -1364,6 +1364,48 @@ RUNG_LABELS = {
     "high_master": "High Master", "grand_master": "Grand Master",
 }
 
+# What each rung of the mastery ladder actually grants in play, as (page, summary):
+# a hand-written mechanical précis (the parts that touch a roll) plus the Combat &
+# Tactics page for the full rule. Rungs the character doesn't buy (nonproficient,
+# familiar) and plain proficiency have no entry. Mirrors CT_RULES for talents/styles.
+RUNG_EFFECTS = {
+    "expert": ("CT/DD02633.htm",
+        "Attacks as often as a specialist would — three attacks every two rounds at "
+        "low level, rising with level — and may use any weapon trick reserved for "
+        "specialists, but gains no bonus to hit or damage. This is the only mastery "
+        "path open to paladins and rangers."),
+    "specialist": ("CT/DD02634.htm",
+        "With a melee weapon: +1 to attack rolls, +2 to damage, and an extra attack "
+        "every two rounds (three attacks per two rounds at 1st level). With a missile "
+        "weapon: a faster rate of fire and +1 to attack. A single-class fighter may "
+        "specialise in only one weapon at a time."),
+    "master": ("CT/DD02641.htm",
+        "The melee attack and damage bonuses rise to +3 and +3. With a bow or "
+        "crossbow, the point-blank bonus rises to +3/+3 and every other range band "
+        "gains +1 to hit (a total of +2 before range penalties)."),
+    "high_master": ("CT/DD02642.htm",
+        "The weapon's speed factor improves by one category (a slow weapon becomes "
+        "average). Critical hits land on a natural 16+ instead of 18+ (when the "
+        "optional crit rule is used) that still beats the target's AC by 5 or more. "
+        "Missile weapons gain a new 'extreme range' band, one-third past long range."),
+    "grand_master": ("CT/DD02643.htm",
+        "One extra attack per round on top of the specialist's rate for your level. "
+        "The weapon's damage die and knockdown die each step up to the next larger "
+        "size — a long sword deals 1d10 — applied to every damage die it rolls."),
+}
+
+
+def rung_summary(rung: str) -> str:
+    """The gameplay effects of a mastery rung, or '' for rungs with no write-up."""
+    entry = RUNG_EFFECTS.get(rung)
+    return entry[1] if entry else ""
+
+
+def rung_page(rung: str):
+    """The Combat & Tactics page for a rung's full rule, or None."""
+    entry = RUNG_EFFECTS.get(rung)
+    return entry[0] if entry else None
+
 
 def weapon_rung_ladder(class_name: str, level: int = 1) -> tuple:
     """The rungs this class can climb, in order, at this level.

@@ -438,7 +438,9 @@ def test_html_class_summary_shows_combat_stats_once_chosen():
     cm.set_race("Human"); cm.set_class("Fighter")
     cm.index = STEPS.index("class")
     html = cmh.generate(cm)
-    assert "Attack bonus" in html and "THAC0" in html
+    # The house rule removes THAC0; the panel shows the attack bonus and AC instead.
+    assert "Attack bonus" in html and "Armor Class" in html
+    assert "THAC0" not in html
     assert "Saving throws" in html
     assert "Max HP" in html
 
@@ -558,6 +560,87 @@ def test_html_review_renders_sheet_and_save():
     assert "Human Fighter" in html and "Lawful Good" in html
     assert "Attack bonus" in html and "Saving throws" in html
     assert "dnd:///cm/save" in html and "dnd:///cm/restart" in html
+
+
+def test_review_shows_unspent_resources_with_links_back_to_their_steps():
+    cm = _complete()                                     # a fresh fighter spends nothing yet
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert '<div class="unspent">' in html
+    assert "You still have resources to spend" in html
+    assert "weapon proficiency slots" in html
+    assert "nonweapon proficiency slots" in html
+    # Each row links back to the step where that resource is spent.
+    assert "dnd:///cm/goto/weapons" in html
+    assert "dnd:///cm/goto/nonweapon" in html
+
+
+def test_review_unspent_panel_gone_once_everything_is_spent():
+    cm = _complete()
+    c = cm.character
+    for w in ("Long Sword", "Dagger", "Spear", "Mace"):
+        cm.dispatch("addweapon/" + w)
+    for p in cr.proficiencies_for_class("Fighter"):
+        if c.nonweapon_slots_left() <= 0:
+            break
+        cm.dispatch("addprof/" + p.name)
+    assert c.unspent_resources() == []
+    cm.index = STEPS.index("review")
+    assert '<div class="unspent">' not in cmh.generate(cm)
+
+
+def test_review_singularises_a_lone_unspent_slot():
+    cm = _complete()
+    c = cm.character
+    # Spend every nonweapon slot, and all but one weapon slot, so only "1 weapon
+    # proficiency slot" (singular) remains -- nothing plural should appear.
+    for w in ("Long Sword", "Dagger", "Spear"):
+        cm.dispatch("addweapon/" + w)
+    for p in cr.proficiencies_for_class("Fighter"):
+        if c.nonweapon_slots_left() <= 0:
+            break
+        cm.dispatch("addprof/" + p.name)
+    assert c.weapon_slots_left() == 1 and c.nonweapon_slots_left() == 0
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "weapon proficiency slot<" in html            # singular noun, then the closing tag
+    assert "weapon proficiency slots" not in html         # never the plural
+
+
+def test_review_lists_conditional_ac_bonuses_below_the_ac():
+    cm = _complete()                                     # Human Fighter
+    c = cm.character
+    c.fighting_styles = {"One-Handed Weapon": 2}
+    c.unarmed_profs = {"Martial Arts: Style D": "specialist"}
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert '<div class="ac-conds">' in html               # the notes block is present
+    assert "+2 AC" in html
+    assert "unarmed and unarmoured" in html
+    assert "One-Handed Weapon style" in html
+
+
+def test_review_has_no_ac_notes_block_without_conditional_bonuses():
+    cm = _complete()                                     # a plain fighter earns none
+    cm.index = STEPS.index("review")
+    assert '<div class="ac-conds">' not in cmh.generate(cm)
+
+
+def test_review_shows_armor_class_not_thac0_with_a_breakdown():
+    cm = _complete()
+    c = cm.character
+    armor = cr.items_in_category("Armor")[0]["name"]
+    c.inventory = {armor: 1}
+    c.worn = [armor]                                     # so the breakdown has an armor term
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "THAC0" not in html                           # dropped: redundant with attack bonus
+    assert "Armor Class" in html
+    # The AC value carries a hover breakdown of its components.
+    base, worn, dex = c.ac_components()
+    assert f"{base} base" in html
+    assert f"{worn:+d} armor &amp; shield" in html       # worn armor is accounted for
+    assert str(c.armor_class()) in html
 
 
 def test_html_saved_list_on_review_and_abilities():
@@ -1334,6 +1417,29 @@ def test_html_weapons_step_renders_with_house_rules():
     assert "dnd:///cm/addprof/Swimming" not in html    # nonweapon skills moved out
 
 
+def test_specialising_a_weapon_shows_what_the_rung_does():
+    cm = _fighter_at_profs()
+    cm.set_level(9)                                    # so mastery rungs are reachable
+    cm.dispatch("addweapon/Long Sword")
+    for rung in ("specialist", "master", "high_master", "grand_master"):
+        cm.dispatch("wpnup/Long Sword")
+        assert cm.character.weapon_rung("Long Sword") == rung
+        html = cmh.generate(cm)
+        label = cr.RUNG_LABELS[rung]
+        assert f"What {label} does" in html
+        # the full mechanical précis, HTML-escaped as it appears in the page
+        assert __import__("html").escape(cr.rung_summary(rung)) in html
+        assert f"newtab/{cr.rung_page(rung)}" in html   # ...and the full-rule link
+
+
+def test_a_plainly_proficient_weapon_has_no_rung_block():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")                 # stays proficient
+    html = cmh.generate(cm)
+    assert "Long Sword" in html
+    assert "What Proficient does" not in html          # nothing to explain at proficiency
+
+
 def test_ct_sections_have_what_it_does_blocks():
     cm = _fighter_at_profs()
     for verb in ("styleup/Two-Weapon", "addunarmed/Pummeling",
@@ -1457,7 +1563,62 @@ def test_html_equipment_and_spells_steps_render():
     cm.index = STEPS.index("equipment")
     cm.dispatch("money")
     h = cmh.generate(cm)
-    assert "Equipment" in h and "Armor Class" in h and "dnd:///cm/buy/" in h
+    assert "Equipment" in h and "Armor Class" in h
+    # Categories are collapsed by default: their expand links show, item buy links don't.
+    assert "dnd:///cm/eqcat/" in h
+    assert "dnd:///cm/buy/" not in h
+
+
+def test_equipment_item_bits_show_damage_and_speed_for_weapons():
+    weapon = {"category": "Weapon", "damage": "d8", "speed": "4", "weight": 3}
+    assert cmh._eq_item_bits(weapon) == ["d8 dmg", "SF 4", "3 lb"]
+    # A weapon with no listed speed (ammunition) omits the speed factor.
+    ammo = {"category": "Weapon", "damage": "d6", "speed": "", "weight": 0.1}
+    assert cmh._eq_item_bits(ammo) == ["d6 dmg", "0.1 lb"]
+    # Armor is unaffected: AC and weight, no speed.
+    armor = {"category": "Armor", "ac_bonus": 2, "weight": 9}
+    assert cmh._eq_item_bits(armor) == ["+2 AC", "9 lb"]
+
+
+def test_owned_weapon_shows_its_speed_factor():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    c = cm.character
+    c.money_cp = 100000
+    cm.dispatch("eqcat/Weapon")
+    weapon = next(i["name"] for i in cr.items_in_category("Weapon")
+                  if i.get("damage") and i.get("speed"))
+    cm.dispatch("buy/" + weapon)
+    html = cmh.generate(cm)
+    it = cr.item(weapon)
+    assert f'SF {it["speed"]}' in html and f'{it["damage"]} dmg' in html
+
+
+def test_equipment_categories_start_collapsed_and_expand_on_click():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    cm.dispatch("money")
+    assert cm.expanded_categories == set()
+    assert 'class="opt-grid"' not in cmh.generate(cm)      # nothing expanded -> no item grid
+    cm.dispatch("eqcat/Weapon")
+    assert cm.expanded_categories == {"Weapon"}
+    html = cmh.generate(cm)
+    assert 'class="opt-grid"' in html and "dnd:///cm/buy/" in html
+    cm.dispatch("eqcat/Weapon")                             # toggles shut again
+    assert cm.expanded_categories == set()
+
+
+def test_expanded_category_survives_a_purchase():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    c = cm.character
+    c.money_cp = 100000
+    cm.dispatch("eqcat/Weapon")
+    item = cr.items_in_category("Weapon")[0]["name"]
+    cm.dispatch("buy/" + item)
+    assert c.inventory.get(item) == 1
+    assert "Weapon" in cm.expanded_categories               # the re-render didn't collapse it
+    assert 'class="opt-grid"' in cmh.generate(cm)
     cm2 = _cleric_at_profs()
     cm2.index = STEPS.index("spells")
     cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1, "description": "x"}]

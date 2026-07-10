@@ -156,6 +156,7 @@ def test_every_combat_and_tactics_summary_links_to_a_real_page():
     import sqlite3
     import char_rules as cr
     conn = sqlite3.connect(RULES_DB)
-    dead = [f"{name} -> {page}" for name, (page, _) in cr.CT_RULES.items()
+    links = list(cr.CT_RULES.items()) + list(cr.RUNG_EFFECTS.items())
+    dead = [f"{name} -> {page}" for name, (page, _) in links
             if not conn.execute("SELECT 1 FROM pages WHERE page_url = ?", (page,)).fetchone()]
     assert dead == [], "dead 'full rule' links: " + "; ".join(dead)

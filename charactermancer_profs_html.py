@@ -94,6 +94,20 @@ def _ct_tooltip(name: str) -> str:
     return esc(summary if len(summary) <= 280 else summary[:277].rstrip() + "…")
 
 
+def _rung_description_html(rung: str) -> str:
+    """What a weapon's mastery rung grants in play, as an expandable block with a
+    link to the full Combat & Tactics rule. Empty for rungs with no write-up
+    (plain proficiency, familiar)."""
+    summary = cr.rung_summary(rung)
+    if not summary:
+        return ""
+    page = cr.rung_page(rung)
+    link = (f'<p><a class="reroll" href="dnd:///newtab/{page}">'
+            f'Read the full rule &rarr;</a></p>' if page else "")
+    return (f'<details class="pr-desc"><summary>What {cr.RUNG_LABELS[rung]} does</summary>'
+            f'<div class="pr-desc-body"><p>{esc(summary)}</p>{link}</div></details>')
+
+
 def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:
     """A trained weapon: its rung, the slots it costs, and the mastery steppers."""
     c = cm.character
@@ -131,7 +145,7 @@ def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:
         '<div class="prof-row">'
         f'{rm}'
         f'<div class="pr-main"><span class="pr-name">{esc(weapon)}</span>'
-        f'<span class="pr-detail">{detail}</span></div>'
+        f'<span class="pr-detail">{detail}</span>{_rung_description_html(rung)}</div>'
         f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
         '</div>')
 

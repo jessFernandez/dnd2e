@@ -322,6 +322,35 @@ def test_specialises_flags_the_mastery_rungs():
         assert cr.specialises(rung)
 
 
+def test_every_earnable_rung_has_a_gameplay_summary():
+    # Every rung a class can actually climb to (beyond plain proficiency) explains
+    # itself, so no bought rung shows up in the builder with no "what it does".
+    earnable = set()
+    for class_name in cr.CLASSES:
+        for rung in cr.weapon_rung_ladder(class_name, level=20):
+            if rung != "proficient":
+                earnable.add(rung)
+    assert earnable == {"expert", "specialist", "master", "high_master", "grand_master"}
+    for rung in earnable:
+        assert cr.rung_summary(rung), rung
+        assert cr.rung_page(rung)
+
+
+def test_unbought_rungs_have_no_summary():
+    # Nothing to describe for states the player never spends a slot to reach.
+    for rung in ("proficient", "familiar", "nonproficient"):
+        assert cr.rung_summary(rung) == ""
+        assert cr.rung_page(rung) is None
+
+
+def test_rung_summaries_name_their_signature_effect():
+    assert "+2 to damage" in cr.rung_summary("specialist")
+    assert "+3" in cr.rung_summary("master")
+    assert "16+" in cr.rung_summary("high_master")          # the better crit range
+    assert "extra attack" in cr.rung_summary("grand_master")
+    assert "no bonus to hit or damage" in cr.rung_summary("expert")
+
+
 def test_barred_penalty_is_zero_before_a_class_is_chosen():
     assert cr.barred_weapon_penalty("Two-Handed Sword", None) == 0
     assert cr.weapon_prof_cost("Two-Handed Sword", "proficient", None) == 1
