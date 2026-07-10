@@ -152,16 +152,30 @@ def test_cannot_overspend_the_budget_or_the_per_skill_cap():
     cm = _mancer()
     c = cm.character
     for _ in range(6):                                 # 30 points: the 1st-level cap
-        cm.add_thief_points("Climb Walls")
-    assert c.thief_points_in("Climb Walls") == 30
-    assert not c.can_add_thief_point("Climb Walls")
-    cm.add_thief_points("Climb Walls")
-    assert c.thief_points_in("Climb Walls") == 30       # refused, silently
+        cm.add_thief_points("Read Languages")
+    assert c.thief_points_in("Read Languages") == 30
+    assert not c.can_add_thief_point("Read Languages")
+    cm.add_thief_points("Read Languages")
+    assert c.thief_points_in("Read Languages") == 30    # refused, silently
 
     for _ in range(6):                                 # spend the other 30
-        cm.add_thief_points("Detect Noise")
+        cm.add_thief_points("Open Locks")
     assert c.thief_points_left() == 0
     assert not c.can_add_thief_point("Pick Pockets")
+
+
+def test_points_cannot_be_poured_into_a_skill_already_at_the_ceiling():
+    # A human thief's Climb Walls starts at 60 + 10 (no armor); 25 points reach 95.
+    cm = _mancer()
+    c = cm.character
+    for _ in range(5):
+        cm.add_thief_points("Climb Walls")
+    assert c.thief_skill_score("Climb Walls") == cr.THIEF_SKILL_MAX
+    # The per-skill cap is 30 and 25 are spent, but a sixth block would buy nothing.
+    assert not c.can_add_thief_point("Climb Walls")
+    cm.add_thief_points("Climb Walls")
+    assert c.thief_points_in("Climb Walls") == 25
+    assert c.thief_points_left() == 35                 # kept for a skill that gains
 
 
 def test_a_bard_may_only_spend_on_a_bards_skills():
@@ -190,11 +204,13 @@ def test_a_race_with_a_lower_level_cap_reclaims_the_points_it_takes_away():
     for skill in c.thief_skill_names():
         while c.can_add_thief_point(skill):
             cm.add_thief_points(skill)
-    assert c.thief_points_left() == 0
+    spent_at_20 = c.thief_points_used()
+    assert spent_at_20 > cr.thief_discretionary_points("Thief", 12)
 
     cm.set_race("Dwarf")                          # dwarven thieves stop at 12th
     assert c.level == 12
     cap = cr.thief_max_points_in_skill("Thief", 12)
+    assert c.thief_points_used() < spent_at_20    # the reclaim actually gave points back
     assert c.thief_points_left() >= 0
     assert all(spent <= cap for spent in c.thief_skills.values())
 

@@ -36,11 +36,6 @@ def roll_4d6_drop_lowest(rng: random.Random = None) -> int:
     return sum(dice[1:])
 
 
-def roll_ability_pool(rng: random.Random = None) -> list:
-    """Six freshly rolled scores for the player to arrange across the abilities."""
-    return [roll_4d6_drop_lowest(rng) for _ in range(6)]
-
-
 # ── The character build ──────────────────────────────────────────────────────
 
 @dataclass
@@ -376,6 +371,15 @@ class Character:
     def weapon_rung_ladder(self) -> tuple:
         return cr.weapon_rung_ladder(self.char_class, self.level) if self.char_class else ()
 
+    def can_add_weapon(self, weapon: str) -> bool:
+        """Whether plain proficiency with a weapon is affordable and not already had.
+        A weapon a bought group covers needs no entry, so it can't be "added"."""
+        if not self.char_class or weapon not in cr.WEAPONS:
+            return False
+        if weapon in self.weapon_profs or self.group_covers(weapon):
+            return False
+        return self.weapon_prof_cost(weapon, "proficient") <= self.weapon_slots_left()
+
     def specialised_weapon(self):
         """The one weapon a fighter has specialised in (or mastered), else None."""
         for weapon, rung in self.weapon_profs.items():
@@ -423,7 +427,8 @@ class Character:
 
     def can_buy_ambidexterity(self) -> bool:
         """Warriors and rogues may buy ambidexterity for one weapon slot (house
-        rule) — unless they're already ambidextrous."""
+        rule) — unless they're already ambidextrous. Layered on top of the CT
+        talent's own class list by `can_add_talent`, which is the only caller."""
         if not self.house_rules or not self.char_class or self.ambidextrous:
             return False
         return cr.CLASSES[self.char_class].group in ("Warrior", "Rogue")
@@ -651,8 +656,11 @@ class Character:
         return {s: self.thief_skill_score(s) for s in self.thief_skill_names()}
 
     def can_add_thief_point(self, skill: str, points: int = 5) -> bool:
-        """Enough points left, and the per-skill cap not yet reached."""
+        """Enough points left, the per-skill cap not yet reached, and the skill not
+        already at the 95% ceiling — points spent there would buy nothing."""
         if skill not in self.thief_skill_names() or points <= 0:
+            return False
+        if self.thief_skill_score(skill) >= cr.THIEF_SKILL_MAX:
             return False
         cap = cr.thief_max_points_in_skill(self.char_class, self.level)
         return (points <= self.thief_points_left()
@@ -662,9 +670,6 @@ class Character:
         return skill in self.thief_skill_names() and self.thief_points_in(skill) >= points
 
     # ── turning undead (PHB Table 61) ───────────────────────────────────────
-    def turns_undead(self) -> bool:
-        return cr.turn_undead_level(self.char_class, self.level) is not None
-
     def turn_undead_level(self):
         """The level this character *turns as* — a paladin's is two lower."""
         return cr.turn_undead_level(self.char_class, self.level)

@@ -1157,7 +1157,7 @@ def _weapon_section(cm) -> str:
         if w in c.weapon_profs or c.group_covers(w):
             continue                       # already trained, or granted by a group
         cost = c.weapon_prof_cost(w, "proficient")
-        dis = "" if cost <= left else " dis"
+        dis = "" if c.can_add_weapon(w) else " dis"
         # Flag the two things that change a weapon's price for this character.
         barred = cr.barred_weapon_penalty(w, c.char_class) if c.char_class else 0
         meta = ""
@@ -1276,13 +1276,9 @@ def _weapons_body(cm, saved=None) -> str:
     return f'<div class="prof-wrap">{_weapon_section(cm)}</div>'
 
 
-_THIEF_SKILL_PAGES = {
-    "base": "PHB/DD01501.htm",
-    "racial": "PHB/DD01502.htm",
-    "dex": "PHB/DD01503.htm",
-    "armor": "PHB/DD01504.htm",
-    "explanations": "PHB/DD01505.htm",
-}
+#: The four adjustment tables are linked from the step's reference rail; only the
+#: prose page that explains what each skill *does* is worth an inline link.
+_THIEF_SKILLS_PAGE = "PHB/DD01505.htm"
 
 _ARMOR_KIND_LABELS = {
     "none": "no armor",
@@ -1348,7 +1344,7 @@ def _thief_skills_block(cm) -> str:
         f'and no skill may pass {cr.THIEF_SKILL_MAX}%. Scores already include your race, '
         f'your Dexterity, and the armor you are wearing (currently {armor}) &mdash; '
         'hover a score to see the arithmetic. '
-        f'<a href="dnd:///{_THIEF_SKILL_PAGES["explanations"]}">What each skill does &rarr;</a>'
+        f'<a href="dnd:///{_THIEF_SKILLS_PAGE}">What each skill does &rarr;</a>'
         '</div>'
         f'<div class="chosen-list">{rows}</div>'
         '</section>'

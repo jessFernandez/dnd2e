@@ -1486,3 +1486,27 @@ def test_html_spells_shows_limit_and_collapsible_info():
     h = cmh.generate(cm)
     assert "left" in h and "memorized" in h                # spell budget bar
     assert "What it does" in h and "raises morale for nearby allies" in h   # collapsible
+
+
+def test_dropping_a_level_forgets_spells_that_level_can_no_longer_cast():
+    cm = _cleric_at_profs()
+    cm.set_level(5)                                        # 3rd-level spells online
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1},
+                        {"name": "Prayer", "school": "Combat", "level": 3}]
+    cm.dispatch("addspell/Bless")
+    cm.dispatch("addspell/Prayer")
+    assert cm.character.spells == {"Bless": 1, "Prayer": 3}
+
+    cm.set_level(1)
+    # A 1st-level cleric cannot know a 3rd-level spell at all — that isn't an
+    # overspent budget the player can trim, so the build drops it.
+    assert cm.character.spells == {"Bless": 1}
+
+
+def test_changing_to_a_non_caster_empties_the_spellbook():
+    cm = _cleric_at_profs()
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1}]
+    cm.dispatch("addspell/Bless")
+    assert cm.character.spells
+    cm.set_class("Fighter")
+    assert cm.character.spells == {}

@@ -154,13 +154,12 @@ class Charactermancer:
         """Race and class both move the racial level cap and the number of hit dice
         a level needs, so re-apply the level after either changes. Must run *after*
         _revalidate(), which clears a class the new race can't take — otherwise
-        max_level() would raise on the illegal pair. A no-op for the level-1 builds
-        the builder makes today."""
+        max_level() would raise on the illegal pair."""
         if self.character.char_class:
             self.character.set_level(self.character.level, rng=self._roll)
             # the new racial cap may have just lowered the level out from under
-            # any thieving-skill points already spent
-            self._reclaim_thief_points()
+            # choices the old level allowed
+            self._reclaim()
 
     # ── advancement ───────────────────────────────────────────────────────────
     def set_level(self, level: int) -> bool:
@@ -168,7 +167,7 @@ class Charactermancer:
         if not self.character.char_class or level < 1:
             return False
         self.character.set_level(level, rng=self._roll)
-        self._reclaim_thief_points()
+        self._reclaim()
         return True
 
     def reroll_hp(self):
@@ -222,8 +221,35 @@ class Charactermancer:
             for name in [n for n in c.nonweapon_profs
                          if not cr.proficiency_available(n, c.char_class)]:
                 self.remove_proficiency(name)
-        # thieving-skill points survive only while the class still has the skills
+        self._reclaim()
+
+    def _reclaim(self):
+        """Drop the level- and class-dependent choices the build can no longer hold.
+
+        Runs after anything that moves the class or the level: both change what a
+        character may know. Slot budgets are deliberately *not* reclaimed here.
+        Which proficiency to give back is the player's call, not ours, so dropping
+        to a level that affords fewer slots leaves the budget overspent (the bar
+        reads "-2 left") for them to sort out.
+        """
         self._reclaim_thief_points()
+        self._drop_uncastable_spells()
+
+    def _drop_uncastable_spells(self):
+        """Forget spells of a level this character can no longer cast at all.
+
+        Unlike an overspent slot budget, this isn't the player's to fix by trimming:
+        a mage knocked back to 1st level simply cannot know Fireball. Spells whose
+        level is still castable stay, even if the *number* of them now exceeds the
+        slots — that much the player can sort out on the Spells step.
+        """
+        c = self.character
+        top = c.max_spell_level() if c.char_class else None
+        if top is None:
+            c.spells.clear()
+            return
+        for name in [n for n, lvl in c.spells.items() if lvl > top]:
+            del c.spells[name]
 
     def _reclaim_thief_points(self):
         """Drop thieving-skill points the build can no longer justify — a class change
@@ -249,11 +275,7 @@ class Charactermancer:
         and any barred-weapon penalty for this class. A weapon a bought group already
         covers is free and needs no entry."""
         c = self.character
-        if not c.char_class or weapon not in cr.WEAPONS or weapon in c.weapon_profs:
-            return
-        if c.group_covers(weapon):
-            return
-        if c.weapon_prof_cost(weapon, "proficient") <= c.weapon_slots_left():
+        if c.can_add_weapon(weapon):
             c.weapon_profs[weapon] = "proficient"
 
     def remove_weapon(self, weapon: str):
@@ -493,22 +515,12 @@ class Charactermancer:
             c.worn.append(name)
 
     # ── spells ────────────────────────────────────────────────────────────────
-    def _catalog_names(self) -> set:
-        return {s["name"] for s in self.spell_catalog}
-
     def spell_level_of(self, name: str):
         """The spell level of a catalog spell, or None if it isn't in the catalog."""
         for s in self.spell_catalog:
             if s["name"] == name:
                 return int(s.get("level") or 1)
         return None
-
-    def chosen_by_level(self) -> dict:
-        """{spell_level: [names]} of the spells already chosen, in catalog order."""
-        out = {}
-        for name, lvl in self.character.spells.items():
-            out.setdefault(lvl, []).append(name)
-        return out
 
     def add_spell(self, name: str):
         """Add a spell, respecting the budget for *its own* spell level (wizards are
