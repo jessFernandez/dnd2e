@@ -82,6 +82,8 @@ class Character:
     # Fighting style -> slots of specialisation (0 = merely known). Warriors know
     # every style for free; nonwarriors pay a slot to learn one.
     fighting_styles: dict = field(default_factory=dict)
+    # Unarmed discipline -> rung (CT Ch5): pummeling, wrestling, martial arts styles.
+    unarmed_profs: dict = field(default_factory=dict)
     nonweapon_profs: dict = field(default_factory=dict)   # name -> total slots invested
     # Combat & Tactics special talents: name -> which budget paid for it,
     # "weapon" or "nonweapon" (only CT's asterisked talents may use the latter).
@@ -274,6 +276,7 @@ class Character:
         used += cr.ARMOR_PROF_SLOT_COST * len(self.armor_profs)
         used += sum(cr.style_slot_cost(s, n, self.char_class)
                     for s, n in self.fighting_styles.items())
+        used += sum(cr.unarmed_prof_cost(r) for r in self.unarmed_profs.values())
         used += self.talent_slots_used("weapon")
         return used
 
@@ -469,12 +472,65 @@ class Character:
         rest 12; defaults to 12 before a race is chosen."""
         return cr.RACES[self.race].movement if self.race in cr.RACES else 12
 
+    # ── unarmed disciplines (Combat & Tactics Ch5) ───────────────────────────
+    def unarmed_rung(self, discipline: str) -> str:
+        """The rung held in an unarmed discipline: an explicit one, else the free rung
+        (familiar with pummeling/wrestling/overbearing; nothing with a martial art)."""
+        if discipline in self.unarmed_profs:
+            return self.unarmed_profs[discipline]
+        return cr.unarmed_free_rung(discipline)
+
+    def martial_art_styles_known(self) -> list:
+        return [s for s in cr.MARTIAL_ARTS_STYLES if s in self.unarmed_profs]
+
+    def knows_a_martial_art(self) -> bool:
+        return bool(self.martial_art_styles_known())
+
+    def _martial_art_at_or_above(self, rung: str):
+        """The martial art already held at `rung` or better, if any. CT allows
+        proficiency in several styles but expertise/specialisation in only one."""
+        order = ("proficient", "expert", "specialist")
+        want = order.index(rung)
+        for style in self.martial_art_styles_known():
+            if order.index(self.unarmed_profs[style]) >= want:
+                return style
+        return None
+
+    def can_add_unarmed(self, discipline: str) -> bool:
+        if discipline in self.unarmed_profs or not self.char_class:
+            return False
+        if not cr.unarmed_rung_ladder(discipline, self.char_class, self.level):
+            return False       # overbearing, or a class that cannot advance it
+        return cr.unarmed_prof_cost("proficient") <= self.weapon_slots_left()
+
+    def can_raise_unarmed(self, discipline: str) -> bool:
+        rung = self.unarmed_profs.get(discipline)
+        if rung is None or not self.char_class:
+            return False
+        ladder = cr.unarmed_rung_ladder(discipline, self.char_class, self.level)
+        if rung not in ladder or ladder.index(rung) + 1 >= len(ladder):
+            return False
+        nxt = ladder[ladder.index(rung) + 1]
+        if cr.is_martial_art(discipline):
+            other = self._martial_art_at_or_above(nxt)
+            if other is not None and other != discipline:
+                return False   # expert / specialist in only one style
+        extra = cr.unarmed_prof_cost(nxt) - cr.unarmed_prof_cost(rung)
+        return extra <= self.weapon_slots_left()
+
+    def can_lower_unarmed(self, discipline: str) -> bool:
+        rung = self.unarmed_profs.get(discipline)
+        if rung is None or not self.char_class:
+            return False
+        ladder = cr.unarmed_rung_ladder(discipline, self.char_class, self.level)
+        return rung in ladder and ladder.index(rung) > 0
+
     # ── special talents (Combat & Tactics) ───────────────────────────────────
     def talent_slots_used(self, source: str) -> int:
         """Slots one budget has spent on talents ('weapon' or 'nonweapon')."""
-        return sum(cr.SPECIAL_TALENTS[name].slots
+        return sum(cr.TALENTS[name].slots
                    for name, paid_from in self.special_talents.items()
-                   if paid_from == source and name in cr.SPECIAL_TALENTS)
+                   if paid_from == source and name in cr.TALENTS)
 
     @property
     def bought_ambidexterity(self) -> bool:
@@ -489,24 +545,34 @@ class Character:
         else:
             self.special_talents.pop("Ambidexterity", None)
 
-    def can_add_talent(self, name: str, source: str = "weapon") -> bool:
-        talent = cr.SPECIAL_TALENTS.get(name)
+    def can_add_talent(self, name: str, source: str = None) -> bool:
+        talent = cr.TALENTS.get(name)
         if talent is None or name in self.special_talents:
             return False
         if not cr.talent_allowed(name, self.char_class):
             return False
-        if source == "nonweapon" and not talent.either_slot:
-            return False       # only CT's asterisked talents may use an NWP slot
+        source = source or self.default_talent_source(name)
+        if talent.slot_source != "either" and source != talent.slot_source:
+            return False       # only CT's asterisked talents may pick their budget
+        if talent.requires_martial_art and not self.knows_a_martial_art():
+            return False       # "Only a martial artist can learn the skills here"
         if name == "Ambidexterity" and not self.can_buy_ambidexterity():
             return False       # already ambidextrous, or house rules off
         left = (self.weapon_slots_left() if source == "weapon"
                 else self.nonweapon_slots_left())
         return talent.slots <= left
 
+    def default_talent_source(self, name: str) -> str:
+        """Which budget a talent draws on unless the player picks the other one."""
+        talent = cr.TALENTS.get(name)
+        if talent is None or talent.slot_source == "either":
+            return "weapon"
+        return talent.slot_source
+
     def talent_skill(self, name: str):
         """A talent's proficiency check score, when it has one: the governing ability
         plus its modifier (the campaign's nonweapon-proficiency check model)."""
-        talent = cr.SPECIAL_TALENTS.get(name)
+        talent = cr.TALENTS.get(name)
         if talent is None or not talent.ability:
             return None
         score = self.final_abilities().get(talent.ability)
@@ -622,6 +688,7 @@ class Character:
             "fighting_styles": dict(self.fighting_styles),
             "nonweapon_profs": dict(self.nonweapon_profs),
             "special_talents": dict(self.special_talents),
+            "unarmed_profs": dict(self.unarmed_profs),
             "money_cp": self.money_cp,
             "inventory": dict(self.inventory),
             "worn": list(self.worn),
@@ -647,6 +714,7 @@ class Character:
         if d.pop("bought_ambidexterity", False) and "Ambidexterity" not in talents:
             talents["Ambidexterity"] = "weapon"
         d["special_talents"] = talents
+        d["unarmed_profs"] = dict(d.get("unarmed_profs") or {})
         d["nonweapon_profs"] = dict(d.get("nonweapon_profs") or {})
         d["inventory"] = dict(d.get("inventory") or {})
         d["worn"] = list(d.get("worn") or [])

@@ -1281,6 +1281,86 @@ def style_slot_cost(style: str, spec_slots: int, class_name: str) -> int:
     return cost + paid * STYLE_SPECIALISE_SLOT_COST
 
 
+# ── Unarmed disciplines (CT Ch5: DD02674, DD02687, DD02695, DD02700-DD02703) ─
+#
+# These are bought with weapon proficiency slots and ride the SAME rung ladder, so
+# they model as pseudo-weapons. Two things stop them being ordinary weapons:
+#   • each has its own rung cap — overbearing cannot be advanced at all
+#     ("It is not possible to develop overbearing expertise, specialization, or
+#     mastery"), martial arts stop at specialist, pummeling/wrestling reach master;
+#   • familiarity doesn't work the same. Everyone is *familiar* with pummeling,
+#     wrestling and overbearing for free, while for martial arts "familiarity has no
+#     effect" — and CT is explicit that "the four martial arts styles do not
+#     constitute a weapon group", so they confer no familiarity on each other.
+#
+# Brawling is universal and has no skill levels, so there is nothing to model.
+# Unlike weapons, *expertise* here is open to any class; only specialisation and
+# mastery are the single-class fighter's.
+
+@dataclass(frozen=True)
+class UnarmedDiscipline:
+    name: str
+    rung_cap: str = None        # None: cannot be advanced at all
+    free_rung: str = "familiar" # what you get without spending anything
+    nonwarrior_benefit: bool = True
+    note: str = ""
+
+
+UNARMED_DISCIPLINES = {d.name: d for d in (
+    UnarmedDiscipline("Overbearing", None, "familiar",
+                      note="Brute force; no expertise, specialisation or mastery."),
+    UnarmedDiscipline("Pummeling", "master", "familiar", nonwarrior_benefit=False,
+                      note="Nonwarriors gain no benefit from proficiency."),
+    UnarmedDiscipline("Wrestling", "master", "familiar", nonwarrior_benefit=False,
+                      note="Nonwarriors gain no benefit from proficiency."),
+    UnarmedDiscipline("Martial Arts: Style A", "specialist", "nonproficient",
+                      note="Strikes with hands/fists; 1d3, any size opponent."),
+    UnarmedDiscipline("Martial Arts: Style B", "specialist", "nonproficient",
+                      note="Strikes with the feet; 1d6 kicks."),
+    UnarmedDiscipline("Martial Arts: Style C", "specialist", "nonproficient"),
+    UnarmedDiscipline("Martial Arts: Style D", "specialist", "nonproficient"),
+)}
+
+MARTIAL_ARTS_STYLES = tuple(n for n in UNARMED_DISCIPLINES if n.startswith("Martial Arts"))
+
+# Unarmed skill levels, in order. Expertise is open to everyone here.
+_UNARMED_LADDER = ("proficient", "expert", "specialist", "master")
+
+
+def is_martial_art(discipline: str) -> bool:
+    return discipline in MARTIAL_ARTS_STYLES
+
+
+def unarmed_rung_ladder(discipline: str, class_name: str, level: int = 1) -> tuple:
+    """The rungs a class can climb in an unarmed discipline at this level."""
+    entry = UNARMED_DISCIPLINES.get(discipline)
+    if entry is None or entry.rung_cap is None or class_name not in CLASSES:
+        return ()
+    ladder = []
+    for rung in _UNARMED_LADDER:
+        if rung == "specialist" and class_name != "Fighter":
+            break
+        if rung == "master" and (class_name != "Fighter"
+                                 or level < _RUNG_MIN_LEVEL["master"]):
+            break
+        ladder.append(rung)
+        if rung == entry.rung_cap:
+            break
+    return tuple(ladder)
+
+
+def unarmed_prof_cost(rung: str) -> int:
+    """Slots invested in an unarmed discipline at a rung: proficiency 1, expertise or
+    specialisation 2, mastery 3 — the same ladder as weapons, with no house-rule or
+    barred-weapon adjustment to the base slot."""
+    return 1 + _RUNG_EXTRA_SLOTS[rung]
+
+
+def unarmed_free_rung(discipline: str) -> str:
+    entry = UNARMED_DISCIPLINES.get(discipline)
+    return entry.free_rung if entry else "nonproficient"
+
+
 # ── Special talents (CT/DD02653-DD02665) ────────────────────────────────────
 # Bought with weapon proficiency slots. CT marks two of them with an asterisk —
 # "originally presented as nonweapon proficiencies ... they can be purchased with
@@ -1295,16 +1375,18 @@ class SpecialTalent:
     modifier: int = 0
     groups: tuple = ()
     initial_rating: int = None
-    either_slot: bool = False
+    # Which budget may pay: "weapon", "nonweapon", or "either" (CT's asterisk).
+    slot_source: str = "weapon"
+    requires_martial_art: bool = False
 
 
 SPECIAL_TALENTS = {t.name: t for t in (
-    SpecialTalent("Alertness", 1, "Wisdom", 1, (), None, either_slot=True),
+    SpecialTalent("Alertness", 1, "Wisdom", 1, (), None, slot_source="either"),
     SpecialTalent("Ambidexterity", 1, "Dexterity", 0, ("Warrior", "Rogue")),
     SpecialTalent("Ambush", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
     SpecialTalent("Camouflage", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
     SpecialTalent("Dirty Fighting", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
-    SpecialTalent("Endurance", 2, "Constitution", 0, ("Warrior",), 3, either_slot=True),
+    SpecialTalent("Endurance", 2, "Constitution", 0, ("Warrior",), 3, slot_source="either"),
     SpecialTalent("Fine Balance", 2, "Dexterity", 0, ("Warrior", "Rogue"), 7),
     SpecialTalent("Iron Will", 2, "Wisdom", -2, ("Warrior", "Priest"), 3),
     SpecialTalent("Leadership", 1, "Charisma", -1, ("Warrior",), 5),
@@ -1313,17 +1395,57 @@ SPECIAL_TALENTS = {t.name: t for t in (
     SpecialTalent("Trouble Sense", 1, "Wisdom", 0, (), 3),
 )}
 
+# CT/DD02705. "Only a martial artist can learn the skills presented here. They can
+# be purchased with either weapon or nonweapon proficiency slots."
+_WPR = ("Warrior", "Priest", "Rogue")
+MARTIAL_ARTS_TALENTS = {t.name: t for t in (
+    SpecialTalent("Flying Kick", 1, "Strength", 0, ("Warrior",), 5,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Backward Kick", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Spring", 1, "Dexterity", 0, ("Warrior", "Rogue"), 5,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Crushing Blow", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Instant Stand", 1, "Dexterity", 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Missile Deflection", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+)}
+
+# CT/DD02824 (Chapter Eight). "The following proficiencies are applicable to warfare
+# and the operation of war equipment. They are acquired the same way standard PHB
+# proficiencies are" — i.e. with nonweapon slots.
+SIEGE_PROFICIENCIES = {t.name: t for t in (
+    SpecialTalent("Artillerist", 1, "Charisma", 0, ("Warrior",), None,
+                  slot_source="nonweapon"),
+    SpecialTalent("Vehicle Handling", 1, "Dexterity", 0, ("Warrior",), None,
+                  slot_source="nonweapon"),
+)}
+
+# Everything buyable through the talent machinery, in one lookup.
+TALENTS = {**SPECIAL_TALENTS, **MARTIAL_ARTS_TALENTS, **SIEGE_PROFICIENCIES}
+
 
 def talent_allowed(name: str, class_name: str) -> bool:
-    """Whether a class group may take this talent at all."""
-    talent = SPECIAL_TALENTS.get(name)
+    """Whether a class group may take this talent at all (ignores prerequisites)."""
+    talent = TALENTS.get(name)
     if talent is None or class_name not in CLASSES:
         return False
     return not talent.groups or CLASSES[class_name].group in talent.groups
 
 
 def talents_for_class(class_name: str) -> tuple:
+    """The twelve Chapter Four special talents open to a class."""
     return tuple(t for t in SPECIAL_TALENTS.values() if talent_allowed(t.name, class_name))
+
+
+def martial_arts_talents_for_class(class_name: str) -> tuple:
+    return tuple(t for t in MARTIAL_ARTS_TALENTS.values() if talent_allowed(t.name, class_name))
+
+
+def siege_proficiencies_for_class(class_name: str) -> tuple:
+    return tuple(t for t in SIEGE_PROFICIENCIES.values() if talent_allowed(t.name, class_name))
 
 
 def two_weapon_penalty(specialised: bool, ambidextrous: bool) -> tuple:

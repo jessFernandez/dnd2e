@@ -1004,7 +1004,7 @@ def test_asterisked_talents_may_use_a_nonweapon_slot():
     assert c.nonweapon_slots_used() == 2 and c.weapon_slots_used() == 0
     cm.dispatch("addtalentnwp/Iron Will")              # not asterisked -> refused
     assert "Iron Will" not in c.special_talents
-    assert {t.name for t in cr.SPECIAL_TALENTS.values() if t.either_slot} == \
+    assert {t.name for t in cr.SPECIAL_TALENTS.values() if t.slot_source == "either"} == \
         {"Alertness", "Endurance"}
 
 
@@ -1025,6 +1025,92 @@ def test_legacy_bought_ambidexterity_bool_migrates_into_the_talents():
     back = Character.from_dict(legacy)
     assert back.special_talents == {"Ambidexterity": "weapon"}
     assert back.bought_ambidexterity is True
+
+
+def test_everyone_is_familiar_with_pummeling_wrestling_and_overbearing():
+    c = _fighter_at_profs().character
+    for d in ("Pummeling", "Wrestling", "Overbearing"):
+        assert c.unarmed_rung(d) == "familiar"
+    for style in cr.MARTIAL_ARTS_STYLES:
+        assert c.unarmed_rung(style) == "nonproficient"   # familiarity has no effect
+    assert c.weapon_slots_used() == 0                     # all of it is free
+
+
+def test_overbearing_cannot_be_advanced():
+    cm = _fighter_at_profs()
+    assert cr.unarmed_rung_ladder("Overbearing", "Fighter", 9) == ()
+    cm.dispatch("addunarmed/Overbearing")
+    assert cm.character.unarmed_profs == {}
+
+
+def test_pummeling_climbs_the_ladder_to_mastery_for_a_fighter():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    cm.dispatch("addunarmed/Pummeling")
+    assert c.unarmed_profs == {"Pummeling": "proficient"} and c.weapon_slots_used() == 1
+    for _ in range(3):
+        cm.dispatch("unarmedup/Pummeling")
+    assert c.unarmed_profs["Pummeling"] == "master"
+    assert c.weapon_slots_used() == 3                     # CT: mastery costs 3 slots
+
+
+def test_nonfighters_reach_expertise_but_not_specialisation():
+    cm = _cleric_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    assert cr.unarmed_rung_ladder("Wrestling", "Cleric", 5) == ("proficient", "expert")
+    cm.dispatch("addunarmed/Wrestling")
+    cm.dispatch("unarmedup/Wrestling")
+    cm.dispatch("unarmedup/Wrestling")                    # specialisation is refused
+    assert c.unarmed_profs["Wrestling"] == "expert"
+
+
+def test_martial_arts_styles_are_learned_separately_and_grant_no_familiarity():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    cm.dispatch("addunarmed/Martial Arts: Style A")
+    cm.dispatch("addunarmed/Martial Arts: Style B")       # proficiency in several is fine
+    assert len(c.martial_art_styles_known()) == 2
+    assert c.unarmed_rung("Martial Arts: Style C") == "nonproficient"   # no weapon group
+    cm.dispatch("unarmedup/Martial Arts: Style A")
+    assert c.unarmed_profs["Martial Arts: Style A"] == "expert"
+    cm.dispatch("unarmedup/Martial Arts: Style B")        # expert in only one style
+    assert c.unarmed_profs["Martial Arts: Style B"] == "proficient"
+
+
+def test_martial_arts_talents_need_a_style_and_vanish_with_it():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Flying Kick")                  # no style yet -> refused
+    assert c.special_talents == {}
+    cm.dispatch("addunarmed/Martial Arts: Style A")
+    cm.dispatch("addtalent/Flying Kick")
+    assert c.special_talents == {"Flying Kick": "weapon"}
+    cm.dispatch("rmunarmed/Martial Arts: Style A")        # last style gone
+    assert c.special_talents == {}                        # so is the talent
+
+
+def test_siege_proficiencies_cost_a_nonweapon_slot_and_are_warrior_only():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Artillerist")
+    assert c.special_talents == {"Artillerist": "nonweapon"}
+    assert c.nonweapon_slots_used() == 1 and c.weapon_slots_used() == 0
+    assert {t.name for t in cr.SIEGE_PROFICIENCIES.values()} == {"Artillerist", "Vehicle Handling"}
+    cm2 = _cleric_at_profs()
+    cm2.dispatch("addtalent/Vehicle Handling")            # warrior-only
+    assert cm2.character.special_talents == {}
+
+
+def test_unarmed_profs_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addunarmed/Wrestling")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.unarmed_profs == {"Wrestling": "proficient"}
+    assert back.unarmed_rung("Pummeling") == "familiar"
 
 
 def test_legacy_weapon_prof_list_migrates_to_rungs():

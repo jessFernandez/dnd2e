@@ -529,6 +529,7 @@ def _review_profs(c) -> str:
     weapons += [f"{a} (armor prof.)" for a in c.armor_profs]
     weapons += [f"{s} style" + (" (specialised)" if c.style_specialisation(s) else "")
                 for s in c.fighting_styles]
+    weapons += [f"{d} ({cr.RUNG_LABELS[r]})" for d, r in c.unarmed_profs.items()]
     weapons += list(c.special_talents)
     wp = ", ".join(_esc(w) for w in weapons) or "none"
     nwp = ""
@@ -902,18 +903,72 @@ def _fighting_styles_block(cm) -> str:
         + (f'<div class="opt-grid">{opts}</div>' if opts else ""))
 
 
-def _talents_block(cm) -> str:
-    """CT special talents. Bought with weapon slots; the two CT asterisks (Alertness,
-    Endurance) may use a nonweapon slot instead."""
+def _unarmed_block(cm) -> str:
+    """CT Ch5 unarmed disciplines, riding the same rung ladder as weapons."""
     c = cm.character
     if not c.char_class:
         return ""
 
     rows = ""
-    for name, source in c.special_talents.items():
-        talent = cr.SPECIAL_TALENTS.get(name)
+    for name in cr.UNARMED_DISCIPLINES:
+        entry = cr.UNARMED_DISCIPLINES[name]
+        rung = c.unarmed_rung(name)
+        held = name in c.unarmed_profs
+        if not held and rung == "nonproficient":
+            continue                       # untrained martial art: it's in the buy list
+        cost = cr.unarmed_prof_cost(rung) if held else 0
+        down = (f'<a class="slot-btn" href="dnd:///cm/unarmeddown/{name}">&minus;</a>'
+                if c.can_lower_unarmed(name) else '<span class="slot-btn off">&minus;</span>')
+        up = (f'<a class="slot-btn" href="dnd:///cm/unarmedup/{name}">+</a>'
+              if c.can_raise_unarmed(name) else '<span class="slot-btn off">+</span>')
+        bits = [cr.RUNG_LABELS[rung]]
+        if entry.rung_cap is None:
+            bits.append("cannot be advanced")
+        if held and not entry.nonwarrior_benefit and \
+                cr.CLASSES[c.char_class].group != "Warrior":
+            bits.append("nonwarriors gain no benefit")
+        if entry.note:
+            bits.append(entry.note)
+        rm = (f'<a class="pr-rm" href="dnd:///cm/rmunarmed/{name}" title="Remove">✕</a>'
+              if held else '<span class="pr-rm" title="Free">•</span>')
+        rows += (
+            '<div class="prof-row">'
+            f'{rm}'
+            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
+            f'<span class="pr-detail">{_esc(" · ".join(bits))}</span></div>'
+            f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
+            '</div>')
+
+    opts = ""
+    for name in cr.UNARMED_DISCIPLINES:
+        if name in c.unarmed_profs or not cr.unarmed_rung_ladder(name, c.char_class, c.level):
+            continue
+        if not cr.is_martial_art(name) and c.unarmed_rung(name) != "familiar":
+            continue
+        dis = "" if c.can_add_unarmed(name) else " dis"
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addunarmed/{name}">'
+                 f'<span class="opt-name">{_esc(name)}</span>'
+                 f'<span class="opt-cost">{cr.unarmed_prof_cost("proficient")}</span></a>')
+
+    return (
+        '<div class="grp-label" style="margin-top:16px">Unarmed combat</div>'
+        '<div class="hint">Everyone is familiar with pummeling, wrestling and '
+        'overbearing for free. Proficiency costs a weapon slot; expertise is open to '
+        'any class, specialisation and mastery to single-class fighters. Martial arts '
+        'styles are learned separately — they form no weapon group, so they grant no '
+        'familiarity, and you may be expert or specialised in only one.</div>'
+        + (f'<div class="chosen-list">{rows}</div>' if rows else "")
+        + (f'<div class="opt-grid">{opts}</div>' if opts else ""))
+
+
+def _talent_rows(cm, names) -> str:
+    c = cm.character
+    rows = ""
+    for name in names:
+        talent = cr.TALENTS.get(name)
         if not talent:
             continue
+        source = c.special_talents[name]
         bits = [f'{talent.slots} {source} slot' + ("s" if talent.slots != 1 else "")]
         skill = c.talent_skill(name)
         if skill is not None:
@@ -926,9 +981,13 @@ def _talents_block(cm) -> str:
             f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
             f'<span class="pr-detail">{" &middot; ".join(bits)}</span></div>'
             f'<div class="pr-slots"><span class="pr-sn">{talent.slots}</span></div></div>')
+    return rows
 
+
+def _talent_opts(cm, talents) -> str:
+    c = cm.character
     opts = ""
-    for talent in cr.talents_for_class(c.char_class):
+    for talent in talents:
         if talent.name in c.special_talents:
             continue
         dis = "" if c.can_add_talent(talent.name) else " dis"
@@ -937,20 +996,55 @@ def _talents_block(cm) -> str:
         opts += (f'<a class="opt{dis}" href="dnd:///cm/addtalent/{talent.name}">'
                  f'<span class="opt-name">{_esc(talent.name)}</span>{meta}'
                  f'<span class="opt-cost">{talent.slots}</span></a>')
-        if talent.either_slot:
+        if talent.slot_source == "either":
             dis2 = "" if c.can_add_talent(talent.name, "nonweapon") else " dis"
             opts += (f'<a class="opt{dis2}" href="dnd:///cm/addtalentnwp/{talent.name}" '
                      f'title="Pay with a nonweapon slot instead">'
                      f'<span class="opt-name">{_esc(talent.name)} (NWP)</span>'
                      f'<span class="opt-cost">{talent.slots}</span></a>')
-    opts = opts or '<span class="hint">No talents available to this class.</span>'
+    return opts
 
-    return (
+
+def _talents_block(cm) -> str:
+    """CT special talents, the martial-arts talents, and the two siege proficiencies."""
+    c = cm.character
+    if not c.char_class:
+        return ""
+    chosen = set(c.special_talents)
+
+    out = (
         '<div class="grp-label" style="margin-top:16px">Special talents</div>'
         '<div class="hint">Bought with weapon slots. Alertness and Endurance may be '
-        'paid for with a nonweapon slot instead (CT marks them with an asterisk).</div>'
-        + (f'<div class="chosen-list">{rows}</div>' if rows else "")
-        + f'<div class="opt-grid">{opts}</div>')
+        'paid for with a nonweapon slot instead (CT marks them with an asterisk).</div>')
+    rows = _talent_rows(cm, [n for n in c.special_talents if n in cr.SPECIAL_TALENTS])
+    if rows:
+        out += f'<div class="chosen-list">{rows}</div>'
+    opts = _talent_opts(cm, cr.talents_for_class(c.char_class))
+    out += (f'<div class="opt-grid">{opts}</div>' if opts else
+            '<span class="hint">No talents available to this class.</span>')
+
+    ma = cr.martial_arts_talents_for_class(c.char_class)
+    if ma:
+        out += '<div class="grp-label" style="margin-top:16px">Martial arts talents</div>'
+        note = ('Only a martial artist can learn these. Either slot type pays.'
+                if c.knows_a_martial_art() else
+                'Requires proficiency in a martial arts style (see Unarmed combat above).')
+        out += f'<div class="hint">{note}</div>'
+        rows = _talent_rows(cm, [n for n in c.special_talents if n in cr.MARTIAL_ARTS_TALENTS])
+        if rows:
+            out += f'<div class="chosen-list">{rows}</div>'
+        out += f'<div class="opt-grid">{_talent_opts(cm, ma)}</div>'
+
+    siege = cr.siege_proficiencies_for_class(c.char_class)
+    if siege:
+        out += ('<div class="grp-label" style="margin-top:16px">Siege proficiencies</div>'
+                '<div class="hint">Warfare and war-machine skills, acquired like any '
+                'nonweapon proficiency — they cost a nonweapon slot.</div>')
+        rows = _talent_rows(cm, [n for n in c.special_talents if n in cr.SIEGE_PROFICIENCIES])
+        if rows:
+            out += f'<div class="chosen-list">{rows}</div>'
+        out += f'<div class="opt-grid">{_talent_opts(cm, siege)}</div>'
+    return out
 
 
 def _weapon_section(cm) -> str:
@@ -1002,6 +1096,7 @@ def _weapon_section(cm) -> str:
         f'{_weapon_group_block(cm)}'
         f'{_shield_armor_block(cm)}'
         f'{_fighting_styles_block(cm)}'
+        f'{_unarmed_block(cm)}'
         f'{_talents_block(cm)}'
         '</section>'
     )

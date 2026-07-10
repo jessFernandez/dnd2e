@@ -310,10 +310,43 @@ class Charactermancer:
         else:
             self.add_talent("Ambidexterity")
 
+    # ── unarmed disciplines (CT Ch5) ─────────────────────────────────────────
+    def add_unarmed(self, discipline: str):
+        c = self.character
+        if c.can_add_unarmed(discipline):
+            c.unarmed_profs[discipline] = "proficient"
+
+    def remove_unarmed(self, discipline: str):
+        c = self.character
+        if c.unarmed_profs.pop(discipline, None) is None:
+            return
+        # "Only a martial artist can learn the skills presented here" — dropping the
+        # last style takes its talents with it.
+        if cr.is_martial_art(discipline) and not c.knows_a_martial_art():
+            for name in [n for n in c.special_talents
+                         if cr.TALENTS[n].requires_martial_art]:
+                c.special_talents.pop(name)
+
+    def raise_unarmed(self, discipline: str):
+        c = self.character
+        if not c.can_raise_unarmed(discipline):
+            return
+        ladder = cr.unarmed_rung_ladder(discipline, c.char_class, c.level)
+        c.unarmed_profs[discipline] = ladder[ladder.index(c.unarmed_profs[discipline]) + 1]
+
+    def lower_unarmed(self, discipline: str):
+        c = self.character
+        if not c.can_lower_unarmed(discipline):
+            return
+        ladder = cr.unarmed_rung_ladder(discipline, c.char_class, c.level)
+        c.unarmed_profs[discipline] = ladder[ladder.index(c.unarmed_profs[discipline]) - 1]
+
     # ── special talents ──────────────────────────────────────────────────────
-    def add_talent(self, name: str, source: str = "weapon"):
-        if self.character.can_add_talent(name, source):
-            self.character.special_talents[name] = source
+    def add_talent(self, name: str, source: str = None):
+        c = self.character
+        source = source or c.default_talent_source(name)
+        if c.can_add_talent(name, source):
+            c.special_talents[name] = source
 
     def remove_talent(self, name: str):
         self.character.special_talents.pop(name, None)
@@ -509,6 +542,14 @@ class Charactermancer:
             self.specialise_style(tail); return True
         if verb == "styledown" and tail:
             self.despecialise_style(tail); return True
+        if verb == "addunarmed" and tail:
+            self.add_unarmed(tail); return True
+        if verb == "rmunarmed" and tail:
+            self.remove_unarmed(tail); return True
+        if verb == "unarmedup" and tail:
+            self.raise_unarmed(tail); return True
+        if verb == "unarmeddown" and tail:
+            self.lower_unarmed(tail); return True
         if verb == "addtalent" and tail:
             self.add_talent(tail); return True
         if verb == "addtalentnwp" and tail:

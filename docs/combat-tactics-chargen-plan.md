@@ -1,6 +1,6 @@
 # Feature plan: Combat & Tactics character-building rules
 
-Status: **Phases 0–6 done**; 6.5 / 6.6 / 7 remain · Created 2026-07-09 · Updated 2026-07-09
+Status: **Phases 0–6.6 done**; only phase 7's re-specialisation cost remains · Created 2026-07-09 · Updated 2026-07-09
 
 > **Sequencing.** Leveling Phase 1 lands *before* CT phases 1+: CT's top four rungs
 > (mastery / high / grand mastery) are gated on 5th–6th level, and `Character` has no
@@ -294,9 +294,9 @@ Each phase ships independently with tests. **Phases 1–6 are all reachable at l
 | ~~**4**~~ | ✅ **Done.** `fighting_styles: {style: specialisation slots}`. Warriors know every style free and may specialise in as many as they can afford; priests and rogues pay a slot to learn one and may specialise in **only one**; wizards may learn but never specialise. Rangers hold the first two-weapon specialisation slot free. `two_weapon_penalty()` is the payoff: −2/−4 normally, 0/−2 specialised, −2/−2 ambidextrous, and **0/0 for both**. |
 | ~~**5**~~ | ✅ **Done.** All 12 talents in `char_rules.SPECIAL_TALENTS`, gated by class group. `Character.bought_ambidexterity` is now a **property** backed by `special_talents["Ambidexterity"]` — the campaign house rule *is* the CT talent, so there is one implementation, and legacy saves holding the old bool migrate into it. CT's asterisk turns out to mark exactly **Alertness and Endurance**; those two may be paid for from the *nonweapon* budget, which the talent state records per-talent. |
 | ~~**6**~~ | ✅ **Done (fell out of phase 1).** `weapon_prof_cost` already adds `barred_weapon_penalty`, so a mage's long sword costs 2 slots and a two-handed sword 3. The buy list badges the penalty. Pleasingly, this reproduces CT's own remark that "the limited number of weapon proficiencies available for nonwarrior characters will tend to control character abuse of this rule" — a 3rd-level mage has one slot and simply cannot afford a barred long sword. |
-| **6.5** | **Ch5 unarmed**: Pummeling/Wrestling as pseudo-weapons on the ladder (rung caps), Overbearing as familiar-only, martial arts styles A–D + the 6 martial arts talents (with the "≥1 style" prerequisite). Depends on phase 1 (rung engine) and phase 5 (talents). |
-| **6.6** | **Ch8 siege proficiencies**: Artillerist, Vehicle Handling. Trivial — two rows in the existing nonweapon-proficiency table; no new machinery. Could ride along with phase 5. |
-| **7** | Mastery / high / grand mastery — **requires leveling** (5th/6th-level gates and the "can't outpace slot gain" rule). Lands with [`leveling-plan.md`](leveling-plan.md). |
+| ~~**6.5**~~ | ✅ **Done.** `unarmed_profs` rides the same rung ladder. Overbearing has an empty ladder (cannot be advanced); pummeling/wrestling reach master; martial arts stop at specialist. **Expertise is open to any class here** (unlike weapons) — only specialisation and mastery are the single-class fighter's. Martial arts confer no familiarity on each other (CT: they "do not constitute a weapon group"), you may be expert or specialised in only one style, and dropping your last style prunes the martial-arts talents that required it. |
+| ~~**6.6**~~ | ✅ **Done.** Artillerist and Vehicle Handling, warrior-only, drawing on the **nonweapon** budget. Rather than touch the generated NWP table, `SpecialTalent` gained a `slot_source` (`weapon` / `nonweapon` / `either`) which also cleanly replaced the ad-hoc `either_slot` flag from phase 5. |
+| **7** | ⚠️ **Mostly done in phase 1** — mastery/high/grand mastery work, gated at 5th/6th/9th level. Outstanding: CT's escalating **re-specialisation cost** (changing your specialised weapon costs 2 extra slots, then 3 each thereafter), which needs a count of how many times you've re-specialised. |
 
 ## Tests
 - `char_rules`: rung table + gates, cost function (house rules + barred penalty),
