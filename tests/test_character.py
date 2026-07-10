@@ -437,6 +437,52 @@ def test_ac_components_sum_to_the_armor_class():
     assert base + worn + dex == c.armor_class()
 
 
+def test_unspent_resources_flags_uncommitted_build_choices():
+    c = _with(**{a: 15 for a in ("Strength", "Dexterity", "Constitution",
+                                 "Intelligence", "Wisdom", "Charisma")})
+    c.race, c.char_class, c.level = "Human", "Fighter", 1
+    kinds = dict(c.unspent_resources())
+    assert kinds["weapon_slots"] == c.weapon_slots_left() > 0
+    assert kinds["nonweapon_slots"] == c.nonweapon_slots_left() > 0
+    assert "spells" not in kinds and "thief_points" not in kinds   # a fighter has neither
+
+
+def test_unspent_resources_is_empty_once_everything_is_committed():
+    c = _with(**{a: 15 for a in ("Strength", "Dexterity", "Constitution",
+                                 "Intelligence", "Wisdom", "Charisma")})
+    c.race, c.char_class, c.level = "Human", "Fighter", 1
+    # Sink every weapon and nonweapon slot.
+    c.weapon_profs = {"Long Sword": "proficient"}
+    c.sunk_slots = c.weapon_slots_total() - c.weapon_prof_cost("Long Sword")
+    c.nonweapon_profs = {}
+    # spend all NWP slots on one skill's extra slots
+    any_skill = next(iter(cr.proficiencies_for_class("Fighter")))
+    c.nonweapon_profs = {any_skill.name: c.nonweapon_slots_total()}
+    assert c.weapon_slots_left() == 0 and c.nonweapon_slots_left() == 0
+    assert c.unspent_resources() == []
+
+
+def test_unspent_spells_count_castable_slots_not_spellbook_capacity():
+    c = _with(Intelligence=16, Dexterity=12, Constitution=12,
+              Strength=10, Wisdom=12, Charisma=12)
+    c.race, c.char_class, c.level = "Human", "Mage", 3
+    # A 3rd-level mage casts 2 first- and 1 second-level spell: 3 slots to fill,
+    # NOT the ~22-spell spellbook capacity.
+    spells = dict(c.unspent_resources()).get("spells")
+    assert spells == sum(c.spell_slots().values()) == 3
+    c.spells = {"Magic Missile": 1}
+    assert dict(c.unspent_resources())["spells"] == 2      # decrements as you choose
+
+
+def test_over_budget_slots_are_not_reported_as_unspent():
+    c = _with(**{a: 15 for a in ("Strength", "Dexterity", "Constitution",
+                                 "Intelligence", "Wisdom", "Charisma")})
+    c.race, c.char_class, c.level = "Human", "Fighter", 1
+    c.nonweapon_profs = {"Swimming": c.nonweapon_slots_total() + 2}   # overspent
+    assert c.nonweapon_slots_left() < 0
+    assert "nonweapon_slots" not in dict(c.unspent_resources())
+
+
 def test_conditional_ac_bonuses_are_listed_not_folded_into_ac():
     c = _with(Dexterity=15)
     c.race, c.char_class, c.level = "Human", "Fighter", 7

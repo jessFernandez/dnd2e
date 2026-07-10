@@ -509,6 +509,31 @@ class Character:
         left = self.spells_left(spell_level)
         return left is None or left > 0
 
+    def unspent_resources(self) -> list:
+        """Build resources this character still has to spend, as (kind, count) — the
+        things it's easy to reach Review without having spent. `kind` is one of
+        "weapon_slots", "nonweapon_slots", "spells", "thief_points"; the UI maps it to
+        a label and the step it's spent on. Empty when the build is fully committed.
+
+        Money is deliberately absent: leftover coin is kept, not wasted. Over-budget
+        slots (a negative balance after a level drop) aren't "unspent" either, so only
+        a positive remainder counts."""
+        out = []
+        if self.weapon_slots_left() > 0:
+            out.append(("weapon_slots", self.weapon_slots_left()))
+        if self.nonweapon_slots_left() > 0:
+            out.append(("nonweapon_slots", self.nonweapon_slots_left()))
+        # Castable slots not yet filled — not spellbook capacity. A wizard can hold far
+        # more spells than he can cast; the nudge is "you can cast N but chose fewer",
+        # which is the same measure for priests (whose limit already is their slots).
+        spells = sum(max(0, count - len(self.spells_at(lvl)))
+                     for lvl, count in self.spell_slots().items())
+        if spells:
+            out.append(("spells", spells))
+        if self.thief_points_left() > 0:
+            out.append(("thief_points", self.thief_points_left()))
+        return out
+
     def movement(self) -> int:
         """Base movement rate (PHB). Demihumans (dwarf/gnome/halfling) are 6, the
         rest 12; defaults to 12 before a race is chosen."""

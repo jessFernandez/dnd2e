@@ -562,6 +562,51 @@ def test_html_review_renders_sheet_and_save():
     assert "dnd:///cm/save" in html and "dnd:///cm/restart" in html
 
 
+def test_review_shows_unspent_resources_with_links_back_to_their_steps():
+    cm = _complete()                                     # a fresh fighter spends nothing yet
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert '<div class="unspent">' in html
+    assert "You still have resources to spend" in html
+    assert "weapon proficiency slots" in html
+    assert "nonweapon proficiency slots" in html
+    # Each row links back to the step where that resource is spent.
+    assert "dnd:///cm/goto/weapons" in html
+    assert "dnd:///cm/goto/nonweapon" in html
+
+
+def test_review_unspent_panel_gone_once_everything_is_spent():
+    cm = _complete()
+    c = cm.character
+    for w in ("Long Sword", "Dagger", "Spear", "Mace"):
+        cm.dispatch("addweapon/" + w)
+    for p in cr.proficiencies_for_class("Fighter"):
+        if c.nonweapon_slots_left() <= 0:
+            break
+        cm.dispatch("addprof/" + p.name)
+    assert c.unspent_resources() == []
+    cm.index = STEPS.index("review")
+    assert '<div class="unspent">' not in cmh.generate(cm)
+
+
+def test_review_singularises_a_lone_unspent_slot():
+    cm = _complete()
+    c = cm.character
+    # Spend every nonweapon slot, and all but one weapon slot, so only "1 weapon
+    # proficiency slot" (singular) remains -- nothing plural should appear.
+    for w in ("Long Sword", "Dagger", "Spear"):
+        cm.dispatch("addweapon/" + w)
+    for p in cr.proficiencies_for_class("Fighter"):
+        if c.nonweapon_slots_left() <= 0:
+            break
+        cm.dispatch("addprof/" + p.name)
+    assert c.weapon_slots_left() == 1 and c.nonweapon_slots_left() == 0
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "weapon proficiency slot<" in html            # singular noun, then the closing tag
+    assert "weapon proficiency slots" not in html         # never the plural
+
+
 def test_review_lists_conditional_ac_bonuses_below_the_ac():
     cm = _complete()                                     # Human Fighter
     c = cm.character

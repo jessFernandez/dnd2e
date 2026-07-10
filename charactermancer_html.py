@@ -597,11 +597,9 @@ def _review_thief_skills(c) -> str:
     rows = "".join(
         f'<div class="ds"><span>{esc(skill)}</span><span>{score}%</span></div>'
         for skill, score in c.thief_skill_scores().items())
-    left = c.thief_points_left()
-    note = (f'<div class="hint">{left} discretionary points still unspent.</div>'
-            if left else "")
+    # Unspent points are reported once, in the "still to spend" panel at the top.
     return ('<div class="rv-block"><div class="rv-h">Thieving Skills</div>'
-            f'{rows}{note}</div>')
+            f'{rows}</div>')
 
 
 def _review_turn_undead(c) -> str:
@@ -626,6 +624,38 @@ def _review_turn_undead(c) -> str:
     return ('<div class="rv-block"><div class="rv-h">Turn Undead</div>'
             f'<div class="hint">Roll d20 and meet the number{aside}. '
             'T turns automatically, D destroys.</div>'
+            f'{rows}</div>')
+
+
+# kind -> (singular, plural, step, where it's spent). Keeps Character free of UI text.
+_UNSPENT_LABELS = {
+    "weapon_slots":    ("weapon proficiency slot", "weapon proficiency slots",
+                        "weapons", "Weapon Proficiencies"),
+    "nonweapon_slots": ("nonweapon proficiency slot", "nonweapon proficiency slots",
+                        "nonweapon", "Nonweapon Proficiencies"),
+    "spells":          ("spell still to choose", "spells still to choose",
+                        "spells", "Spells"),
+    "thief_points":    ("thieving-skill point", "thieving-skill points",
+                        "nonweapon", "Nonweapon Proficiencies"),
+}
+
+
+def _unspent_panel(cm) -> str:
+    """A "still to spend" checklist at the top of the finished sheet: build resources
+    the character hasn't committed, each linking back to the step it's spent on. Shown
+    only when something is unspent; a fully-committed build has no panel."""
+    items = cm.character.unspent_resources()
+    if not items:
+        return ""
+    rows = ""
+    for kind, count in items:
+        singular, plural, step, where = _UNSPENT_LABELS[kind]
+        noun = singular if count == 1 else plural
+        rows += (f'<a class="unspent-item" href="dnd:///cm/goto/{step}">'
+                 f'<span class="unspent-n">{count}</span> {noun}'
+                 f'<span class="unspent-go">in {esc(where)} &rarr;</span></a>')
+    return ('<div class="unspent">'
+            '<div class="unspent-h">You still have resources to spend</div>'
             f'{rows}</div>')
 
 
@@ -660,6 +690,7 @@ def _review_body(cm, saved=None):
         f'<div class="sheet-head"><div class="sheet-name">{esc(c.name) or "Unnamed"}</div>'
         f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · '
         f'{_ordinal(c.level)} level · {c.alignment or "—"}</div></div>'
+        f'{_unspent_panel(cm)}'
         f'<div class="rv-abgrid">{ab}</div>'
         '<div class="rv-cols">'
         f'<div class="rv-block"><div class="rv-h">Combat ({_ordinal(c.level)} level)</div>'
@@ -1326,6 +1357,14 @@ _CSS = f"""
   .sheet-head {{ border-bottom: 1px solid #2a2e3e; padding-bottom: 12px; margin-bottom: 14px; }}
   .sheet-name {{ font-size: 1.5em; font-weight: 800; color: #e6e9f6; }}
   .sheet-sub {{ font-size: 12.5px; color: {ACCENT}; font-weight: 600; margin-top: 2px; }}
+  .unspent {{ background: #241f16; border: 1px solid #6b5426; border-radius: 8px;
+             padding: 10px 12px; margin-bottom: 16px; }}
+  .unspent-h {{ color: {ACCENT}; font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }}
+  .unspent-item {{ display: flex; align-items: baseline; text-decoration: none;
+                  color: #d8dcf0; font-size: 12px; padding: 3px 0; }}
+  .unspent-item:hover {{ color: #fff; }}
+  .unspent-n {{ color: {ACCENT}; font-weight: 800; min-width: 18px; margin-right: 6px; }}
+  .unspent-go {{ margin-left: auto; color: #8a90a8; font-size: 11px; }}
   .rv-abgrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }}
   .rv-ab {{ background: #23263a; border: 1px solid #2f3346; border-radius: 8px; padding: 8px 10px; }}
   .rv-abn {{ font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
