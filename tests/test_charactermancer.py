@@ -211,7 +211,7 @@ def test_with_scroll_restore_positions_before_the_first_paint():
     html = "<html><head></head><body><p>hi</p></body></html>"
     assert cmh.with_scroll_restore(html, 0) == html          # nothing to restore
     out = cmh.with_scroll_restore(html, 420)
-    assert "window.scrollTo(0,420)" in out
+    assert "Y=420" in out                                    # the target offset
     # the document is hidden in <head> so the top of the page is never painted...
     assert 'id="cm-scroll-hide"' in out
     assert out.index("cm-scroll-hide") < out.index("<body")
@@ -220,8 +220,10 @@ def test_with_scroll_restore_positions_before_the_first_paint():
     assert out.endswith("</body></html>")
     # Chromium must not fight us over the restored offset
     assert "history.scrollRestoration='manual'" in out
-    # a load listener repeats it as a fallback
-    assert "addEventListener('load'" in out
+    # a load listener and a hard timeout both reveal, as fallbacks
+    assert "addEventListener('load'" in out and "setTimeout(reveal" in out
+    # a page whose script never runs must not stay hidden
+    assert "<noscript>" in out
 
 
 def test_with_scroll_restore_handles_a_headless_document():
@@ -231,7 +233,7 @@ def test_with_scroll_restore_handles_a_headless_document():
 
 def test_with_scroll_restore_on_a_real_builder_page():
     out = cmh.with_scroll_restore(cmh.generate(_complete()), 17)
-    assert "window.scrollTo(0,17)" in out
+    assert "Y=17" in out
     assert out.index("cm-scroll-hide") < out.index("<body")
     assert out.rstrip().endswith("</html>")
 

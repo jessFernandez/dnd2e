@@ -1543,6 +1543,47 @@ def keeps_scroll(path: str, step_before: str, step_after: str) -> bool:
 _SCROLL_HIDE_STYLE = ('<style id="cm-scroll-hide">html{visibility:hidden}</style>'
                       '<noscript><style>html{visibility:visible!important}</style></noscript>')
 
+# Scrolls to __Y__ and only then reveals the document.
+#
+# The subtlety: a script at the end of <body> runs before the first paint, but the
+# layout may not have settled — QtWebEngine can still be growing the document. A
+# bare scrollTo then clamps against a too-short scrollHeight, lands short, and the
+# later `load` handler corrects it *after* the page is visible. That correction was
+# the intermittent flash.
+#
+# So retry on each animation frame (which also runs before paint) until we land on
+# the target, and reveal only then.
+#
+# The "page is too short to reach Y" escape has to be careful: a still-growing
+# document is *also* momentarily scrolled to its bottom. Bailing out there reveals
+# a half-laid-out page at the wrong offset, which the load handler then corrects —
+# the exact intermittent flash. So we only accept "cannot scroll further" once the
+# document height has stopped changing between frames.
+#
+# Every exit path reveals: the target, a settled short page, the frame budget, the
+# load event, and a hard timeout. The document can never stay hidden.
+_SCROLL_RESTORE_JS = """(function(){
+var Y=__Y__,frames=0,lastH=-1,done=false;
+function reveal(){if(done){return;}done=true;
+var s=document.getElementById('cm-scroll-hide');
+if(s&&s.parentNode){s.parentNode.removeChild(s);}}
+function docHeight(){var d=document.documentElement,b=document.body;
+return Math.max(d.scrollHeight,b?b.scrollHeight:0);}
+function settle(){
+try{window.scrollTo(0,Y);}catch(e){reveal();return;}
+var here=window.pageYOffset||document.documentElement.scrollTop||0;
+if(Math.abs(here-Y)<2){reveal();return;}
+var h=docHeight();
+if(here>=h-window.innerHeight-2&&h===lastH){reveal();return;}
+lastH=h;
+if(++frames>30){reveal();return;}
+window.requestAnimationFrame(settle);}
+try{if('scrollRestoration' in history){history.scrollRestoration='manual';}}catch(e){}
+window.requestAnimationFrame?window.requestAnimationFrame(settle):settle();
+window.addEventListener('load',function(){window.scrollTo(0,Y);reveal();});
+window.setTimeout(reveal,600);
+})();"""
+
 
 def with_scroll_restore(html: str, scroll_y) -> str:
     """Re-instate a vertical scroll offset after the page reloads.
@@ -1560,14 +1601,7 @@ def with_scroll_restore(html: str, scroll_y) -> str:
     if not scroll_y:
         return html
     y = int(scroll_y)
-    script = (
-        "<script>(function(){"
-        "var reveal=function(){var s=document.getElementById('cm-scroll-hide');"
-        "if(s&&s.parentNode){s.parentNode.removeChild(s);}};"
-        "try{if('scrollRestoration' in history){history.scrollRestoration='manual';}"
-        f"window.scrollTo(0,{y});}}finally{{reveal();}}"
-        f"window.addEventListener('load',function(){{window.scrollTo(0,{y});reveal();}});"
-        "})();</script>")
+    script = "<script>" + _SCROLL_RESTORE_JS.replace("__Y__", str(y)) + "</script>"
 
     if "</head>" in html:
         html = html.replace("</head>", _SCROLL_HIDE_STYLE + "</head>", 1)
