@@ -75,6 +75,13 @@ class Character:
     weapon_profs: dict = field(default_factory=dict)
     # Tight weapon groups bought wholesale (CT: 2 slots for every weapon in one).
     weapon_groups: list = field(default_factory=list)
+    # How many times a fighter has moved his specialisation to a new weapon. Each
+    # move makes the next specialisation dearer (CT: 2 extra slots, then 3 each).
+    respecialisations: int = 0
+    # Slots spent on a specialisation that was later moved off. CT: the old weapon
+    # "loses all benefits of specializing" but stays proficient — those slots are
+    # gone, not refunded, so they must keep counting against the budget.
+    sunk_slots: int = 0
     # Shield / armor proficiencies (1 weapon slot each): a better shield AC bonus,
     # and half encumbrance from that armor.
     shield_profs: list = field(default_factory=list)
@@ -271,6 +278,7 @@ class Character:
 
     def weapon_slots_used(self) -> int:
         used = sum(self.weapon_prof_cost(w) for w in self.weapon_profs)
+        used += self.sunk_slots            # specialisations moved off, never refunded
         used += cr.WEAPON_GROUP_SLOT_COST * len(self.weapon_groups)
         used += cr.SHIELD_PROF_SLOT_COST * len(self.shield_profs)
         used += cr.ARMOR_PROF_SLOT_COST * len(self.armor_profs)
@@ -295,16 +303,42 @@ class Character:
             known.update(cr.weapon_group_members(group))
         return known
 
-    def weapon_prof_cost(self, weapon: str, rung: str = None) -> int:
+    def weapon_prof_cost(self, weapon: str, rung: str = None,
+                         respecialisations: int = None) -> int:
         """Slots invested in a weapon at a rung (its current one by default). When a
         weapon group already grants proficiency, only the rungs *above* it cost
         anything — the proficiency slot was paid for by the group."""
         rung = rung or self.weapon_profs.get(weapon, "proficient")
-        cost = cr.weapon_prof_cost(weapon, rung, self.char_class, self.house_rules)
+        respec = self.respecialisations if respecialisations is None else respecialisations
+        cost = cr.weapon_prof_cost(weapon, rung, self.char_class, self.house_rules, respec)
         if self.group_covers(weapon):
             cost -= cr.weapon_prof_cost(weapon, "proficient", self.char_class,
                                         self.house_rules)
         return cost
+
+    # ── moving a specialisation (CT: 2 extra slots, then 3 each) ─────────────
+    def respecialisation_cost(self, weapon: str):
+        """Slots to move the specialisation onto `weapon`. The old weapon's investment
+        is *sunk* — CT says it "loses all benefits of specializing" but stays
+        proficient — so the price is simply the new weapon's dearer specialisation:
+        2 slots for the first move, 3 for every one after. None if nothing to move."""
+        old = self.specialised_weapon()
+        if old is None or old == weapon or not self.char_class:
+            return None
+        moved = self.respecialisations + 1
+        return (self.weapon_prof_cost(weapon, "specialist", respecialisations=moved)
+                - self.weapon_prof_cost(weapon))
+
+    def can_respecialise(self, weapon: str) -> bool:
+        """CT lets a fighter change which weapon he specialises in — at a price. The
+        new weapon must already be proficient; the old one stays proficient forever
+        but loses every benefit above it."""
+        if "specialist" not in cr.weapon_rung_ladder(self.char_class or "", self.level):
+            return False
+        if self.weapon_rung(weapon) != "proficient":
+            return False
+        cost = self.respecialisation_cost(weapon)
+        return cost is not None and cost <= self.weapon_slots_left()
 
     def weapon_rung(self, weapon: str) -> str:
         """The rung held with a weapon: an explicit one, else proficient via a bought
@@ -683,6 +717,8 @@ class Character:
             "age_level": self.age_level,
             "weapon_profs": dict(self.weapon_profs),
             "weapon_groups": list(self.weapon_groups),
+            "respecialisations": self.respecialisations,
+            "sunk_slots": self.sunk_slots,
             "shield_profs": list(self.shield_profs),
             "armor_profs": list(self.armor_profs),
             "fighting_styles": dict(self.fighting_styles),
@@ -705,6 +741,8 @@ class Character:
         d["weapon_profs"] = ({w: "proficient" for w in wprofs} if isinstance(wprofs, list)
                              else dict(wprofs))
         d["weapon_groups"] = list(d.get("weapon_groups") or [])
+        d["respecialisations"] = int(d.get("respecialisations") or 0)
+        d["sunk_slots"] = int(d.get("sunk_slots") or 0)
         d["shield_profs"] = list(d.get("shield_profs") or [])
         d["armor_profs"] = list(d.get("armor_profs") or [])
         d["fighting_styles"] = {k: int(v) for k, v in (d.get("fighting_styles") or {}).items()}

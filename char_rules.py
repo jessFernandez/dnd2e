@@ -1376,12 +1376,28 @@ def prev_weapon_rung(rung: str, class_name: str, level: int = 1):
     return ladder[i - 1] if i > 0 else None
 
 
+def respecialisation_surcharge(changes: int) -> int:
+    """Extra slots on top of a normal specialisation, by how many times the fighter
+    has already moved it. CT: the first specialisation costs one extra slot, "if she
+    wishes to change her specialization to a different weapon, she must spend two
+    extra proficiency slots... Any more changes cost three slots each." So the
+    surcharge is 0, then 1, then 2 forever."""
+    if changes <= 0:
+        return 0
+    return 1 if changes == 1 else 2
+
+
 def weapon_prof_cost(weapon: str, rung: str, class_name: str,
-                     house_rules: bool = True) -> int:
+                     house_rules: bool = True, respecialisations: int = 0) -> int:
     """Total slots invested in a weapon to sit at `rung`: the proficiency slot
-    (house-rule cost + barred-weapon penalty) plus the extra slots the rung needs."""
+    (house-rule cost + barred-weapon penalty) plus the extra slots the rung needs,
+    plus the re-specialisation surcharge once the fighter has moved his
+    specialisation off an earlier weapon."""
     base = weapon_slot_cost(weapon, house_rules) + barred_weapon_penalty(weapon, class_name)
-    return base + _RUNG_EXTRA_SLOTS[rung]
+    extra = _RUNG_EXTRA_SLOTS[rung]
+    if specialises(rung):
+        extra += respecialisation_surcharge(respecialisations)
+    return base + extra
 
 
 def specialises(rung: str) -> bool:
@@ -1529,12 +1545,27 @@ def unarmed_free_rung(discipline: str) -> str:
 
 @dataclass(frozen=True)
 class SpecialTalent:
+    """A Combat & Tactics talent.
+
+    `ability` + `modifier` is the **PHB** proficiency check this campaign uses:
+    d20 ≤ ability + modifier (Iron Will is Wis−2, Alertness Wis+1, Leadership Cha−1).
+
+    `initial_rating` is the *same check* written for **Skills & Powers**, where the
+    score starts at a flat 3–8 rating and the ability only nudges it via S&P's ±5
+    Table 44. CT prints both notations on one line because it supports both systems.
+    The campaign plays PHB proficiency slots, not S&P character points, so the rating
+    is kept for fidelity and never used — under S&P an Int-15 Ambush would succeed
+    35% of the time where the PHB check succeeds 75%.
+
+    Note the campaign's +2-per-extra-slot bonus never applies here: a talent is a
+    single purchase, so its check is simply the ability plus the book's modifier.
+    """
     name: str
     slots: int
     ability: str = None
     modifier: int = 0
     groups: tuple = ()
-    initial_rating: int = None
+    initial_rating: int = None      # Skills & Powers only — see the class docstring
     # Which budget may pay: "weapon", "nonweapon", or "either" (CT's asterisk).
     slot_source: str = "weapon"
     requires_martial_art: bool = False

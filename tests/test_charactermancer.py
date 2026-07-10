@@ -817,6 +817,88 @@ def test_a_fighter_may_specialise_in_only_one_weapon():
     assert cm.character.specialised_weapon() == "Long Sword"
 
 
+def _fighter_with_four_weapons(level=19):
+    cm = _fighter_at_profs()
+    cm.dispatch(f"level/{level}")
+    for w in ("Long Sword", "Battle Axe", "Spear", "Mace"):
+        cm.dispatch("addweapon/" + w)
+    cm.dispatch("wpnup/Long Sword")                    # specialise the first
+    return cm
+
+
+def test_respecialisation_surcharge_escalates():
+    # CT: the first specialisation costs one extra slot; changing it costs two extra,
+    # "any more changes cost three slots each".
+    assert [cr.respecialisation_surcharge(n) for n in range(4)] == [0, 1, 2, 2]
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter") == 2
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter", respecialisations=1) == 3
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter", respecialisations=2) == 4
+
+
+def test_moving_a_specialisation_costs_two_slots_then_three():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    assert c.specialised_weapon() == "Long Sword" and c.weapon_slots_used() == 5
+
+    assert c.respecialisation_cost("Battle Axe") == 2      # the first change
+    cm.dispatch("respec/Battle Axe")
+    assert c.specialised_weapon() == "Battle Axe" and c.weapon_slots_used() == 7
+
+    assert c.respecialisation_cost("Spear") == 3           # every later change
+    cm.dispatch("respec/Spear")
+    assert c.specialised_weapon() == "Spear" and c.weapon_slots_used() == 10
+    assert c.respecialisations == 2
+
+
+def test_the_old_weapon_keeps_proficiency_and_its_slots_stay_spent():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    cm.dispatch("respec/Battle Axe")
+    # "loses all benefits of specializing in the previous one (although she is still
+    # proficient with it and always will be)"
+    assert c.weapon_profs["Long Sword"] == "proficient"
+    # ...and the slot it cost is sunk, not handed back
+    assert c.sunk_slots == 1
+    assert c.weapon_slots_used() == 7                      # 4 profs + 2 (new spec) + 1 sunk
+
+
+def test_respecialisation_is_refused_without_the_slots():
+    cm = _fighter_with_four_weapons(level=13)              # only 8 slots
+    c = cm.character
+    cm.dispatch("respec/Battle Axe")                       # costs 2 -> used 7
+    assert c.specialised_weapon() == "Battle Axe"
+    assert c.weapon_slots_left() == 1
+    cm.dispatch("respec/Spear")                            # costs 3 -> refused
+    assert c.specialised_weapon() == "Battle Axe" and c.respecialisations == 1
+
+
+def test_only_a_proficient_weapon_can_receive_the_specialisation():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    cm.dispatch("respec/Halberd")                          # not even proficient
+    assert c.specialised_weapon() == "Long Sword"
+    cm.dispatch("respec/Long Sword")                       # already the specialised one
+    assert c.respecialisations == 0
+    # and a class that never specialises cannot respecialise either
+    assert not _cleric_at_profs().character.can_respecialise("Mace")
+
+
+def test_respecialisation_survives_a_round_trip():
+    from character import Character
+    cm = _fighter_with_four_weapons()
+    cm.dispatch("respec/Battle Axe")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.respecialisations == 1 and back.sunk_slots == 1
+    assert back.weapon_slots_used() == cm.character.weapon_slots_used()
+
+
+def test_html_offers_to_move_the_specialisation():
+    cm = _fighter_with_four_weapons()
+    html = cmh.generate(cm)
+    assert "dnd:///cm/respec/Battle Axe" in html
+    assert "specialise here (2 slots)" in html
+
+
 def test_nonfighters_cannot_climb_past_their_rung():
     cm = _cleric_at_profs()
     cm.dispatch("addweapon/Mace")

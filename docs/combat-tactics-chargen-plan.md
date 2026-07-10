@@ -1,6 +1,6 @@
 # Feature plan: Combat & Tactics character-building rules
 
-Status: **Phases 0–6.6 done**; only phase 7's re-specialisation cost remains · Created 2026-07-09 · Updated 2026-07-09
+Status: **complete** (phases 0–7) · Created 2026-07-09 · Updated 2026-07-09
 
 > **Sequencing.** Leveling Phase 1 lands *before* CT phases 1+: CT's top four rungs
 > (mastery / high / grand mastery) are gated on 5th–6th level, and `Character` has no
@@ -83,7 +83,8 @@ headers, "proficiency slot", "Groups:", "Initial rating"). Result:
 
 Constraints:
 - A fighter may specialize in **one weapon at a time**. Re-specializing costs 2
-  extra slots, then **3 each** thereafter; the old weapon stays merely proficient.
+  extra slots, then **3 each** thereafter; the old weapon stays merely proficient and
+  the slots it consumed are gone (see `sunk_slots`).
 - Mastery slots can't be gained faster than weapon-proficiency slots (master at
   5th → 2nd mastery slot at 6th, 3rd at 9th).
 - Specialization benefits differ by category: **melee / missile / bows /
@@ -296,7 +297,7 @@ Each phase ships independently with tests. **Phases 1–6 are all reachable at l
 | ~~**6**~~ | ✅ **Done (fell out of phase 1).** `weapon_prof_cost` already adds `barred_weapon_penalty`, so a mage's long sword costs 2 slots and a two-handed sword 3. The buy list badges the penalty. Pleasingly, this reproduces CT's own remark that "the limited number of weapon proficiencies available for nonwarrior characters will tend to control character abuse of this rule" — a 3rd-level mage has one slot and simply cannot afford a barred long sword. |
 | ~~**6.5**~~ | ✅ **Done.** `unarmed_profs` rides the same rung ladder. Overbearing has an empty ladder (cannot be advanced); pummeling/wrestling reach master; martial arts stop at specialist. **Expertise is open to any class here** (unlike weapons) — only specialisation and mastery are the single-class fighter's. Martial arts confer no familiarity on each other (CT: they "do not constitute a weapon group"), you may be expert or specialised in only one style, and dropping your last style prunes the martial-arts talents that required it. |
 | ~~**6.6**~~ | ✅ **Done.** Artillerist and Vehicle Handling, warrior-only, drawing on the **nonweapon** budget. Rather than touch the generated NWP table, `SpecialTalent` gained a `slot_source` (`weapon` / `nonweapon` / `either`) which also cleanly replaced the ad-hoc `either_slot` flag from phase 5. |
-| **7** | ⚠️ **Mostly done in phase 1** — mastery/high/grand mastery work, gated at 5th/6th/9th level. Outstanding: CT's escalating **re-specialisation cost** (changing your specialised weapon costs 2 extra slots, then 3 each thereafter), which needs a count of how many times you've re-specialised. |
+| ~~**7**~~ | ✅ **Done.** Mastery/high/grand mastery landed in phase 1 (gated at 5th/6th/9th). The escalating **re-specialisation** cost is now modelled: the first specialisation costs 1 extra slot, moving it costs 2, and every later move 3. The old weapon keeps its proficiency forever but its extra slots are **sunk, not refunded** — `Character.sunk_slots` keeps them counting against the budget, which is what CT means by "loses all benefits of specializing in the previous one". |
 
 ## Tests
 - `char_rules`: rung table + gates, cost function (house rules + barred penalty),
@@ -312,21 +313,31 @@ invested slots there instead of the current hardcoded `1`. Fighting styles and
 special talents have no native home on the sheet (open question below).
 
 ## Open questions
-1. **Talent checks.** Talents with an "Initial rating" (Ambush 5, Endurance 3, …)
-   are Skills & Powers-flavored. Do they use our house-rule NWP check
-   (`skill = ability + 2 per extra slot`, target 21) or their own rating? *Interim:*
-   `Character.talent_skill()` returns `ability + modifier` (the NWP model) and the
-   `initial_rating` is stored and displayed but not yet used. Still your ruling.
+1. ~~**Talent checks.**~~ **Answered (2026-07-09): use the PHB check,
+   `d20 ≤ ability + modifier`.**
+
+   CT prints *two* notations on each talent line because it supports two proficiency
+   systems. `Intelligence/Reason` and the `, +1` / `, -2` are the **PHB** form
+   (score = ability + modifier). `Initial rating: 5` is the **Skills & Powers** form
+   of the *same check*, where the score starts at a flat 3–8 and the ability only
+   nudges it through S&P's ±5 Table 44. They are not cumulative — they're
+   alternatives, and they differ wildly: an Int-15 Ambush is **75%** under the PHB
+   and **35%** under S&P.
+
+   The campaign spends proficiency slots, not character points, so the PHB reading
+   is the consistent one. `Character.talent_skill()` already returns
+   `ability + modifier`; `initial_rating` stays in `char_rules` for fidelity but is
+   **no longer shown in the UI** — two numbers on a row only invite the wrong roll.
+   Note the house-rule `+2 per extra slot` never applies to a talent: it's a single
+   purchase, so the check is just the ability plus the book's modifier.
 2. ~~**`Shield, Aspis`** → CT "medium" or "body"?~~ **Answered: medium.**
 3. **Roll20**: where do fighting styles / special talents / unarmed disciplines live —
    NWP rows, WP rows, or notes?
 4. **Specialization benefit tables** — transcribe melee/missile/bow/crossbow now, or
-   record the rung and let the DM adjudicate until phase 7?
-5. **Martial arts in this campaign?** CT gates proficiency on a "nonwestern,
-   philosophical, nonmaterialistic" cultural background. Are martial arts available
-   to PCs at all, and do all four styles (A–D) exist in the setting? If they're
-   flavour-gated, the builder should still offer them but flag "requires DM approval"
-   (the same way it already flags house rules).
+   record the rung and let the DM adjudicate?
+5. ~~**Martial arts in this campaign?**~~ **Answered (2026-07-09): they exist.** All
+   four styles (A–D) are available; no flavour gate in the builder.
 6. **Nonwarrior pummeling/wrestling.** CT says nonwarriors gain *no benefit* from
    proficiency. Should the builder let a wizard spend the slot anyway (RAW: yes,
-   pointless), or block it as a footgun?
+   pointless), or block it as a footgun? *Currently: allowed, and the row says
+   "nonwarriors gain no benefit".*

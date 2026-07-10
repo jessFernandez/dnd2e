@@ -238,6 +238,22 @@ class Charactermancer:
             c.weapon_profs[weapon] = cr.next_weapon_rung(
                 c.weapon_rung(weapon), c.char_class, c.level)
 
+    def respecialise(self, weapon: str):
+        """Move the fighter's specialisation onto another proficient weapon. The old
+        weapon keeps its proficiency but loses mastery; each move costs more."""
+        c = self.character
+        if not c.can_respecialise(weapon):
+            return
+        old = c.specialised_weapon()
+        # Whatever was spent above proficiency on the old weapon is gone for good.
+        c.sunk_slots += c.weapon_prof_cost(old) - c.weapon_prof_cost(old, "proficient")
+        c.respecialisations += 1
+        if c.group_covers(old):
+            c.weapon_profs.pop(old, None)     # the group still grants proficiency
+        else:
+            c.weapon_profs[old] = "proficient"
+        c.weapon_profs[weapon] = "specialist"
+
     def lower_weapon(self, weapon: str):
         """Step back down one rung, refunding its extra slot. Dropping to proficiency
         on a group-covered weapon drops the entry entirely — the group grants it."""
@@ -526,6 +542,8 @@ class Charactermancer:
             self.raise_weapon(tail); return True
         if verb == "wpndown" and tail:
             self.lower_weapon(tail); return True
+        if verb == "respec" and tail:
+            self.respecialise(tail); return True
         if verb == "addgroup" and tail:
             self.add_weapon_group(tail); return True
         if verb == "rmgroup" and tail:

@@ -772,6 +772,15 @@ def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:
         detail += ' &middot; <span class="hint">from a weapon group</span>'
     if top and cr.specialises(rung):
         detail += ' &middot; <span class="hint">top of the ladder</span>'
+    # A fighter may move his specialisation here, at CT's escalating price.
+    if rung == "proficient" and c.specialised_weapon() not in (None, weapon):
+        respec = c.respecialisation_cost(weapon)
+        if c.can_respecialise(weapon):
+            detail += (f' &middot; <a class="reroll" href="dnd:///cm/respec/{weapon}">'
+                       f'specialise here ({respec} slot{"s" if respec != 1 else ""})</a>')
+        elif respec is not None:
+            detail += (f' &middot; <span class="hint">moving specialisation here '
+                       f'costs {respec} slots</span>')
     groups = cr.weapon_tight_groups(weapon)
     if groups:
         detail += f' &middot; {_esc(", ".join(groups))}'
@@ -1011,8 +1020,9 @@ def _talent_rows(cm, names) -> str:
         skill = c.talent_skill(name)
         if skill is not None:
             bits.append(f'{_ABBR.get(talent.ability, talent.ability)} check {skill}')
-        if talent.initial_rating:
-            bits.append(f'rating {talent.initial_rating}')
+        # `initial_rating` is deliberately not shown: it's the Skills & Powers form of
+        # the same check, and this campaign rolls the PHB one. Two numbers here would
+        # only leave a player wondering which to roll against.
         rows += (
             '<div class="prof-row">'
             f'<a class="pr-rm" href="dnd:///cm/rmtalent/{name}" title="Remove">✕</a>'
