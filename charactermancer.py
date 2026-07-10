@@ -541,6 +541,54 @@ class Charactermancer:
         self.character.spells.pop(name, None)
 
     # ── action dispatch (from dnd:///cm/<path> links) ─────────────────────────
+    # A `cm/` link is `verb/tail`, and most verbs do the same shape of thing, so they
+    # are tables rather than 50 near-identical branches. The odd ones out -- return-
+    # value passthroughs, integer tails, the two-argument talent verb -- stay explicit
+    # in dispatch() below.
+
+    #: verb -> method, called with no argument; always handled.
+    _VERBS_NO_TAIL = {
+        "roll": "roll", "clear": "clear_abilities", "rerollhp": "reroll_hp",
+        "handedness": "roll_handedness", "exstr": "roll_exceptional_strength",
+        "money": "roll_money", "ambi": "toggle_ambidexterity",
+    }
+
+    #: verb -> method, called with the tail; a missing tail is not handled.
+    _VERBS_WITH_TAIL = {
+        "mode": "set_mode", "race": "set_race", "class": "set_class",
+        "align": "set_alignment",
+        "addweapon": "add_weapon", "rmweapon": "remove_weapon",
+        "wpnup": "raise_weapon", "wpndown": "lower_weapon", "respec": "respecialise",
+        "addgroup": "add_weapon_group", "rmgroup": "remove_weapon_group",
+        "addshieldprof": "add_shield_prof", "rmshieldprof": "remove_shield_prof",
+        "addarmorprof": "add_armor_prof", "rmarmorprof": "remove_armor_prof",
+        "learnstyle": "learn_style", "forgetstyle": "forget_style",
+        "styleup": "specialise_style", "styledown": "despecialise_style",
+        "addunarmed": "add_unarmed", "rmunarmed": "remove_unarmed",
+        "unarmedup": "raise_unarmed", "unarmeddown": "lower_unarmed",
+        "addtalent": "add_talent", "rmtalent": "remove_talent",
+        "thiefup": "add_thief_points", "thiefdown": "remove_thief_points",
+        "addprof": "add_proficiency", "rmprof": "remove_proficiency",
+        "profplus": "add_proficiency_slot", "profminus": "remove_proficiency_slot",
+        "buy": "buy_item", "sell": "sell_item", "wear": "toggle_worn",
+        "addspell": "add_spell", "rmspell": "remove_spell",
+    }
+
+    #: verb -> method, called with the tail even when it's empty (clears the field).
+    _VERBS_TAIL_OPTIONAL = {"name": "set_name", "gender": "set_gender"}
+
+    #: Verbs handled by the explicit branches in dispatch() (return-value passthroughs,
+    #: integer tails, the two-argument talent verb) rather than by the tables above.
+    _VERBS_SPECIAL = frozenset({"next", "back", "goto", "level", "age", "assign",
+                                "addtalentnwp"})
+
+    @classmethod
+    def handles(cls, verb: str) -> bool:
+        """Whether dispatch() recognises this verb. Lets a test confirm every action
+        the rendered builder links to is actually wired to something."""
+        return (verb in cls._VERBS_NO_TAIL or verb in cls._VERBS_WITH_TAIL
+                or verb in cls._VERBS_TAIL_OPTIONAL or verb in cls._VERBS_SPECIAL)
+
     def dispatch(self, path: str) -> bool:
         """Apply a `cm/` link action. `path` is everything after `cm/`, already
         URL-unquoted by the caller. Parsed as `verb/tail` so a tail (an ability
@@ -550,122 +598,40 @@ class Charactermancer:
         if not verb:
             return False
 
+        if verb in self._VERBS_NO_TAIL:
+            getattr(self, self._VERBS_NO_TAIL[verb])(); return True
+        if verb in self._VERBS_WITH_TAIL:
+            if not tail:
+                return False
+            getattr(self, self._VERBS_WITH_TAIL[verb])(tail); return True
+        if verb in self._VERBS_TAIL_OPTIONAL:
+            getattr(self, self._VERBS_TAIL_OPTIONAL[verb])(tail); return True
+
+        # The verbs whose behaviour isn't "call a method and report success".
         if verb == "next":
             return self.advance()
         if verb == "back":
             return self.back()
-        if verb == "goto" and tail:
-            return self.goto(tail)
-        if verb == "mode" and tail:
-            self.set_mode(tail); return True
-        if verb == "roll":
-            self.roll(); return True
-        if verb == "clear":
-            self.clear_abilities(); return True
+        if verb == "goto":
+            return self.goto(tail) if tail else False
+        if verb == "level":
+            try:
+                return self.set_level(int(tail))
+            except ValueError:
+                return False
+        if verb == "age" and tail:
+            try:
+                self.set_age_level(int(tail)); return True
+            except ValueError:
+                return False
         if verb == "assign" and tail:
             ability, _, score = tail.partition("/")
             if not score:
                 return False
             try:
-                self.set_ability(ability, int(score))
+                self.set_ability(ability, int(score)); return True
             except ValueError:
                 return False
-            return True
-        if verb == "race" and tail:
-            self.set_race(tail); return True
-        if verb == "class" and tail:
-            self.set_class(tail); return True
-        if verb == "align" and tail:
-            self.set_alignment(tail); return True
-        if verb == "name":
-            self.set_name(tail); return True
-        if verb == "gender":
-            self.set_gender(tail); return True
-        if verb == "level" and tail:
-            try:
-                return self.set_level(int(tail))
-            except ValueError:
-                return False
-        if verb == "rerollhp":
-            self.reroll_hp(); return True
-        if verb == "handedness":
-            self.roll_handedness(); return True
-        if verb == "exstr":
-            self.roll_exceptional_strength(); return True
-        if verb == "age" and tail:
-            try:
-                self.set_age_level(int(tail))
-            except ValueError:
-                return False
-            return True
-        if verb == "addweapon" and tail:
-            self.add_weapon(tail); return True
-        if verb == "rmweapon" and tail:
-            self.remove_weapon(tail); return True
-        if verb == "wpnup" and tail:
-            self.raise_weapon(tail); return True
-        if verb == "wpndown" and tail:
-            self.lower_weapon(tail); return True
-        if verb == "respec" and tail:
-            self.respecialise(tail); return True
-        if verb == "addgroup" and tail:
-            self.add_weapon_group(tail); return True
-        if verb == "rmgroup" and tail:
-            self.remove_weapon_group(tail); return True
-        if verb == "addshieldprof" and tail:
-            self.add_shield_prof(tail); return True
-        if verb == "rmshieldprof" and tail:
-            self.remove_shield_prof(tail); return True
-        if verb == "addarmorprof" and tail:
-            self.add_armor_prof(tail); return True
-        if verb == "rmarmorprof" and tail:
-            self.remove_armor_prof(tail); return True
-        if verb == "learnstyle" and tail:
-            self.learn_style(tail); return True
-        if verb == "forgetstyle" and tail:
-            self.forget_style(tail); return True
-        if verb == "styleup" and tail:
-            self.specialise_style(tail); return True
-        if verb == "styledown" and tail:
-            self.despecialise_style(tail); return True
-        if verb == "addunarmed" and tail:
-            self.add_unarmed(tail); return True
-        if verb == "rmunarmed" and tail:
-            self.remove_unarmed(tail); return True
-        if verb == "unarmedup" and tail:
-            self.raise_unarmed(tail); return True
-        if verb == "unarmeddown" and tail:
-            self.lower_unarmed(tail); return True
-        if verb == "addtalent" and tail:
-            self.add_talent(tail); return True
         if verb == "addtalentnwp" and tail:
             self.add_talent(tail, "nonweapon"); return True
-        if verb == "rmtalent" and tail:
-            self.remove_talent(tail); return True
-        if verb == "ambi":
-            self.toggle_ambidexterity(); return True
-        if verb == "thiefup" and tail:
-            self.add_thief_points(tail); return True
-        if verb == "thiefdown" and tail:
-            self.remove_thief_points(tail); return True
-        if verb == "addprof" and tail:
-            self.add_proficiency(tail); return True
-        if verb == "rmprof" and tail:
-            self.remove_proficiency(tail); return True
-        if verb == "profplus" and tail:
-            self.add_proficiency_slot(tail); return True
-        if verb == "profminus" and tail:
-            self.remove_proficiency_slot(tail); return True
-        if verb == "money":
-            self.roll_money(); return True
-        if verb == "buy" and tail:
-            self.buy_item(tail); return True
-        if verb == "sell" and tail:
-            self.sell_item(tail); return True
-        if verb == "wear" and tail:
-            self.toggle_worn(tail); return True
-        if verb == "addspell" and tail:
-            self.add_spell(tail); return True
-        if verb == "rmspell" and tail:
-            self.remove_spell(tail); return True
         return False

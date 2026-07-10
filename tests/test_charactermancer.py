@@ -1560,3 +1560,34 @@ def test_the_nonweapon_step_gates_on_its_own_budget():
     c.nonweapon_profs = {"Riding, Land-Based": c.nonweapon_slots_total() + 1}
     assert c.nonweapon_slots_left() == -1
     assert not cm.is_complete("nonweapon")
+
+
+# ── every rendered action is wired (guards against dead buttons) ──────────────
+
+# Verbs handled by MainWindow._cm_action (save/load/delete touch the user DB) rather
+# than by the pure controller. Kept in sync with app.py's _cm_action.
+_APP_LEVEL_VERBS = {"restart", "save", "load", "delete", "roll20export"}
+
+
+def _rendered_verbs():
+    import re
+    import charactermancer_html
+    import charactermancer_profs_html
+    verbs = set()
+    for mod in (charactermancer_html, charactermancer_profs_html):
+        src = open(mod.__file__, encoding="utf-8").read()
+        verbs |= set(re.findall(r"dnd:///cm/([a-z0-9]+)", src))
+    return verbs
+
+
+def test_every_rendered_cm_verb_is_handled_somewhere():
+    rendered = _rendered_verbs()
+    assert len(rendered) > 30                          # the scan actually found the links
+    for verb in rendered:
+        assert Charactermancer.handles(verb) or verb in _APP_LEVEL_VERBS, \
+            f"builder links to cm/{verb} but nothing handles it"
+
+
+def test_handles_rejects_an_unknown_verb():
+    assert not Charactermancer.handles("nonsense")
+    assert Charactermancer().dispatch("nonsense/x") is False
