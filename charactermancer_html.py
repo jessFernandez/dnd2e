@@ -791,26 +791,30 @@ def _cost_label(cp: int) -> str:
     return f"{cp}cp"
 
 
-def _eq_item_detail(it: dict) -> str:
+def _eq_item_bits(it: dict) -> list:
+    """The stat pieces shown for an item: AC (armor), damage and speed factor
+    (weapons), and weight. Raw strings — the caller escapes and joins them."""
     bits = []
     if it.get("category") == "Armor" and it.get("ac_bonus"):
         bits.append(f'+{it["ac_bonus"]} AC')
-    if it.get("category") == "Weapon" and it.get("damage"):
-        bits.append(f'{esc(it["damage"])} dmg')
+    if it.get("category") == "Weapon":
+        if it.get("damage"):
+            bits.append(f'{it["damage"]} dmg')
+        if it.get("speed"):
+            bits.append(f'SF {it["speed"]}')      # weapon speed factor (lower is faster)
     if it.get("weight"):
         bits.append(f'{it["weight"]:g} lb')
-    return " &middot; ".join(bits) if bits else esc(it.get("category", ""))
+    return bits
+
+
+def _eq_item_detail(it: dict) -> str:
+    bits = _eq_item_bits(it)
+    return " &middot; ".join(esc(b) for b in bits) if bits else esc(it.get("category", ""))
 
 
 def _eq_item_plain(it: dict) -> str:
     """Plain-text stat line (no HTML entities) for an item's hover title=."""
-    bits = []
-    if it.get("category") == "Armor" and it.get("ac_bonus"):
-        bits.append(f'+{it["ac_bonus"]} AC')
-    if it.get("category") == "Weapon" and it.get("damage"):
-        bits.append(f'{it["damage"]} dmg')
-    if it.get("weight"):
-        bits.append(f'{it["weight"]:g} lb')
+    bits = _eq_item_bits(it)
     return " · ".join(bits) if bits else str(it.get("category", ""))
 
 

@@ -1569,6 +1569,31 @@ def test_html_equipment_and_spells_steps_render():
     assert "dnd:///cm/buy/" not in h
 
 
+def test_equipment_item_bits_show_damage_and_speed_for_weapons():
+    weapon = {"category": "Weapon", "damage": "d8", "speed": "4", "weight": 3}
+    assert cmh._eq_item_bits(weapon) == ["d8 dmg", "SF 4", "3 lb"]
+    # A weapon with no listed speed (ammunition) omits the speed factor.
+    ammo = {"category": "Weapon", "damage": "d6", "speed": "", "weight": 0.1}
+    assert cmh._eq_item_bits(ammo) == ["d6 dmg", "0.1 lb"]
+    # Armor is unaffected: AC and weight, no speed.
+    armor = {"category": "Armor", "ac_bonus": 2, "weight": 9}
+    assert cmh._eq_item_bits(armor) == ["+2 AC", "9 lb"]
+
+
+def test_owned_weapon_shows_its_speed_factor():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    c = cm.character
+    c.money_cp = 100000
+    cm.dispatch("eqcat/Weapon")
+    weapon = next(i["name"] for i in cr.items_in_category("Weapon")
+                  if i.get("damage") and i.get("speed"))
+    cm.dispatch("buy/" + weapon)
+    html = cmh.generate(cm)
+    it = cr.item(weapon)
+    assert f'SF {it["speed"]}' in html and f'{it["damage"]} dmg' in html
+
+
 def test_equipment_categories_start_collapsed_and_expand_on_click():
     cm = _fighter_at_profs()
     cm.index = STEPS.index("equipment")
