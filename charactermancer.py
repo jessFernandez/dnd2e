@@ -18,14 +18,18 @@ import char_rules as cr
 from character import Character
 
 # Ordered steps and their display titles.
-STEPS = ("abilities", "race", "class", "alignment", "proficiencies",
+# The two proficiency budgets are separate steps: Combat & Tactics turned the weapon
+# side into weapons, groups, shield/armor, fighting styles, unarmed disciplines and
+# talents, which is far too much to share a page with the nonweapon skills.
+STEPS = ("abilities", "race", "class", "alignment", "weapons", "nonweapon",
          "equipment", "spells", "details", "review")
 STEP_TITLES = {
     "abilities": "Ability Scores",
     "race": "Race",
     "class": "Class",
     "alignment": "Alignment",
-    "proficiencies": "Proficiencies",
+    "weapons": "Weapon Proficiencies",
+    "nonweapon": "Nonweapon Proficiencies",
     "equipment": "Equipment",
     "spells": "Spells",
     "details": "Details",
@@ -76,7 +80,7 @@ class Charactermancer:
             return bool(c.alignment) and c.alignment in c.eligible_alignments()
         if step == "details":
             return bool(c.name.strip())
-        # proficiencies (optional in v1) and review are always passable
+        # the two proficiency steps (optional) and review are always passable
         return True
 
     def can_advance(self) -> bool:

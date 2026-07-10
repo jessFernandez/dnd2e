@@ -44,8 +44,9 @@ def test_full_happy_path_through_the_flow():
     cm.set_class("Ranger")                             # qualifies with these stats
     assert cm.is_complete("class") and cm.advance() and cm.step == "alignment"
     cm.set_alignment("Neutral Good")                   # allowed for ranger
-    assert cm.is_complete("alignment") and cm.advance() and cm.step == "proficiencies"
-    assert cm.advance() and cm.step == "equipment"     # proficiencies optional in v1
+    assert cm.is_complete("alignment") and cm.advance() and cm.step == "weapons"
+    assert cm.advance() and cm.step == "nonweapon"     # weapon profs optional in v1
+    assert cm.advance() and cm.step == "equipment"     # nonweapon profs optional too
     assert cm.advance() and cm.step == "spells"        # equipment optional
     assert cm.advance() and cm.step == "details"       # spells optional
     assert not cm.is_complete("details")               # name required
@@ -199,12 +200,12 @@ def test_keeps_scroll_only_for_in_place_actions():
     # Picking things leaves you where you were...
     for path in ("addweapon/Long Sword", "wpnup/Long Sword", "addspell/Bless",
                  "level/5", "rerollhp", "save", "delete/3", "ambi"):
-        assert cmh.keeps_scroll(path, "proficiencies", "proficiencies")
+        assert cmh.keeps_scroll(path, "weapons", "weapons")
     # ...but changing step, loading, or starting over goes to the top.
     for path in ("next", "back", "goto/review", "restart", "load/2"):
-        assert not cmh.keeps_scroll(path, "proficiencies", "proficiencies")
+        assert not cmh.keeps_scroll(path, "weapons", "weapons")
     # and any action that moved the step resets regardless
-    assert not cmh.keeps_scroll("addweapon/Club", "proficiencies", "equipment")
+    assert not cmh.keeps_scroll("addweapon/Club", "weapons", "nonweapon")
 
 
 def test_swap_wrap_js_replaces_the_node_in_the_live_document():
@@ -725,7 +726,7 @@ def test_details_step_has_aging_and_dispatch_applies_it():
 
 def _fighter_at_profs():
     cm = _complete()                                     # Human Fighter, FULL stats
-    cm.index = STEPS.index("proficiencies")
+    cm.index = STEPS.index("weapons")
     return cm
 
 
@@ -775,7 +776,7 @@ def _cleric_at_profs() -> Charactermancer:
     cm.set_race("Human")
     cm.set_class("Cleric")
     cm.set_alignment("Lawful Good")
-    cm.index = STEPS.index("proficiencies")
+    cm.index = STEPS.index("weapons")
     return cm
 
 
@@ -1219,15 +1220,40 @@ def test_ambidexterity_purchase_costs_one_slot():
     assert c.bought_ambidexterity is False
 
 
-def test_html_proficiencies_step_renders_with_house_rules():
-    cm = _fighter_at_profs()
+def test_html_weapons_step_renders_with_house_rules():
+    cm = _fighter_at_profs()                       # the weapons step
     html = cmh.generate(cm)
-    assert "Weapon Proficiencies" in html and "Nonweapon Proficiencies" in html
-    assert "crossbows are free" in html and "adds +2" in html
+    assert "Weapon Proficiencies" in html
+    assert "crossbows are free" in html
     assert "dnd:///cm/addweapon/Long Bow" in html
-    assert "dnd:///cm/addprof/Swimming" in html
-    # Handedness roll now lives here (it affects which proficiencies you take).
+    # Handedness roll lives here (it affects which weapon proficiencies you take).
     assert "dnd:///cm/handedness" in html and "Roll d10" in html
+    # ...and the Combat & Tactics sections it now shares the page with
+    for section in ("Weapon groups", "Shield &amp; armor proficiency",
+                    "Fighting styles", "Unarmed combat", "Special talents"):
+        assert section in html
+    assert "dnd:///cm/addprof/Swimming" not in html    # nonweapon skills moved out
+
+
+def test_rail_shortens_the_long_step_labels():
+    # Ten steps means ~85px columns, so the rail abbreviates while the heading doesn't.
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("nonweapon")
+    html = cmh.generate(cm)
+    assert '<span class="rl">Nonweapon</span>' in html
+    assert '<h2 class="step-h">Nonweapon Proficiencies</h2>' in html
+    assert '<span class="rl">Weapons</span>' in html
+
+
+def test_html_nonweapon_step_is_its_own_page():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("nonweapon")
+    html = cmh.generate(cm)
+    assert "Nonweapon Proficiencies" in html
+    assert "adds +2" in html                            # the house-rule slot bonus
+    assert "dnd:///cm/addprof/Swimming" in html
+    assert "dnd:///cm/addweapon/Long Bow" not in html   # weapons stayed behind
+    assert "Fighting styles" not in html
 
 
 def test_html_review_lists_chosen_proficiencies():

@@ -123,6 +123,15 @@ def _ability_summary(ability: str, score: int, exceptional: int = None) -> str:
 
 # ── the progress rail ────────────────────────────────────────────────────────
 
+# Short labels for the progress rail; with ten steps the columns are ~85px wide, so
+# the full step titles don't fit. The step heading still uses STEP_TITLES.
+_RAIL_LABELS = {
+    "abilities": "Abilities",
+    "weapons": "Weapons",
+    "nonweapon": "Nonweapon",
+}
+
+
 def _rail(cm) -> str:
     cells = []
     for i, step in enumerate(STEPS):
@@ -131,7 +140,7 @@ def _rail(cm) -> str:
         # a step is reachable if every earlier step is complete
         reachable = all(cm.is_complete(STEPS[j]) for j in range(i))
         cls = "cur" if current else ("done" if done else "todo")
-        label = STEP_TITLES[step]
+        label = _RAIL_LABELS.get(step, STEP_TITLES[step])
         inner = (f'<span class="rn">{i + 1}</span><span class="rl">{label}</span>')
         if reachable and not current:
             cells.append(f'<a class="rail-step {cls}" href="dnd:///cm/goto/{step}">{inner}</a>')
@@ -1179,8 +1188,15 @@ def _nonweapon_section(cm) -> str:
     )
 
 
-def _proficiencies_body(cm, saved=None) -> str:
-    return f'<div class="prof-wrap">{_weapon_section(cm)}{_nonweapon_section(cm)}</div>'
+def _weapons_body(cm, saved=None) -> str:
+    """The weapon-slot budget: weapons and their mastery rungs, weapon groups,
+    shield/armor proficiency, fighting styles, unarmed disciplines and talents."""
+    return f'<div class="prof-wrap">{_weapon_section(cm)}</div>'
+
+
+def _nonweapon_body(cm, saved=None) -> str:
+    """The nonweapon-slot budget: the campaign's skills."""
+    return f'<div class="prof-wrap">{_nonweapon_section(cm)}</div>'
 
 
 # ── equipment step ───────────────────────────────────────────────────────────
@@ -1434,9 +1450,15 @@ _STEP_REFS = {
         ("Alignment Overview", "PHB/DD01515.htm", "phb"),
         ("The Nine Alignments", "PHB/DD01518.htm", "phb"),
     ],
-    "proficiencies": [
-        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+    "weapons": [
         ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
+        ("Specialization & Mastery", "CT/DD02618.htm", "phb"),    # Combat & Tactics Ch4
+        ("Unarmed Combat", "CT/DD02666.htm", "phb"),              # Combat & Tactics Ch5
+    ],
+    "nonweapon": [
+        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+        ("Nonweapon Proficiencies", "PHB/DD01533.htm", "phb"),
+        ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
     ],
     "equipment": [
         ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book
@@ -1486,7 +1508,8 @@ def _side_rail(cm) -> str:
 
 _BODIES = {
     "abilities": _abilities_body, "race": _race_body, "class": _class_body,
-    "alignment": _alignment_body, "proficiencies": _proficiencies_body,
+    "alignment": _alignment_body,
+    "weapons": _weapons_body, "nonweapon": _nonweapon_body,
     "equipment": _equipment_body, "spells": _spells_body,
     "details": _details_body, "review": _review_body,
 }

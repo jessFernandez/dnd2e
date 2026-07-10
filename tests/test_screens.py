@@ -46,8 +46,13 @@ def test_charactermancer_step_references():
     assert "References" in html
     assert 'href="dnd:///newtab/PHB/' in html           # abilities -> PHB, in a new tab
     # Proficiency, spell, and equipment steps point at in-app pages, not the PHB.
-    prof = charactermancer_html._step_refs("proficiencies")
-    assert 'href="dnd:///newtab/proficiencies"' in prof and "Codex of Worldly Craft" in prof
+    nwp = charactermancer_html._step_refs("nonweapon")
+    assert 'href="dnd:///newtab/proficiencies"' in nwp and "Codex of Worldly Craft" in nwp
+    # The weapon step points at the PHB rules and the Combat & Tactics chapters.
+    weapons = charactermancer_html._step_refs("weapons")
+    assert 'href="dnd:///newtab/PHB/DD01526.htm"' in weapons     # Weapon Proficiencies
+    assert 'href="dnd:///newtab/CT/DD02618.htm"' in weapons      # Specialization & Mastery
+    assert 'href="dnd:///newtab/CT/DD02666.htm"' in weapons      # Unarmed Combat
     spells = charactermancer_html._step_refs("spells")
     assert 'href="dnd:///newtab/screen/spells"' in spells and "Spell Compendium" in spells
     equip = charactermancer_html._step_refs("equipment")
