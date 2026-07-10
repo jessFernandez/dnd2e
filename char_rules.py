@@ -244,25 +244,211 @@ def priest_bonus_spells(wis) -> dict:
     return out
 
 
-# Priest spell slots by class level (PHB Table 24), per spell level. Only class
-# level 1 is tabulated today — the builder makes level-1 characters. The rest are
-# left for the leveling work (see docs/leveling-plan.md), which will extend this
-# the same way it extends the wizard progression.
-_PRIEST_SPELL_SLOTS = {
-    1: {1: 1},
+# ═══════════════════════════════════════════════════════════════════════════
+#  Spell progression (PHB Tables 21, 24, 17, 18, 32)
+#
+#  Each row lists the spells castable of levels 1..N at that class level; a 0
+#  means none. Below a table's first row the class casts nothing; at or above its
+#  last row the slots stop improving (the "maximum spell ability" footnote on the
+#  paladin and ranger tables).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Table 21 — Wizard (spell levels 1-9).
+_WIZARD_SPELL_SLOTS = {
+    1:  (1, 0, 0, 0, 0, 0, 0, 0, 0),
+    2:  (2, 0, 0, 0, 0, 0, 0, 0, 0),
+    3:  (2, 1, 0, 0, 0, 0, 0, 0, 0),
+    4:  (3, 2, 0, 0, 0, 0, 0, 0, 0),
+    5:  (4, 2, 1, 0, 0, 0, 0, 0, 0),
+    6:  (4, 2, 2, 0, 0, 0, 0, 0, 0),
+    7:  (4, 3, 2, 1, 0, 0, 0, 0, 0),
+    8:  (4, 3, 3, 2, 0, 0, 0, 0, 0),
+    9:  (4, 3, 3, 2, 1, 0, 0, 0, 0),
+    10: (4, 4, 3, 2, 2, 0, 0, 0, 0),
+    11: (4, 4, 4, 3, 3, 0, 0, 0, 0),
+    12: (4, 4, 4, 4, 4, 1, 0, 0, 0),
+    13: (5, 5, 5, 4, 4, 2, 0, 0, 0),
+    14: (5, 5, 5, 4, 4, 2, 1, 0, 0),
+    15: (5, 5, 5, 5, 5, 2, 1, 0, 0),
+    16: (5, 5, 5, 5, 5, 3, 2, 1, 0),
+    17: (5, 5, 5, 5, 5, 3, 3, 2, 0),
+    18: (5, 5, 5, 5, 5, 3, 3, 2, 1),
+    19: (5, 5, 5, 5, 5, 3, 3, 3, 1),
+    20: (5, 5, 5, 5, 5, 4, 3, 3, 2),
 }
+
+# Table 24 — Priest (spell levels 1-7). Footnotes: 6th-level spells are usable
+# only with Wisdom 17+, 7th-level only with Wisdom 18+ (see priest_spell_slots).
+_PRIEST_SPELL_SLOTS = {
+    1:  (1, 0, 0, 0, 0, 0, 0),
+    2:  (2, 0, 0, 0, 0, 0, 0),
+    3:  (2, 1, 0, 0, 0, 0, 0),
+    4:  (3, 2, 0, 0, 0, 0, 0),
+    5:  (3, 3, 1, 0, 0, 0, 0),
+    6:  (3, 3, 2, 0, 0, 0, 0),
+    7:  (3, 3, 2, 1, 0, 0, 0),
+    8:  (3, 3, 3, 2, 0, 0, 0),
+    9:  (4, 4, 3, 2, 1, 0, 0),
+    10: (4, 4, 3, 3, 2, 0, 0),
+    11: (5, 4, 4, 3, 2, 1, 0),
+    12: (6, 5, 5, 3, 2, 2, 0),
+    13: (6, 6, 6, 4, 2, 2, 0),
+    14: (6, 6, 6, 5, 3, 2, 1),
+    15: (6, 6, 6, 6, 4, 2, 1),
+    16: (7, 7, 7, 6, 4, 3, 1),
+    17: (7, 7, 7, 7, 5, 3, 2),
+    18: (8, 8, 8, 8, 6, 4, 2),
+    19: (9, 9, 8, 8, 6, 4, 2),
+    20: (9, 9, 9, 8, 7, 5, 2),
+}
+
+# Table 17 — Paladin: priest spells from 9th level (priest spell levels 1-4).
+_PALADIN_SPELL_SLOTS = {
+    9:  (1, 0, 0, 0),
+    10: (2, 0, 0, 0),
+    11: (2, 1, 0, 0),
+    12: (2, 2, 0, 0),
+    13: (2, 2, 1, 0),
+    14: (3, 2, 1, 0),
+    15: (3, 2, 1, 1),
+    16: (3, 3, 2, 1),
+    17: (3, 3, 3, 1),
+    18: (3, 3, 3, 1),
+    19: (3, 3, 3, 2),
+    20: (3, 3, 3, 3),
+}
+
+# Table 18 — Ranger: priest spells from 8th level (priest spell levels 1-3).
+_RANGER_SPELL_SLOTS = {
+    8:  (1, 0, 0),
+    9:  (2, 0, 0),
+    10: (2, 1, 0),
+    11: (2, 2, 0),
+    12: (2, 2, 1),
+    13: (3, 2, 1),
+    14: (3, 2, 2),
+    15: (3, 3, 2),
+    16: (3, 3, 3),      # "maximum spell ability" — no further gain
+}
+
+# Table 32 — Bard: wizard spells from 2nd level (wizard spell levels 1-6).
+_BARD_SPELL_SLOTS = {
+    2:  (1, 0, 0, 0, 0, 0),
+    3:  (2, 0, 0, 0, 0, 0),
+    4:  (2, 1, 0, 0, 0, 0),
+    5:  (3, 1, 0, 0, 0, 0),
+    6:  (3, 2, 0, 0, 0, 0),
+    7:  (3, 2, 1, 0, 0, 0),
+    8:  (3, 3, 1, 0, 0, 0),
+    9:  (3, 3, 2, 0, 0, 0),
+    10: (3, 3, 2, 1, 0, 0),
+    11: (3, 3, 3, 1, 0, 0),
+    12: (3, 3, 3, 2, 0, 0),
+    13: (3, 3, 3, 2, 1, 0),
+    14: (3, 3, 3, 3, 1, 0),
+    15: (3, 3, 3, 3, 2, 0),
+    16: (4, 3, 3, 3, 2, 1),
+    17: (4, 4, 3, 3, 3, 1),
+    18: (4, 4, 4, 3, 3, 2),
+    19: (4, 4, 4, 4, 3, 2),
+    20: (4, 4, 4, 4, 4, 3),
+}
+
+# Specialist wizards gain one extra spell per castable spell level (of their
+# school). Illusionist is the only specialist the builder offers.
+_SPECIALIST_WIZARDS = frozenset({"Illusionist"})
+
+
+def _progression_slots(table: dict, level: int) -> dict:
+    """{spell_level: count} for a class level, dropping the zero entries. Below the
+    table's first row the class casts nothing; past its last row slots are capped."""
+    if not table or level < min(table):
+        return {}
+    row = table[min(level, max(table))]
+    return {i + 1: n for i, n in enumerate(row) if n}
+
+
+def wizard_spell_slots(level: int, int_score=None, specialist: bool = False) -> dict:
+    """Wizard spells castable per spell level. Intelligence caps the highest spell
+    level a wizard can ever learn (Table 4); a specialist gains one extra spell of
+    each castable level."""
+    slots = _progression_slots(_WIZARD_SPELL_SLOTS, level)
+    if int_score is not None:
+        cap = intelligence_mods(int_score).max_spell_level
+        slots = {lvl: n for lvl, n in slots.items() if lvl <= cap}
+    if specialist:
+        slots = {lvl: n + 1 for lvl, n in slots.items()}
+    return slots
 
 
 def priest_spell_slots(level: int, wis) -> dict:
-    """Priest spells memorizable at a class level, per spell level, INCLUDING the
-    Wisdom bonus spells (Table 5). The base table decides which spell levels are
-    castable; the Wisdom bonus only augments those (a low-level priest gets no
-    bonus for spell levels too high to cast). E.g. level 1, Wis 16 -> {1: 3}."""
-    slots = dict(_PRIEST_SPELL_SLOTS.get(level, {}))
-    bonus = priest_bonus_spells(wis)
+    """Priest spells memorizable per spell level, INCLUDING the Wisdom bonus spells
+    (Table 5). The base table decides which spell levels are castable and the bonus
+    only augments those, so a low-level priest gets no bonus for spell levels too
+    high to cast. Table 24's footnotes also gate the top two levels on Wisdom:
+    6th-level spells need Wis 17+, 7th-level need Wis 18+."""
+    slots = _progression_slots(_PRIEST_SPELL_SLOTS, level)
+    if wis is None or wis < 17:
+        slots.pop(6, None)
+    if wis is None or wis < 18:
+        slots.pop(7, None)
+    bonus = priest_bonus_spells(wis) if wis is not None else {}
     for spell_level in list(slots):
         slots[spell_level] += bonus.get(spell_level, 0)
     return slots
+
+
+def paladin_spell_slots(level: int) -> dict:
+    """Priest spells for a paladin (9th level+). PHB: 'Unlike a priest, the paladin
+    does not gain extra spells for a high Wisdom score.'"""
+    return _progression_slots(_PALADIN_SPELL_SLOTS, level)
+
+
+def ranger_spell_slots(level: int) -> dict:
+    """Priest spells for a ranger (8th level+), plant/animal spheres only. PHB: 'He
+    does not gain bonus spells for a high Wisdom score.'"""
+    return _progression_slots(_RANGER_SPELL_SLOTS, level)
+
+
+def bard_spell_slots(level: int, int_score=None) -> dict:
+    """Wizard spells for a bard (2nd level+), capped by Intelligence like a wizard."""
+    slots = _progression_slots(_BARD_SPELL_SLOTS, level)
+    if int_score is not None:
+        cap = intelligence_mods(int_score).max_spell_level
+        slots = {lvl: n for lvl, n in slots.items() if lvl <= cap}
+    return slots
+
+
+def spell_slots(class_name: str, level: int, wis=None, int_score=None) -> dict:
+    """{spell_level: count} a class can cast at a level; {} for non-casters and for
+    casters below the level at which their progression starts."""
+    if class_name in ("Mage", "Illusionist"):
+        return wizard_spell_slots(level, int_score, class_name in _SPECIALIST_WIZARDS)
+    if class_name in ("Cleric", "Druid"):
+        return priest_spell_slots(level, wis)
+    if class_name == "Paladin":
+        return paladin_spell_slots(level)
+    if class_name == "Ranger":
+        return ranger_spell_slots(level)
+    if class_name == "Bard":
+        return bard_spell_slots(level, int_score)
+    return {}
+
+
+def max_spell_level(class_name: str, level: int, wis=None, int_score=None) -> int:
+    """The highest spell level castable, or 0 for a non-caster."""
+    slots = spell_slots(class_name, level, wis, int_score)
+    return max(slots) if slots else 0
+
+
+def spell_caster_group(class_name: str):
+    """'wizard' | 'priest' | None — which spell list a class ever draws on, ignoring
+    level. Bards cast wizard spells; paladins and rangers cast priest spells."""
+    if class_name in ("Mage", "Illusionist", "Bard"):
+        return "wizard"
+    if class_name in ("Cleric", "Druid", "Paladin", "Ranger"):
+        return "priest"
+    return None
 
 
 @dataclass(frozen=True)
@@ -576,6 +762,58 @@ def max_hp_at_first_level(class_name: str, con: int, house_rules: bool = True) -
     return max(1, hit_die(class_name, house_rules) + con_hp_bonus(class_name, con))
 
 
+def hp_die_levels(class_name: str, level: int) -> int:
+    """How many hit dice are rolled *after* 1st level, i.e. how many stored rolls
+    `hp_at_level` needs. Levels 2..name_level roll a die; levels past the class's
+    name level add flat HP instead."""
+    name_level = GROUPS[CLASSES[class_name].group].name_level
+    return max(0, min(level, name_level) - 1)
+
+
+def hp_at_level(class_name: str, level: int, con: int, rolls=(),
+                house_rules: bool = True) -> int:
+    """Total HP at a class level.
+
+    The campaign's model (see docs/leveling-plan.md): 1st level is **best case**
+    (max hit die + Con bonus); each level from 2nd up to the class's *name level*
+    adds a stored hit-die **roll** plus the per-HD Con bonus (a level always yields
+    at least 1 hp); every level beyond the name level adds the group's flat
+    `hp_after` with **no die and no Con bonus**.
+
+    Con is applied at call time rather than baked into `rolls`, so a later
+    Constitution change recomputes correctly. `rolls` must hold at least
+    `hp_die_levels(class_name, level)` entries."""
+    group = GROUPS[CLASSES[class_name].group]
+    needed = hp_die_levels(class_name, level)
+    rolls = list(rolls)
+    if len(rolls) < needed:
+        raise ValueError(
+            f"{class_name} at level {level} needs {needed} hit-die roll(s), got {len(rolls)}")
+
+    total = max_hp_at_first_level(class_name, con, house_rules)
+    bonus = con_hp_bonus(class_name, con)
+    for roll in rolls[:needed]:
+        total += max(1, roll + bonus)          # a level never yields less than 1 hp
+    total += max(0, level - group.name_level) * group.hp_after
+    return max(1, total)
+
+
+# ── Attacks per round (PHB Table 58: warriors only) ─────────────────────────
+# Returned as (attacks, per_rounds): 1/1 -> 3/2 at 7th -> 2/1 at 13th. Only the
+# Warrior group advances; everyone else attacks once per round. (Weapon
+# specialisation grants further attacks — that's Combat & Tactics, not here.)
+
+def attacks_per_round(class_name: str, level: int) -> tuple:
+    """(attacks, rounds) for a class at a level, e.g. (3, 2) == three per two rounds."""
+    if CLASSES[class_name].group != "Warrior":
+        return (1, 1)
+    if level >= 13:
+        return (2, 1)
+    if level >= 7:
+        return (3, 2)
+    return (1, 1)
+
+
 # ── THAC0 / attack bonus ────────────────────────────────────────────────────
 
 def _thac0_raw(group: str, level: int) -> int:
@@ -756,6 +994,725 @@ WEAPONS = (
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Combat & Tactics — weapon groups and barred-weapon access (CT Chapters 4 & 7)
+#
+#  Phase 0 of docs/combat-tactics-chargen-plan.md: pure reference data. Nothing
+#  consumes it yet; the rung/proficiency engine lands on top of it.
+#
+#  CT sorts weapons into *tight* groups nested under *broad* groups
+#  (CT/DD02744). Only the tight groups are mechanically load-bearing: they drive
+#  **familiarity** (proficiency in one weapon of a tight group gives familiarity
+#  with the rest) and the 2-slot **weapon group proficiency**. Broad groups are
+#  informational.
+#
+#  Two subtleties that make this NOT a simple weapon->group dict:
+#   • A weapon belongs to SEVERAL tight groups — a short sword is Ancient,
+#     Middle Eastern *and* Short. Familiarity is the union over your weapons.
+#   • CT's "Unrelated:" lines are NOT a group. Those weapons (and any weapon
+#     absent from the listing) belong to *no* group: "If a weapon does not appear
+#     in the preceding listings, it belongs to no weapon group."
+#     For our roster that means Trident (listed Unrelated), plus Quarterstaff and
+#     Sling (absent entirely) — no familiarity, no group proficiency.
+# ═══════════════════════════════════════════════════════════════════════════
+
+TIGHT_TO_BROAD = {
+    "Axes":             "Axes, Picks, and Hammers",
+    "Hammers":          "Axes, Picks, and Hammers",
+    "Bows":             "Bows",
+    "Maces":            "Clubs, Maces, and Flails",
+    "Clubs":            "Clubs, Maces, and Flails",
+    "Flails":           "Clubs, Maces, and Flails",
+    "Crossbows":        "Crossbows",
+    "Daggers & Knives": "Daggers & Knives",
+    "Poleaxes":         "Polearms",
+    "Spears":           "Spears & Javelins",
+    "Javelins":         "Spears & Javelins",
+    "Ancient":          "Swords",
+    "Roman":            "Swords",
+    "Middle Eastern":   "Swords",
+    "Short":            "Swords",
+    "Medium":           "Swords",
+    "Large":            "Swords",
+}
+
+# Our roster mapped onto CT's tight groups. Transcribed from CT/DD02744; the
+# generic entries (Mace, Flail, Club, Spear) stand in for the book's named
+# variants (footman's/horseman's mace, etc.). () means "no weapon group".
+WEAPON_TIGHT_GROUPS = {
+    "Long Sword":       ("Medium",),
+    "Short Sword":      ("Ancient", "Middle Eastern", "Short"),
+    "Broad Sword":      ("Ancient", "Roman", "Medium"),      # CT spells it "broadsword"
+    "Bastard Sword":    ("Large",),
+    "Two-Handed Sword": ("Large",),
+    "Scimitar":         ("Middle Eastern",),
+    "Dagger":           ("Daggers & Knives", "Short"),
+    "Mace":             ("Maces",),
+    "Morning Star":     ("Clubs",),                          # CT files it under Clubs
+    "Warhammer":        ("Hammers",),
+    "Club":             ("Clubs",),
+    "Quarterstaff":     (),                                  # absent from CT's listing
+    "Flail":            ("Flails",),
+    "Battle Axe":       ("Axes",),
+    "Hand Axe":         ("Axes",),                           # CT: "hand/throwing axe"
+    "Spear":            ("Spears",),
+    "Halberd":          ("Poleaxes",),
+    "Trident":          (),                                  # CT lists it as "Unrelated"
+    "Sling":            (),                                  # absent from CT's listing
+    "Dart":             ("Javelins",),
+    "Short Bow":        ("Bows",),
+    "Long Bow":         ("Bows",),
+    "Light Crossbow":   ("Crossbows",),
+    "Heavy Crossbow":   ("Crossbows",),
+}
+
+
+# What each Combat & Tactics option actually *does* at the table, plus the page to
+# read for the full rule. Hand-written summaries rather than the rulebook's prose:
+# the book spends most of its words on who may pummel and how ambushes feel, and
+# buries the mechanics that decide a character sheet.
+#
+# `(page, summary)`. Keep summaries to the numbers a player needs mid-fight.
+CT_RULES = {
+    # ── Fighting styles (the effect of *specialising*) ───────────────────────
+    "Weapon and Shield": ("CT/DD02646.htm",
+        "Using a shield offensively (rush, punch, block, trap) normally forfeits its "
+        "AC bonus for the round. Specialised: make one such attack every round and "
+        "keep the shield's AC."),
+    "One-Handed Weapon": ("CT/DD02647.htm",
+        "Your empty hand always counts as a secondary weapon, at the usual two-weapon "
+        "penalties. Specialised: +1 AC while wielding a one-handed weapon with no "
+        "shield and no off-hand weapon. A second slot raises that to +2 AC."),
+    "Two-Handed Weapon": ("CT/DD02648.htm",
+        "You may wield a weapon one size larger than yourself in two hands. "
+        "Specialised: your two-handed weapon's speed improves by one category "
+        "(slow to average, average to fast) — or its speed factor drops by 3 under "
+        "the old initiative rules."),
+    "Two-Weapon": ("CT/DD02649.htm",
+        "A weapon in each hand normally costs -2 to hit with the primary and -4 with "
+        "the off-hand. Specialised: 0 and -2. Ambidextrous and specialised: no "
+        "penalty with either. The off-hand weapon must be one size smaller, though "
+        "knives and daggers always qualify; a second slot allows two weapons of equal "
+        "size."),
+    "Missile or Thrown Weapon": ("CT/DD02650.htm",
+        "Specialised: move up to half your rate and still shoot at your full rate of "
+        "fire, or take a full move and shoot at half rate. You also gain +1 AC against "
+        "enemy missile fire while shooting."),
+
+    # ── Unarmed disciplines ─────────────────────────────────────────────────
+    "Pummeling": ("CT/DD02672.htm",
+        "Punches, elbows and the like. Everyone gets one pummeling attack a round for "
+        "free. Proficiency gives a warrior his full melee attack rate when pummeling; "
+        "nonwarriors gain nothing from it. Expertise raises the rate further, and only "
+        "single-class fighters may specialise or master it."),
+    "Wrestling": ("CT/DD02679.htm",
+        "Grabs, holds and locks. Everyone gets one wrestling attack a round for free. "
+        "Proficiency gives a warrior his full melee attack rate when wrestling; "
+        "nonwarriors gain nothing. The nonproficient can neither score critical hits "
+        "nor achieve holds or locks."),
+    "Overbearing": ("CT/DD02689.htm",
+        "Overpowering a foe by brute strength or weight of numbers. Everyone is "
+        "familiar with it and it can never be advanced — there is no overbearing "
+        "expertise, specialisation or mastery. Multi-legged creatures are hard to "
+        "overbear; legless ones nearly impossible."),
+    "Martial Arts: Style A": ("CT/DD02701.htm",
+        "Hands and fists. Your bare or gloved hands count as small hard objects (1d3) "
+        "and can damage a creature of any size. Unarmed and unarmoured, you gain an "
+        "extra attack each round with your free hand, without the two-weapon penalties."),
+    "Martial Arts: Style B": ("CT/DD02701.htm",
+        "Feet. Your bare or shod feet count as large hard objects (1d6) and can kick an "
+        "opponent who is standing. Unarmed and unarmoured, you gain an extra attack each "
+        "round with a free hand. Does not grant Style A's any-size damage."),
+    "Martial Arts: Style C": ("CT/DD02701.htm",
+        "Throws and escapes. You may take the pull/trip option on a pummeling attack, "
+        "using Strength or Dexterity for the opposed roll, and may make an opposed "
+        "roll to escape any hold, grapple, lock or pin — it costs an attack, but on a "
+        "success you are free and finish the round normally."),
+    "Martial Arts: Style D": ("CT/DD02701.htm",
+        "Dodges and blocks. One free block each round on top of your attacks, and "
+        "+2 AC while unarmed and unarmoured."),
+
+    # ── Special talents ─────────────────────────────────────────────────────
+    "Alertness": ("CT/DD02654.htm",
+        "On a successful check, your chance of being surprised drops by 1 in 10. Where "
+        "surprise would be automatic, a successful check means you are surprised only "
+        "at the normal chance instead."),
+    "Ambidexterity": ("CT/DD02655.htm",
+        "You have no off-hand. Fighting two-weapon style, both hands count as primary: "
+        "-2 to hit with either. Add two-weapon style specialisation and you suffer no "
+        "penalty at all."),
+    "Ambush": ("CT/DD02656.htm",
+        "You can lay an ambush where the terrain would not normally allow one. Useless "
+        "once the enemy has already spotted you."),
+    "Camouflage": ("CT/DD02657.htm",
+        "Conceal yourself in natural surroundings. Unlike hiding in shadows it needs "
+        "either good cover nearby or time to prepare — with preparation you can hide on "
+        "open ground."),
+    "Dirty Fighting": ("CT/DD02658.htm",
+        "Once per fight a feint or dirty trick grants +1 on your next attack roll, or +2 "
+        "if the enemy has reason to expect you to fight honourably. Any given enemy only "
+        "falls for it once."),
+    "Endurance": ("CT/DD02659.htm",
+        "Sustain strenuous activity twice as long as normal before fatigue sets in. "
+        "Under the Chapter One fatigue rules, your fatigue points rise by 50%."),
+    "Fine Balance": ("CT/DD02660.htm",
+        "On a successful check, +2 on climbing checks, saving throws and ability checks "
+        "to avoid slipping or falling, and penalties for fighting off-balance or in "
+        "awkward footing are reduced by 2."),
+    "Iron Will": ("CT/DD02661.htm",
+        "+1 on saving throws against mind-affecting magic — charm, hold, hypnotism, "
+        "fascination, suggestion and the like — and you can keep fighting past the point "
+        "that would stop another character."),
+    "Leadership": ("CT/DD02662.htm",
+        "Troops you lead gain +2 on morale checks. Under the Chapter Eight mass-combat "
+        "rules you command as though you were three levels higher."),
+    "Quickness": ("CT/DD02663.htm",
+        "On a successful check, -2 on your initiative roll when you move or attack with a "
+        "weapon of average speed or faster. It never applies to slow weapons."),
+    "Steady Hand": ("CT/DD02664.htm",
+        "With bows and crossbows: take a full round to aim (holding your action until "
+        "last) and you suffer no penalty at medium range, and only -2 at long range."),
+    "Trouble Sense": ("CT/DD02665.htm",
+        "The DM rolls in secret whenever an unnoticed danger threatens you. On a success "
+        "a sneak attack surprises you only on a 1, and rear attacks count as flank "
+        "attacks instead."),
+
+    # ── Martial arts talents (each needs a martial arts style) ───────────────
+    "Flying Kick": ("CT/DD02705.htm",
+        "Leap and kick a target up to three squares away, landing adjacent to it. "
+        "Without Style B it is your only attack that round and deals 2d4; with Style B it "
+        "replaces one kick and deals 2d6. Strength bonuses apply."),
+    "Backward Kick": ("CT/DD02705.htm",
+        "Attack an opponent standing in one of your rear squares without provoking an "
+        "attack of opportunity. Works best with Style B."),
+    "Spring": ("CT/DD02705.htm",
+        "For the cost of a half move or an attack, leap five feet up and land up to two "
+        "squares away in any direction, facing wherever you like. A two-square running "
+        "start doubles the distance."),
+    "Crushing Blow": ("CT/DD02705.htm",
+        "Break hard objects barehanded — or with the feet, using Style B — up to half an "
+        "inch of board or a quarter inch of stone per level. Exceptionally strong or "
+        "supported objects get a saving throw."),
+    "Instant Stand": ("CT/DD02705.htm",
+        "On a successful check you regain your feet instantly, ignoring a knockdown or a "
+        "failed spring. On a failure you rise on your next action but can do nothing more "
+        "that round. Useless while pinned, locked, held or grappled."),
+    "Missile Deflection": ("CT/DD02705.htm",
+        "Block normal missiles — arrows, bolts, javelins, spears, thrown axes, small "
+        "stones — fired at you from the front. You may spend your free facing change to "
+        "turn toward a shooter on your flank or rear."),
+
+    # ── Siege proficiencies (nonweapon slots) ───────────────────────────────
+    "Artillerist": ("CT/DD02824.htm",
+        "Direct the siting and operation of bombardment engines. You can control up to "
+        "one third of your Charisma score in engines, so long as they stand no farther "
+        "apart than you can sprint in a single round."),
+    "Vehicle Handling": ("CT/DD02824.htm",
+        "Control a wagon or chariot under difficult circumstances: roll against this "
+        "proficiency whenever a driving check is called for."),
+}
+
+
+def ct_summary(name: str) -> str:
+    """What this style / discipline / talent does at the table; '' if unknown."""
+    entry = CT_RULES.get(name)
+    return entry[1] if entry else ""
+
+
+def ct_page(name: str) -> str:
+    """The rulebook page with the full rule; '' if unknown."""
+    entry = CT_RULES.get(name)
+    return entry[0] if entry else ""
+
+
+# CT: "Weapon group proficiencies cost two slots, but may include a number of
+# weapons." One tight group, every weapon in it.
+WEAPON_GROUP_SLOT_COST = 2
+
+
+def weapon_tight_groups(weapon: str) -> tuple:
+    """The tight groups a weapon belongs to; () when it belongs to none."""
+    return WEAPON_TIGHT_GROUPS.get(weapon, ())
+
+
+def tight_groups_with_members() -> tuple:
+    """Every tight group that has at least one weapon on our roster, alphabetical."""
+    return tuple(sorted(g for g in TIGHT_TO_BROAD if weapon_group_members(g)))
+
+
+def weapon_broad_groups(weapon: str) -> tuple:
+    """The distinct broad groups a weapon's tight groups sit under."""
+    seen = []
+    for tight in weapon_tight_groups(weapon):
+        broad = TIGHT_TO_BROAD.get(tight)
+        if broad and broad not in seen:
+            seen.append(broad)
+    return tuple(seen)
+
+
+def weapon_group_members(tight_group: str) -> tuple:
+    """Every weapon on our roster belonging to a tight group, in WEAPONS order."""
+    return tuple(w for w in WEAPONS if tight_group in weapon_tight_groups(w))
+
+
+def is_familiar(weapon: str, proficient_weapons) -> bool:
+    """CT familiarity: the weapon shares a tight group with something you're already
+    proficient in (and you aren't already proficient in it). Group-less weapons —
+    Trident, Quarterstaff, Sling — can never be familiar."""
+    proficient = set(proficient_weapons)
+    if weapon in proficient:
+        return False
+    groups = set(weapon_tight_groups(weapon))
+    if not groups:
+        return False
+    return any(groups & set(weapon_tight_groups(w)) for w in proficient)
+
+
+# ── Barred weapons (CT/DD02624) ──────────────────────────────────────────────
+# CT prices a weapon by the *least restrictive* class group that may wield it,
+# then charges extra slots when you reach above your station:
+#   rogue/priest taking a warrior-only weapon           -> +1 slot
+#   wizard taking a priest/rogue weapon                 -> +1 slot
+#   wizard taking a warrior-only weapon                 -> +2 slots
+# Validated against CT's own worked example: a wizard pays 2 slots total for a
+# long sword (rogue-tier) and 3 for a two-handed sword (warrior-only).
+#
+# NOTE: this is CT's coarse three-tier model. It deliberately does NOT capture the
+# finer per-class PHB restrictions (e.g. clerics being limited to bludgeoning
+# weapons) — those stay DM-adjudicated, exactly as CT leaves them.
+WEAPON_ACCESS = {
+    # wizard-tier: the weapons a mage may natively wield
+    "Dagger": "wizard", "Dart": "wizard", "Quarterstaff": "wizard", "Sling": "wizard",
+    # priest/rogue-tier
+    "Club": "priest_rogue", "Mace": "priest_rogue", "Warhammer": "priest_rogue",
+    "Flail": "priest_rogue", "Morning Star": "priest_rogue", "Scimitar": "priest_rogue",
+    "Spear": "priest_rogue", "Short Sword": "priest_rogue", "Long Sword": "priest_rogue",
+    "Broad Sword": "priest_rogue", "Short Bow": "priest_rogue",
+    "Light Crossbow": "priest_rogue",
+    # warrior-only
+    "Bastard Sword": "warrior", "Two-Handed Sword": "warrior", "Battle Axe": "warrior",
+    "Hand Axe": "warrior", "Halberd": "warrior", "Trident": "warrior",
+    "Long Bow": "warrior", "Heavy Crossbow": "warrior",
+}
+
+_ACCESS_RANK = {"wizard": 0, "priest_rogue": 1, "warrior": 2}
+_GROUP_RANK = {"Wizard": 0, "Priest": 1, "Rogue": 1, "Warrior": 2}
+
+
+def barred_weapon_penalty(weapon: str, class_name: str) -> int:
+    """Extra proficiency slots to learn a weapon barred to your class group (0/1/2).
+    Zero before a class is chosen — nothing is barred to nobody."""
+    if class_name not in CLASSES:
+        return 0
+    group = CLASSES[class_name].group
+    weapon_rank = _ACCESS_RANK[WEAPON_ACCESS.get(weapon, "warrior")]
+    return max(0, weapon_rank - _GROUP_RANK[group])
+
+
+# ── The weapon mastery ladder (CT Ch4, CT/DD02629-DD02644) ───────────────────
+#
+# The ladder is NOT linear. Expertise and specialisation both cost two slots and
+# sit at the same rung: expertise is the non-fighter's version (paladins, rangers
+# and multi-classed fighters), specialisation the single-class fighter's. Mastery
+# builds on specialisation, so only a single-class fighter ever climbs past it.
+#
+# `nonproficient` and `familiar` cost nothing and are never *bought* — familiarity
+# falls out of the tight weapon groups (see is_familiar), so neither appears in a
+# class's ladder.
+#
+# Level gates come from CT's own worked example: master at 5th, high master at 6th
+# ("has spent four slots ... and is at least 6th level"), and the third mastery
+# slot — grand mastery — no earlier than 9th.
+_RUNG_MIN_LEVEL = {"master": 5, "high_master": 6, "grand_master": 9}
+
+# Slots spent *beyond* the proficiency slot. Proficiency itself costs
+# weapon_slot_cost() (house rules apply) plus any barred-weapon penalty.
+_RUNG_EXTRA_SLOTS = {
+    "proficient": 0, "expert": 1, "specialist": 1,
+    "master": 2, "high_master": 3, "grand_master": 4,
+}
+
+RUNG_LABELS = {
+    "nonproficient": "Nonproficient", "familiar": "Familiar", "proficient": "Proficient",
+    "expert": "Expert", "specialist": "Specialist", "master": "Master",
+    "high_master": "High Master", "grand_master": "Grand Master",
+}
+
+
+def weapon_rung_ladder(class_name: str, level: int = 1) -> tuple:
+    """The rungs this class can climb, in order, at this level.
+
+    Single-class fighters specialise and go on to mastery; paladins and rangers
+    take expertise instead and stop there; everyone else stops at proficiency."""
+    if class_name == "Fighter":
+        ladder = ["proficient", "specialist"]
+        for rung in ("master", "high_master", "grand_master"):
+            if level >= _RUNG_MIN_LEVEL[rung]:
+                ladder.append(rung)
+        return tuple(ladder)
+    if class_name in ("Paladin", "Ranger"):
+        return ("proficient", "expert")
+    return ("proficient",)
+
+
+def max_weapon_rung(class_name: str, level: int = 1) -> str:
+    return weapon_rung_ladder(class_name, level)[-1]
+
+
+def next_weapon_rung(rung: str, class_name: str, level: int = 1):
+    """The rung above `rung` on this class's ladder, or None at the top."""
+    ladder = weapon_rung_ladder(class_name, level)
+    if rung not in ladder:
+        return None
+    i = ladder.index(rung)
+    return ladder[i + 1] if i + 1 < len(ladder) else None
+
+
+def prev_weapon_rung(rung: str, class_name: str, level: int = 1):
+    """The rung below `rung`, or None when `rung` is merely proficient."""
+    ladder = weapon_rung_ladder(class_name, level)
+    if rung not in ladder:
+        return None
+    i = ladder.index(rung)
+    return ladder[i - 1] if i > 0 else None
+
+
+def respecialisation_surcharge(changes: int) -> int:
+    """Extra slots on top of a normal specialisation, by how many times the fighter
+    has already moved it. CT: the first specialisation costs one extra slot, "if she
+    wishes to change her specialization to a different weapon, she must spend two
+    extra proficiency slots... Any more changes cost three slots each." So the
+    surcharge is 0, then 1, then 2 forever."""
+    if changes <= 0:
+        return 0
+    return 1 if changes == 1 else 2
+
+
+def weapon_prof_cost(weapon: str, rung: str, class_name: str,
+                     house_rules: bool = True, respecialisations: int = 0) -> int:
+    """Total slots invested in a weapon to sit at `rung`: the proficiency slot
+    (house-rule cost + barred-weapon penalty) plus the extra slots the rung needs,
+    plus the re-specialisation surcharge once the fighter has moved his
+    specialisation off an earlier weapon."""
+    base = weapon_slot_cost(weapon, house_rules) + barred_weapon_penalty(weapon, class_name)
+    extra = _RUNG_EXTRA_SLOTS[rung]
+    if specialises(rung):
+        extra += respecialisation_surcharge(respecialisations)
+    return base + extra
+
+
+def specialises(rung: str) -> bool:
+    """Rungs that count as 'specialised in this weapon' — a single-class fighter may
+    hold only one at a time (CT: 'A fighter may only specialize in one weapon')."""
+    return rung in ("specialist", "master", "high_master", "grand_master")
+
+
+# ── Fighting styles (CT Ch2 list, Ch4 specialisation: DD02645-DD02650) ───────
+# "Warriors automatically know every style, while the other character types are
+# limited... If a nonwarrior wishes to learn a style he doesn't know, he can do so
+# at the cost of a weapon proficiency. In addition to simply knowing a style,
+# warriors, priests, and rogues can specialize... by spending a weapon proficiency
+# slot." Warriors may specialise in as many styles as they like; priests and rogues
+# in only one. Wizards may learn a style but never specialise in it.
+FIGHTING_STYLES = (
+    "Weapon and Shield",
+    "One-Handed Weapon",
+    "Two-Handed Weapon",
+    "Two-Weapon",
+    "Missile or Thrown Weapon",
+)
+STYLE_LEARN_SLOT_COST = 1
+STYLE_SPECIALISE_SLOT_COST = 1
+# Two styles take a second slot of specialisation: two-weapon (it then allows two
+# weapons of equal size) and one-handed weapon ("By spending an additional
+# proficiency slot, the character can increase his AC bonus to +2, but that's the
+# maximum benefit"). The rest cap at one.
+_MAX_STYLE_SPECIALISATION = {"Two-Weapon": 2, "One-Handed Weapon": 2}
+
+
+def knows_styles_free(class_name: str) -> bool:
+    """Warriors automatically know every fighting style."""
+    return class_name in CLASSES and CLASSES[class_name].group == "Warrior"
+
+
+def can_specialise_styles(class_name: str) -> bool:
+    """Warriors, priests and rogues may specialise in a style; wizards may not."""
+    return class_name in CLASSES and CLASSES[class_name].group in ("Warrior", "Priest", "Rogue")
+
+
+def max_style_specialisation(style: str) -> int:
+    return _MAX_STYLE_SPECIALISATION.get(style, 1)
+
+
+def style_free_specialisation(style: str, class_name: str) -> int:
+    """Specialisation slots granted free. CT: 'Rangers are considered to have the
+    first slot of this style specialization' in two-weapon style."""
+    return 1 if (class_name == "Ranger" and style == "Two-Weapon") else 0
+
+
+def style_slot_cost(style: str, spec_slots: int, class_name: str) -> int:
+    """Weapon slots a style costs: learning it (free for warriors) plus each slot of
+    specialisation beyond any granted free."""
+    cost = 0 if knows_styles_free(class_name) else STYLE_LEARN_SLOT_COST
+    paid = max(0, spec_slots - style_free_specialisation(style, class_name))
+    return cost + paid * STYLE_SPECIALISE_SLOT_COST
+
+
+# ── Unarmed disciplines (CT Ch5: DD02674, DD02687, DD02695, DD02700-DD02703) ─
+#
+# These are bought with weapon proficiency slots and ride the SAME rung ladder, so
+# they model as pseudo-weapons. Two things stop them being ordinary weapons:
+#   • each has its own rung cap — overbearing cannot be advanced at all
+#     ("It is not possible to develop overbearing expertise, specialization, or
+#     mastery"), martial arts stop at specialist, pummeling/wrestling reach master;
+#   • familiarity doesn't work the same. Everyone is *familiar* with pummeling,
+#     wrestling and overbearing for free, while for martial arts "familiarity has no
+#     effect" — and CT is explicit that "the four martial arts styles do not
+#     constitute a weapon group", so they confer no familiarity on each other.
+#
+# Brawling is universal and has no skill levels, so there is nothing to model.
+# Unlike weapons, *expertise* here is open to any class; only specialisation and
+# mastery are the single-class fighter's.
+
+@dataclass(frozen=True)
+class UnarmedDiscipline:
+    name: str
+    rung_cap: str = None        # None: cannot be advanced at all
+    free_rung: str = "familiar" # what you get without spending anything
+    nonwarrior_benefit: bool = True
+    note: str = ""
+
+
+UNARMED_DISCIPLINES = {d.name: d for d in (
+    UnarmedDiscipline("Overbearing", None, "familiar",
+                      note="Brute force; no expertise, specialisation or mastery."),
+    UnarmedDiscipline("Pummeling", "master", "familiar", nonwarrior_benefit=False,
+                      note="Nonwarriors gain no benefit from proficiency."),
+    UnarmedDiscipline("Wrestling", "master", "familiar", nonwarrior_benefit=False,
+                      note="Nonwarriors gain no benefit from proficiency."),
+    UnarmedDiscipline("Martial Arts: Style A", "specialist", "nonproficient",
+                      note="Strikes with hands/fists; 1d3, any size opponent."),
+    UnarmedDiscipline("Martial Arts: Style B", "specialist", "nonproficient",
+                      note="Strikes with the feet; 1d6 kicks."),
+    UnarmedDiscipline("Martial Arts: Style C", "specialist", "nonproficient"),
+    UnarmedDiscipline("Martial Arts: Style D", "specialist", "nonproficient"),
+)}
+
+MARTIAL_ARTS_STYLES = tuple(n for n in UNARMED_DISCIPLINES if n.startswith("Martial Arts"))
+
+# Unarmed skill levels, in order. Expertise is open to everyone here.
+_UNARMED_LADDER = ("proficient", "expert", "specialist", "master")
+
+
+def is_martial_art(discipline: str) -> bool:
+    return discipline in MARTIAL_ARTS_STYLES
+
+
+def unarmed_rung_ladder(discipline: str, class_name: str, level: int = 1) -> tuple:
+    """The rungs a class can climb in an unarmed discipline at this level."""
+    entry = UNARMED_DISCIPLINES.get(discipline)
+    if entry is None or entry.rung_cap is None or class_name not in CLASSES:
+        return ()
+    ladder = []
+    for rung in _UNARMED_LADDER:
+        if rung == "specialist" and class_name != "Fighter":
+            break
+        if rung == "master" and (class_name != "Fighter"
+                                 or level < _RUNG_MIN_LEVEL["master"]):
+            break
+        ladder.append(rung)
+        if rung == entry.rung_cap:
+            break
+    return tuple(ladder)
+
+
+def unarmed_prof_cost(rung: str) -> int:
+    """Slots invested in an unarmed discipline at a rung: proficiency 1, expertise or
+    specialisation 2, mastery 3 — the same ladder as weapons, with no house-rule or
+    barred-weapon adjustment to the base slot."""
+    return 1 + _RUNG_EXTRA_SLOTS[rung]
+
+
+def unarmed_free_rung(discipline: str) -> str:
+    entry = UNARMED_DISCIPLINES.get(discipline)
+    return entry.free_rung if entry else "nonproficient"
+
+
+# ── Special talents (CT/DD02653-DD02665) ────────────────────────────────────
+# Bought with weapon proficiency slots. CT marks two of them with an asterisk —
+# "originally presented as nonweapon proficiencies ... they can be purchased with
+# either type of proficiency slot" — Alertness and Endurance.
+# `groups` are the class groups allowed to take it; () means anyone ("All"/"General").
+
+@dataclass(frozen=True)
+class SpecialTalent:
+    """A Combat & Tactics talent.
+
+    `ability` + `modifier` is the **PHB** proficiency check this campaign uses:
+    d20 ≤ ability + modifier (Iron Will is Wis−2, Alertness Wis+1, Leadership Cha−1).
+
+    `initial_rating` is the *same check* written for **Skills & Powers**, where the
+    score starts at a flat 3–8 rating and the ability only nudges it via S&P's ±5
+    Table 44. CT prints both notations on one line because it supports both systems.
+    The campaign plays PHB proficiency slots, not S&P character points, so the rating
+    is kept for fidelity and never used — under S&P an Int-15 Ambush would succeed
+    35% of the time where the PHB check succeeds 75%.
+
+    Note the campaign's +2-per-extra-slot bonus never applies here: a talent is a
+    single purchase, so its check is simply the ability plus the book's modifier.
+    """
+    name: str
+    slots: int
+    ability: str = None
+    modifier: int = 0
+    groups: tuple = ()
+    initial_rating: int = None      # Skills & Powers only — see the class docstring
+    # Which budget may pay: "weapon", "nonweapon", or "either" (CT's asterisk).
+    slot_source: str = "weapon"
+    requires_martial_art: bool = False
+
+
+SPECIAL_TALENTS = {t.name: t for t in (
+    SpecialTalent("Alertness", 1, "Wisdom", 1, (), None, slot_source="either"),
+    SpecialTalent("Ambidexterity", 1, "Dexterity", 0, ("Warrior", "Rogue")),
+    SpecialTalent("Ambush", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Camouflage", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Dirty Fighting", 1, "Intelligence", 0, ("Warrior", "Rogue"), 5),
+    SpecialTalent("Endurance", 2, "Constitution", 0, ("Warrior",), 3, slot_source="either"),
+    SpecialTalent("Fine Balance", 2, "Dexterity", 0, ("Warrior", "Rogue"), 7),
+    SpecialTalent("Iron Will", 2, "Wisdom", -2, ("Warrior", "Priest"), 3),
+    SpecialTalent("Leadership", 1, "Charisma", -1, ("Warrior",), 5),
+    SpecialTalent("Quickness", 2, "Dexterity", 0, ("Warrior", "Rogue"), 3),
+    SpecialTalent("Steady Hand", 1, "Dexterity", 0, ("Warrior", "Rogue")),
+    SpecialTalent("Trouble Sense", 1, "Wisdom", 0, (), 3),
+)}
+
+# CT/DD02705. "Only a martial artist can learn the skills presented here. They can
+# be purchased with either weapon or nonweapon proficiency slots."
+_WPR = ("Warrior", "Priest", "Rogue")
+MARTIAL_ARTS_TALENTS = {t.name: t for t in (
+    SpecialTalent("Flying Kick", 1, "Strength", 0, ("Warrior",), 5,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Backward Kick", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Spring", 1, "Dexterity", 0, ("Warrior", "Rogue"), 5,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Crushing Blow", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Instant Stand", 1, "Dexterity", 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+    SpecialTalent("Missile Deflection", 1, None, 0, _WPR, None,
+                  slot_source="either", requires_martial_art=True),
+)}
+
+# CT/DD02824 (Chapter Eight). "The following proficiencies are applicable to warfare
+# and the operation of war equipment. They are acquired the same way standard PHB
+# proficiencies are" — i.e. with nonweapon slots.
+SIEGE_PROFICIENCIES = {t.name: t for t in (
+    SpecialTalent("Artillerist", 1, "Charisma", 0, ("Warrior",), None,
+                  slot_source="nonweapon"),
+    SpecialTalent("Vehicle Handling", 1, "Dexterity", 0, ("Warrior",), None,
+                  slot_source="nonweapon"),
+)}
+
+# Everything buyable through the talent machinery, in one lookup.
+TALENTS = {**SPECIAL_TALENTS, **MARTIAL_ARTS_TALENTS, **SIEGE_PROFICIENCIES}
+
+
+def talent_allowed(name: str, class_name: str) -> bool:
+    """Whether a class group may take this talent at all (ignores prerequisites)."""
+    talent = TALENTS.get(name)
+    if talent is None or class_name not in CLASSES:
+        return False
+    return not talent.groups or CLASSES[class_name].group in talent.groups
+
+
+def talents_for_class(class_name: str) -> tuple:
+    """The twelve Chapter Four special talents open to a class."""
+    return tuple(t for t in SPECIAL_TALENTS.values() if talent_allowed(t.name, class_name))
+
+
+def martial_arts_talents_for_class(class_name: str) -> tuple:
+    return tuple(t for t in MARTIAL_ARTS_TALENTS.values() if talent_allowed(t.name, class_name))
+
+
+def siege_proficiencies_for_class(class_name: str) -> tuple:
+    return tuple(t for t in SIEGE_PROFICIENCIES.values() if talent_allowed(t.name, class_name))
+
+
+def two_weapon_penalty(specialised: bool, ambidextrous: bool) -> tuple:
+    """(primary, off-hand) attack penalties when fighting with a weapon in each hand.
+
+    Normally −2/−4. Specialising in two-weapon style reduces that to 0/−2. An
+    ambidextrous character has two 'primary' hands (−2 with either), and one who is
+    *both* ambidextrous and specialised suffers no penalty at all."""
+    if ambidextrous and specialised:
+        return (0, 0)
+    if specialised:
+        return (0, -2)
+    if ambidextrous:
+        return (-2, -2)
+    return (-2, -4)
+
+
+# ── Shield proficiency (CT/DD02627) ──────────────────────────────────────────
+# 1 weapon slot. `attackers` is how many attacks the shield's bonus may apply to
+# in a round. Body shields list (melee, missile) bonuses.
+SHIELD_PROFICIENCY = {
+    "buckler": {"normal_ac": 1, "proficient_ac": 1, "attackers": 1},
+    "small":   {"normal_ac": 1, "proficient_ac": 2, "attackers": 2},
+    "medium":  {"normal_ac": 1, "proficient_ac": 3, "attackers": 3},
+    "body":    {"normal_ac": (1, 2), "proficient_ac": (3, 4), "attackers": 4},
+}
+
+# Our homebrew shields mapped onto CT's four types (DM ruling: the aspis, a large
+# round hoplite shield at +2 AC, is a CT "medium" shield).
+SHIELD_TYPES = {
+    "Shield, Buckler": "buckler",
+    "Shield, Aspis":   "medium",
+}
+
+# Shield proficiency and armor proficiency each cost one weapon slot (CT/DD02627-8).
+SHIELD_PROF_SLOT_COST = 1
+ARMOR_PROF_SLOT_COST = 1
+# CT: a character proficient in an armor "only has to count half" its weight.
+ARMOR_PROF_WEIGHT_FACTOR = 0.5
+
+
+def is_shield(item_name: str) -> bool:
+    return item_name in SHIELD_TYPES
+
+
+def shield_ac_bonus(item_name: str, proficient: bool = False) -> int:
+    """A shield's AC bonus, better when its wielder is proficient.
+
+    The **homebrew item owns the normal bonus** (our Aspis is +2 where CT's medium
+    shield is +1); CT's table only supplies the *proficient* upgrade, and never
+    lowers a shield below its own value. Body shields list (melee, vs-missile)
+    values; we take the melee one — the sheet has no column for the missile bonus."""
+    shield_type = SHIELD_TYPES.get(item_name)
+    if shield_type is None:
+        return 0
+    own = (item(item_name) or {}).get("ac_bonus", 0)
+    if not proficient:
+        return own
+    value = SHIELD_PROFICIENCY[shield_type]["proficient_ac"]
+    return max(own, value[0] if isinstance(value, tuple) else value)
+
+
+def shield_attackers_blocked(item_name: str) -> int:
+    """How many attacks in a round the shield's bonus may apply to."""
+    shield_type = SHIELD_TYPES.get(item_name)
+    return SHIELD_PROFICIENCY[shield_type]["attackers"] if shield_type else 0
+
+
+def armor_items() -> tuple:
+    """Armor a character can take an armor proficiency in (shields excluded — those
+    take a shield proficiency instead)."""
+    return tuple(it["name"] for it in items_in_category("Armor")
+                 if not is_shield(it["name"]))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Equipment — starting money, Armor Class, encumbrance
 #  (Item data itself lives in equipment.py; these are the rules that use it.)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -899,3 +1856,282 @@ def eligible_classes(abilities: dict, race: str = None) -> list:
 def eligible_races(abilities: dict) -> list:
     """Every race whose Table 7 requirements the given abilities satisfy."""
     return [name for name in RACES if not meets_racial_requirements(name, abilities)]
+
+
+# ---------------------------------------------------------------------------
+# Thieving skills -- PHB Tables 26 (base), 27 (race), 28 (Dexterity), 29 (armor)
+#
+# The base scores on Table 26 assume the thief is wearing *leather* armor, so
+# Table 29 is a set of adjustments away from that baseline -- "leather" is the
+# zero column and does not appear in the book's table at all.
+#
+# Bards run the same machinery over a four-skill subset with their own base
+# scores (Table 33) and their own, smaller, pool of discretionary points.
+# ---------------------------------------------------------------------------
+
+THIEF_SKILLS = (
+    "Pick Pockets",
+    "Open Locks",
+    "Find/Remove Traps",
+    "Move Silently",
+    "Hide in Shadows",
+    "Detect Noise",
+    "Climb Walls",
+    "Read Languages",
+)
+
+#: No skill may exceed this, "including all adjustments for Dexterity, race,
+#: and armor" (PHB, Thief).
+THIEF_SKILL_MAX = 95
+
+_THIEF_BASE = {                                     # Table 26
+    "Pick Pockets": 15,
+    "Open Locks": 10,
+    "Find/Remove Traps": 5,
+    "Move Silently": 10,
+    "Hide in Shadows": 5,
+    "Detect Noise": 15,
+    "Climb Walls": 60,
+    "Read Languages": 0,
+}
+
+_BARD_SKILLS = ("Climb Walls", "Detect Noise", "Pick Pockets", "Read Languages")
+_BARD_BASE = {                                      # Table 33
+    "Climb Walls": 50,
+    "Detect Noise": 20,
+    "Pick Pockets": 10,
+    "Read Languages": 5,
+}
+
+_THIEF_RACIAL = {                                   # Table 27 (Human: all zero)
+    "Dwarf":    {"Open Locks": 10, "Find/Remove Traps": 15, "Climb Walls": -10,
+                 "Read Languages": -5},
+    "Elf":      {"Pick Pockets": 5, "Open Locks": -5, "Move Silently": 5,
+                 "Hide in Shadows": 10, "Detect Noise": 5},
+    "Gnome":    {"Open Locks": 5, "Find/Remove Traps": 10, "Move Silently": 5,
+                 "Hide in Shadows": 5, "Detect Noise": 10, "Climb Walls": -15},
+    "Half-Elf": {"Pick Pockets": 10, "Hide in Shadows": 5},
+    "Halfling": {"Pick Pockets": 5, "Open Locks": 5, "Find/Remove Traps": 5,
+                 "Move Silently": 10, "Hide in Shadows": 15, "Detect Noise": 5,
+                 "Climb Walls": -15, "Read Languages": -5},
+}
+
+#: Table 28, keyed by Dexterity. Only five skills are affected; scores below 9
+#: and above 19 clamp to the ends of the table.
+_THIEF_DEX = {
+    #      PP,  OL, FRT,  MS,  HS
+    9:  (-15, -10, -10, -20, -10),
+    10: (-10,  -5, -10, -15,  -5),
+    11: (-5,    0,  -5, -10,   0),
+    12: (0,     0,   0,  -5,   0),
+    13: (0,     0,   0,   0,   0),
+    14: (0,     0,   0,   0,   0),
+    15: (0,     0,   0,   0,   0),
+    16: (0,     5,   0,   0,   0),
+    17: (5,    10,   0,   5,   5),
+    18: (10,   15,   5,  10,  10),
+    19: (15,   20,  10,  15,  15),
+}
+_THIEF_DEX_SKILLS = ("Pick Pockets", "Open Locks", "Find/Remove Traps",
+                     "Move Silently", "Hide in Shadows")
+
+#: Table 29. ``leather`` is the baseline the Table 26 scores already assume.
+THIEF_ARMOR_KINDS = ("none", "leather", "elven_chain", "padded_studded", "chain_ring")
+_THIEF_ARMOR = {
+    #                    none, elven_chain, padded_studded, chain_ring
+    "Pick Pockets":      (5,  -20, -30, -25),
+    "Open Locks":        (0,   -5, -10, -10),
+    "Find/Remove Traps": (0,   -5, -10, -10),
+    "Move Silently":     (10, -10, -20, -15),
+    "Hide in Shadows":   (5,  -10, -20, -15),
+    "Detect Noise":      (0,   -5, -10,  -5),
+    "Climb Walls":       (10, -20, -30, -25),
+    "Read Languages":    (0,    0,   0,   0),
+}
+_ARMOR_COLUMN = {"none": 0, "elven_chain": 1, "padded_studded": 2, "chain_ring": 3}
+
+#: Worst armor worn wins, so rank the kinds by how much they hurt.
+_ARMOR_SEVERITY = {kind: i for i, kind in enumerate(THIEF_ARMOR_KINDS)}
+
+
+def thief_skill_class(class_name) -> str:
+    """``"Thief"``, ``"Bard"``, or ``None`` -- who has thieving skills at all."""
+    return class_name if class_name in ("Thief", "Bard") else None
+
+
+def thief_skills_for_class(class_name) -> tuple:
+    """The skills this class may use. Empty for everyone but Thief and Bard."""
+    if class_name == "Thief":
+        return THIEF_SKILLS
+    if class_name == "Bard":
+        return _BARD_SKILLS
+    return ()
+
+
+def thief_skill_base(class_name: str, skill: str) -> int:
+    """Table 26 (thief) or Table 33 (bard) base score for one skill."""
+    table = _BARD_BASE if class_name == "Bard" else _THIEF_BASE
+    return table[skill]
+
+
+def thief_racial_adjustment(race, skill: str) -> int:
+    """Table 27. Bards read off the same table ("as given in the Thief description")."""
+    return _THIEF_RACIAL.get(race, {}).get(skill, 0)
+
+
+def thief_dex_adjustment(dex: int, skill: str) -> int:
+    """Table 28, clamped at both ends. Skills the table ignores return 0."""
+    if skill not in _THIEF_DEX_SKILLS:
+        return 0
+    row = _THIEF_DEX[max(9, min(19, int(dex)))]
+    return row[_THIEF_DEX_SKILLS.index(skill)]
+
+
+def thief_armor_kind(item_names) -> str:
+    """Classify worn body armor into a Table 29 column.
+
+    Helms and shields are not body armor and are ignored. Plate is not armor a
+    thief may legally wear; it lands in the harshest column rather than raising.
+    """
+    body_armor = set(armor_items())
+    worst = "none"
+    for name in item_names:
+        if name not in body_armor or name.startswith("Helm"):
+            continue
+        if name.startswith("Gambeson"):
+            kind = "padded_studded"
+        elif name.startswith("Leather"):
+            kind = "leather"
+        else:                                       # Chain, Plate
+            kind = "chain_ring"
+        if _ARMOR_SEVERITY[kind] > _ARMOR_SEVERITY[worst]:
+            worst = kind
+    return worst
+
+
+def thief_armor_adjustment(armor_kind: str, skill: str) -> int:
+    """Table 29. ``leather`` is the baseline and adjusts nothing."""
+    if armor_kind == "leather":
+        return 0
+    return _THIEF_ARMOR[skill][_ARMOR_COLUMN[armor_kind]]
+
+
+def thief_discretionary_points(class_name, level: int) -> int:
+    """Points to spread across the skills: 60 + 30/level (thief), 20 + 15 (bard)."""
+    level = max(1, int(level))
+    if class_name == "Thief":
+        return 60 + 30 * (level - 1)
+    if class_name == "Bard":
+        return 20 + 15 * (level - 1)
+    return 0
+
+
+def thief_max_points_in_skill(class_name, level: int) -> int:
+    """Cap on points sunk into any *one* skill: 30 at 1st, +15 per level after.
+
+    The book states this cap for thieves only; bards inherit it here so that a
+    1st-level bard cannot dump all 20 points into Climb Walls, which the thief
+    rule plainly means to forbid.
+    """
+    if thief_skill_class(class_name) is None:
+        return 0
+    return 30 + 15 * (max(1, int(level)) - 1)
+
+
+def thief_skill_score(class_name: str, race, dex: int, armor_kind: str,
+                      skill: str, allocated: int = 0) -> int:
+    """Final percentage for one skill, capped at :data:`THIEF_SKILL_MAX`."""
+    total = (thief_skill_base(class_name, skill)
+             + thief_racial_adjustment(race, skill)
+             + thief_dex_adjustment(dex, skill)
+             + thief_armor_adjustment(armor_kind, skill)
+             + int(allocated))
+    return max(0, min(THIEF_SKILL_MAX, total))
+
+
+# ---------------------------------------------------------------------------
+# Turning undead -- PHB Table 61
+#
+# An entry is the d20 roll the priest must meet or beat. "T" turns automatically,
+# "D" destroys automatically, "D*" destroys and takes 2d4 extra creatures with
+# it, and None means this priest cannot affect that kind of undead at all.
+#
+# The table is a perfect diagonal: every row is the row above it shifted one
+# column right. ``test_char_rules`` asserts that, which is what catches a typo
+# in the transcription below.
+# ---------------------------------------------------------------------------
+
+TURN_UNDEAD_TYPES = (
+    "Skeleton or 1 HD",
+    "Zombie",
+    "Ghoul or 2 HD",
+    "Shadow or 3-4 HD",
+    "Wight or 5 HD",
+    "Ghast",
+    "Wraith or 6 HD",
+    "Mummy or 7 HD",
+    "Spectre or 8 HD",
+    "Vampire or 9 HD",
+    "Ghost or 10 HD",
+    "Lich or 11+ HD",
+    "Special",
+)
+
+_T, _D, _DS, _X = "T", "D", "D*", None
+
+#: Columns are priest levels 1..9, then 10-11, 12-13, 14+.
+_TURN_UNDEAD = {
+    "Skeleton or 1 HD": (10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS, _DS, _DS),
+    "Zombie":           (13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS, _DS),
+    "Ghoul or 2 HD":    (16, 13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS, _DS),
+    "Shadow or 3-4 HD": (19, 16, 13, 10,  7,  4, _T, _T, _D, _D, _DS, _DS),
+    "Wight or 5 HD":    (20, 19, 16, 13, 10,  7,  4, _T, _T, _D, _D, _DS),
+    "Ghast":            (_X, 20, 19, 16, 13, 10,  7,  4, _T, _T, _D, _D),
+    "Wraith or 6 HD":   (_X, _X, 20, 19, 16, 13, 10,  7,  4, _T, _T, _D),
+    "Mummy or 7 HD":    (_X, _X, _X, 20, 19, 16, 13, 10,  7,  4, _T, _T),
+    "Spectre or 8 HD":  (_X, _X, _X, _X, 20, 19, 16, 13, 10,  7,  4, _T),
+    "Vampire or 9 HD":  (_X, _X, _X, _X, _X, 20, 19, 16, 13, 10,  7,  4),
+    "Ghost or 10 HD":   (_X, _X, _X, _X, _X, _X, 20, 19, 16, 13, 10,  7),
+    "Lich or 11+ HD":   (_X, _X, _X, _X, _X, _X, _X, 20, 19, 16, 13, 10),
+    "Special":          (_X, _X, _X, _X, _X, _X, _X, _X, 20, 19, 16, 13),
+}
+
+
+def turn_undead_level(class_name, level: int):
+    """The level a character *turns as*, or ``None`` if they cannot turn at all.
+
+    Clerics turn from 1st level at their own level. Paladins "turn undead as
+    priests who are two levels lower", which is why they start at 3rd. Druids
+    and every non-priest class never turn.
+    """
+    level = int(level)
+    if class_name == "Cleric":
+        return level
+    if class_name == "Paladin":
+        effective = level - 2
+        return effective if effective >= 1 else None
+    return None
+
+
+def _turn_column(priest_level: int) -> int:
+    """Table 61's columns collapse above 9th: 10-11, 12-13, 14+."""
+    if priest_level <= 9:
+        return priest_level - 1
+    if priest_level <= 11:
+        return 9
+    if priest_level <= 13:
+        return 10
+    return 11
+
+
+def turn_undead(class_name, level: int):
+    """Map every undead type to this character's Table 61 result, or ``None``.
+
+    Values are an ``int`` (the d20 roll needed), ``"T"``, ``"D"``, ``"D*"``, or
+    ``None`` for undead this character cannot turn.
+    """
+    priest_level = turn_undead_level(class_name, level)
+    if priest_level is None:
+        return None
+    column = _turn_column(priest_level)
+    return {kind: row[column] for kind, row in _TURN_UNDEAD.items()}

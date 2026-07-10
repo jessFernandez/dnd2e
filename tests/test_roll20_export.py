@@ -16,8 +16,8 @@ def _cleric() -> Character:
     c.inventory = {armor: 1, "Dagger": 1}
     c.worn = [armor]
     c.nonweapon_profs = {"Healing": 1, "Anatomy": 1}
-    c.weapon_profs = ["Mace"]
-    c.spells = ["Bless"]
+    c.weapon_profs = {"Mace": "proficient"}
+    c.spells = {"Bless": 1}
     return c
 
 
@@ -39,7 +39,7 @@ def test_export_repeating_sections():
     d = rx.character_to_roll20(c, {"Bless": {"school": "Combat", "casting_time": "1 rd"}})
     dagger = next(w for w in d["weapons"] if w["name"] == "Dagger")
     assert dagger["damage"] == "1d4"                  # 'd4' normalized to '1d4'
-    assert "Mace" in d["weapon_profs"]
+    assert {"name": "Mace", "slots": 1, "rung": "proficient"} in d["weapon_profs"]
     healing = next(n for n in d["nwp"] if n["name"] == "Healing")
     assert healing["stat"] == "willpower"             # Wisdom-based prof -> willpower token
     assert healing["base"] == c.proficiency_skill("Healing") - c.final_abilities()["Wisdom"]
@@ -63,6 +63,41 @@ def test_export_armor_and_spell_details():
     assert sp["description"].startswith("Bless")
     assert sp["save"] == "None" and sp["materials"] == "holy water"
     assert sp["verbal"] == 1 and sp["somatic"] == 1 and sp["material"] == 1
+
+
+def test_export_spells_carry_their_own_level():
+    c = _cleric()
+    c.spells = {"Bless": 1, "Silence": 2, "Prayer": 3}
+    d = rx.character_to_roll20(c)
+    by_name = {s["name"]: s["level"] for s in d["spells"]}
+    assert by_name == {"Bless": 1, "Silence": 2, "Prayer": 3}   # drives repeating_spells<N>
+
+
+def test_export_reflects_shield_and_armor_proficiency():
+    c = _cleric()
+    c.inventory = {"Chain, Full": 1, "Shield, Aspis": 1}
+    c.worn = ["Chain, Full", "Shield, Aspis"]
+    c.shield_profs = ["Shield, Aspis"]
+    c.armor_profs = ["Chain, Full"]
+    d = rx.character_to_roll20(c)
+    aac = {a["name"]: a["aac"] for a in d["armor"]}
+    assert aac["Shield, Aspis"] == 3                # +2 -> +3 for a proficient wielder
+    weights = {g["name"]: g["weight"] for g in d["gear"]}
+    assert weights["Chain, Full"] == 20.0           # half encumbrance, as the builder shows
+    assert weights["Shield, Aspis"] == cr.item("Shield, Aspis")["weight"]
+
+
+def test_export_carries_level_and_xp():
+    import random
+    c = _cleric()
+    d = rx.character_to_roll20(c)
+    assert d["player_level"] == 1 and d["xp"] == 0      # default level-1 build
+    c.set_level(6, rng=random.Random(3))
+    c.xp = 55000
+    d = rx.character_to_roll20(c)
+    assert d["player_level"] == 6 and d["xp"] == 55000
+    assert d["hp_max"] == c.max_hp()                     # HP follows the level
+    assert d["attack_base"] == c.attack_bonus()          # so do THAC0-derived stats
 
 
 def test_movement_by_race():

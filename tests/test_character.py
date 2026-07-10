@@ -50,6 +50,99 @@ def test_unknown_ability_rejected():
         ch.Character().assign_ability("Luck", 12)
 
 
+# ── leveling ─────────────────────────────────────────────────────────────────
+
+def _fighter(**over):
+    c = _with(**over)
+    c.race, c.char_class = "Human", "Fighter"
+    return c
+
+
+def test_new_character_starts_at_level_1():
+    c = _fighter()
+    assert c.level == 1 and c.xp == 0 and c.hp_rolls == []
+    assert c.max_hp() == cr.max_hp_at_first_level("Fighter", c.final_abilities()["Constitution"])
+
+
+def test_set_level_rolls_and_stores_hit_dice():
+    c = _fighter()
+    c.set_level(4, rng=random.Random(1))
+    assert c.level == 4
+    assert len(c.hp_rolls) == 3                       # levels 2,3,4
+    assert all(1 <= r <= c.hit_die() for r in c.hp_rolls)
+    # HP reflects the stored rolls, not a reroll
+    assert c.max_hp() == cr.hp_at_level("Fighter", 4, c.final_abilities()["Constitution"],
+                                        c.hp_rolls)
+
+
+def test_level_down_discards_rolls_then_up_rerolls():
+    c = _fighter()
+    c.set_level(5, rng=random.Random(2))
+    assert len(c.hp_rolls) == 4
+    c.set_level(2, rng=random.Random(2))
+    assert c.level == 2 and len(c.hp_rolls) == 1      # truncated
+    c.set_level(5, rng=random.Random(3))
+    assert len(c.hp_rolls) == 4                       # refilled
+
+
+def test_set_level_clamps_to_racial_limit():
+    c = _fighter()
+    c.race = "Dwarf"                                  # Dwarf Fighter caps at 15
+    assert c.set_level(20, rng=random.Random(4)) == 15
+    assert c.level == 15
+    c2 = _fighter()                                   # Human: unlimited
+    assert c2.max_level() is None
+    assert c2.set_level(18, rng=random.Random(4)) == 18
+
+
+def test_set_level_rejects_below_one():
+    with pytest.raises(ValueError):
+        _fighter().set_level(0)
+
+
+def test_reroll_hp_keeps_count_changes_values():
+    c = _fighter()
+    c.set_level(6, rng=random.Random(5))
+    before = list(c.hp_rolls)
+    c.reroll_hp(rng=random.Random(99))
+    assert len(c.hp_rolls) == len(before) and c.hp_rolls != before
+
+
+def test_stats_scale_with_level():
+    c = _fighter()
+    lvl1_slots, lvl1_thac0 = c.weapon_slots_total(), c.thac0()
+    c.set_level(7, rng=random.Random(6))
+    assert c.weapon_slots_total() > lvl1_slots        # Table 34: +1 slot / 3 levels
+    assert c.thac0() < lvl1_thac0                     # THAC0 improves (lower is better)
+    assert c.attacks_per_round() == (3, 2)            # warrior 3/2 at 7th
+    assert c.nonweapon_slots_total() >= 3
+
+
+def test_level_from_xp():
+    c = _fighter()
+    c.xp = cr.xp_for_level("Fighter", 5)
+    assert c.level_from_xp() == 5
+    assert c.level == 1                               # xp does not auto-level
+
+
+def test_legacy_save_without_level_loads_as_level_1():
+    legacy = _fighter().to_dict()
+    for key in ("level", "xp", "hp_rolls"):
+        legacy.pop(key)
+    c = ch.Character.from_dict(legacy)
+    assert c.level == 1 and c.xp == 0 and c.hp_rolls == []
+    assert c.max_hp() is not None                     # and still computes
+
+
+def test_level_survives_a_save_load_round_trip():
+    c = _fighter()
+    c.set_level(6, rng=random.Random(7))
+    c.xp = 40000
+    back = ch.Character.from_dict(c.to_dict())
+    assert (back.level, back.xp, back.hp_rolls) == (6, 40000, c.hp_rolls)
+    assert back.max_hp() == c.max_hp()
+
+
 # ── movement + spell limits ──────────────────────────────────────────────────
 
 def test_movement_by_race():
@@ -65,14 +158,14 @@ def test_wizard_spell_limit_capped_by_intelligence():
     assert c.spellcasting_group() == "wizard"
     assert c.spell_limit() == cr.intelligence_mods(11).max_spells_per_level  # 7
     assert c.spells_left() == 7 and c.can_add_spell()
-    c.spells = list("abcdefg")                            # 7 chosen -> full
+    c.spells = {n: 1 for n in "abcdefg"}                  # 7 chosen -> full
     assert c.spells_left() == 0 and not c.can_add_spell()
 
 
 def test_wizard_high_intelligence_is_unlimited():
     c = _with(Intelligence=19); c.race, c.char_class = "Human", "Mage"
     assert c.spell_limit() is None and c.spells_left() is None
-    c.spells = list("abcdefghij")
+    c.spells = {n: 1 for n in "abcdefghij"}
     assert c.can_add_spell()                              # no cap at Int 19+ ("All")
 
 
@@ -80,13 +173,45 @@ def test_priest_spell_limit_from_wisdom_slots():
     c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
     assert c.spellcasting_group() == "priest"
     assert c.spell_limit() == 3                           # 1 base + 2 Wis bonus
-    c.spells = ["x", "y", "z"]
+    c.spells = {"x": 1, "y": 1, "z": 1}
     assert c.spells_left() == 0 and not c.can_add_spell()
 
 
 def test_noncaster_has_no_spell_limit():
     c = _with(); c.race, c.char_class = "Human", "Fighter"
     assert c.spell_limit() is None and c.can_add_spell()
+    assert c.spell_slots() == {} and not c.casts_spells()
+
+
+def test_spell_slots_and_limits_are_per_spell_level():
+    c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
+    c.set_level(5, rng=random.Random(1))
+    assert c.spell_slots() == {1: 5, 2: 3, 3: 1}       # 3/3/1 base, +2 Wis bonus at 1st
+    assert c.max_spell_level() == 3
+    assert c.spell_limit(1) == 5 and c.spell_limit(2) == 3 and c.spell_limit(3) == 1
+    assert c.spell_limit(4) == 0                       # not castable yet
+    c.spells = {"Prayer": 3}
+    assert not c.can_add_spell(3) and c.can_add_spell(1)
+    assert c.spells_at(3) == ["Prayer"] and c.spells_at(1) == []
+
+
+def test_late_casters_have_no_slots_before_their_level():
+    for cls, first in (("Paladin", 9), ("Ranger", 8), ("Bard", 2)):
+        c = _with(Intelligence=16, Wisdom=16)
+        c.race, c.char_class = "Human", cls
+        assert c.spellcasting_group() is not None       # they *are* casters...
+        assert not c.casts_spells()                     # ...just not yet at 1st
+        c.set_level(first, rng=random.Random(2))
+        assert c.casts_spells() and c.spell_slots() == {1: 1}
+
+
+def test_legacy_spell_list_migrates_to_levelled_dict():
+    c = _with(Wisdom=14); c.race, c.char_class = "Human", "Cleric"
+    legacy = c.to_dict()
+    legacy["spells"] = ["Bless", "Cure Light Wounds"]   # the old flat list
+    back = ch.Character.from_dict(legacy)
+    assert back.spells == {"Bless": 1, "Cure Light Wounds": 1}   # all were 1st level
+    assert back.spells_at(1) == ["Bless", "Cure Light Wounds"]
 
 
 def test_out_of_range_scores_flagged():
@@ -256,9 +381,9 @@ def test_proficiency_slot_budgets():
     c.race, c.char_class = "Human", "Fighter"
     assert c.weapon_slots_total() == 4
     assert c.nonweapon_slots_total() == 3 + 3           # Fighter 3 + Int-13 bonus (3)
-    c.weapon_profs = ["Long Sword", "Light Crossbow"]   # 1 + 0 (crossbow free)
-    assert c.weapon_slots_used() == 1 and c.weapon_slots_left() == 3
-    c.weapon_profs.append("Long Bow")                   # +2 (house rule)
+    c.weapon_profs = {"Long Sword": "proficient", "Light Crossbow": "proficient"}
+    assert c.weapon_slots_used() == 1 and c.weapon_slots_left() == 3   # 1 + 0 (free)
+    c.weapon_profs["Long Bow"] = "proficient"           # +2 (house rule)
     assert c.weapon_slots_used() == 3
 
 
@@ -286,11 +411,11 @@ def test_can_buy_ambidexterity_warrior_or_rogue_only():
 def test_serialization_preserves_proficiencies():
     c = _with()
     c.race, c.char_class = "Human", "Fighter"
-    c.weapon_profs = ["Long Sword"]
+    c.weapon_profs = {"Long Sword": "proficient"}
     c.nonweapon_profs = {"Swimming": 2}
     c.bought_ambidexterity = True
     r = ch.Character.from_dict(c.to_dict())
-    assert r.weapon_profs == ["Long Sword"] and r.nonweapon_profs == {"Swimming": 2}
+    assert r.weapon_profs == {"Long Sword": "proficient"} and r.nonweapon_profs == {"Swimming": 2}
     assert r.bought_ambidexterity is True
 
 
@@ -320,7 +445,7 @@ def test_serialization_preserves_equipment_and_spells():
     c.money_cp = 12345
     c.inventory = {"Gambeson, Body": 1}
     c.worn = ["Gambeson, Body"]
-    c.spells = ["Bless", "Cure Light Wounds"]
+    c.spells = {"Bless": 1, "Cure Light Wounds": 1}
     r = ch.Character.from_dict(json.loads(json.dumps(c.to_dict())))
     assert r.money_cp == 12345 and r.inventory == c.inventory
     assert r.worn == c.worn and r.spells == c.spells

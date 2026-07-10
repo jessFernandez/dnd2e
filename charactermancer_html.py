@@ -5,30 +5,87 @@ the content view. Actions are `dnd:///cm/<verb>/…` links / `location.href`
 navigations that app.py intercepts and feeds to `cm.dispatch()`, after which the
 page is re-rendered — the same in-place round-trip the Jarvis screen uses.
 
-Only the Ability Scores step is fully built (the walking-skeleton vertical slice);
-the remaining steps render a placeholder so navigation works end-to-end. They'll
-be filled in one at a time, each reusing this shell.
+This module owns the document shell (CSS, progress rail, footer, the in-place
+`.wrap` swap) and every step but the two proficiency ones, which grew big enough
+to live in `charactermancer_profs_html`. The primitives both of those need are in
+`charactermancer_common`, so neither has to import the other.
 
 Layout note: QtWebEngine (Chromium 87) mis-renders flexbox `gap`, so spacing uses
 CSS grid `gap` (which works) or explicit margins — never flex `gap`.
 """
-import html
+import json
 
 import char_rules as cr
 from charactermancer import STEPS, STEP_TITLES
-
-ACCENT = "#c9a84c"
+from charactermancer_common import ABBR, ACCENT, budget_bar, esc
+from charactermancer_profs_html import _nonweapon_body, _weapons_body
 
 
 # ── small helpers ────────────────────────────────────────────────────────────
 
-def _esc(s) -> str:
-    return html.escape(str(s), quote=True)
-
-
 def _exstr_label(roll: int) -> str:
     """Display form of an exceptional-Strength percentile roll, e.g. 76 -> '18/76'."""
     return "18/00" if roll in (0, 100) else f"18/{roll:02d}"
+
+
+def _ordinal(n: int) -> str:
+    """1 -> '1st', 7 -> '7th', 12 -> '12th', 21 -> '21st'."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _next_level_xp(c):
+    """XP needed for the next level, or None past the tabulated range."""
+    try:
+        return cr.xp_for_level(c.char_class, c.level + 1)
+    except (ValueError, KeyError):
+        return None
+
+
+def _attacks_label(c) -> str:
+    """'1' / '3/2' / '2' attacks per round."""
+    atks = c.attacks_per_round()
+    if not atks:
+        return "&mdash;"
+    n, rounds = atks
+    return str(n) if rounds == 1 else f"{n}/{rounds}"
+
+
+def _level_field(cm) -> str:
+    """Level stepper + the stored hit-die rolls. Rendered on the Class step (so the
+    slot budgets downstream are already right) and again on the finished sheet."""
+    c = cm.character
+    if not c.char_class:
+        return ""
+    cap = c.max_level()
+    at_cap = cap is not None and c.level >= cap
+    minus = (f'<a class="slot-btn" href="dnd:///cm/level/{c.level - 1}">&minus;</a>'
+             if c.level > 1 else '<span class="slot-btn off">&minus;</span>')
+    plus = ('<span class="slot-btn off">+</span>' if at_cap else
+            f'<a class="slot-btn" href="dnd:///cm/level/{c.level + 1}">+</a>')
+    cap_txt = "unlimited" if cap is None else str(cap)
+
+    nxt = _next_level_xp(c)
+    xp_note = (f'Next level at {nxt:,} XP.' if nxt and not at_cap
+               else ('At the racial level limit.' if at_cap else ""))
+
+    rolls = ""
+    if c.hp_rolls:
+        vals = ", ".join(str(r) for r in c.hp_rolls)
+        rolls = ('<div class="hint">Hit dice rolled after 1st: '
+                 f'{vals} &middot; <a class="reroll" href="dnd:///cm/rerollhp">reroll</a></div>')
+
+    return (
+        '<div class="field"><label>Level '
+        f'<span class="hint">(max {cap_txt})</span></label>'
+        f'<div class="hand-row"><div class="pr-slots">{minus}'
+        f'<span class="pr-sn">{c.level}</span>{plus}</div>'
+        f'<span class="hint" style="margin-left:14px">{xp_note}</span></div>'
+        f'{rolls}</div>'
+    )
 
 
 def _ability_summary(ability: str, score: int, exceptional: int = None) -> str:
@@ -62,6 +119,15 @@ def _ability_summary(ability: str, score: int, exceptional: int = None) -> str:
 
 # ── the progress rail ────────────────────────────────────────────────────────
 
+# Short labels for the progress rail; with ten steps the columns are ~85px wide, so
+# the full step titles don't fit. The step heading still uses STEP_TITLES.
+_RAIL_LABELS = {
+    "abilities": "Abilities",
+    "weapons": "Weapons",
+    "nonweapon": "Nonweapon",
+}
+
+
 def _rail(cm) -> str:
     cells = []
     for i, step in enumerate(STEPS):
@@ -70,7 +136,7 @@ def _rail(cm) -> str:
         # a step is reachable if every earlier step is complete
         reachable = all(cm.is_complete(STEPS[j]) for j in range(i))
         cls = "cur" if current else ("done" if done else "todo")
-        label = STEP_TITLES[step]
+        label = _RAIL_LABELS.get(step, STEP_TITLES[step])
         inner = (f'<span class="rn">{i + 1}</span><span class="rl">{label}</span>')
         if reachable and not current:
             cells.append(f'<a class="rail-step {cls}" href="dnd:///cm/goto/{step}">{inner}</a>')
@@ -167,8 +233,6 @@ def _eligibility_panel(cm) -> str:
     )
 
 
-_ABBR = {"Strength": "Str", "Dexterity": "Dex", "Constitution": "Con",
-         "Intelligence": "Int", "Wisdom": "Wil", "Charisma": "Cha", "Perception": "Per"}
 
 # The campaign calls Wisdom "Willpower". The rules model keeps the internal name
 # "Wisdom" (all char_rules tables key on it); only the display label changes.
@@ -215,7 +279,7 @@ def _summary_panel(cm) -> str:
         moved = adjusted and base is not None and v != base
         val = "&mdash;" if v is None else (f'{v}<span class="adj">&nbsp;({base:+d}&rarr;)</span>'
                                            if moved else str(v))
-        ab_rows += f'<div class="sm-ab"><span>{_ABBR[a]}</span><span>{val}</span></div>'
+        ab_rows += f'<div class="sm-ab"><span>{ABBR[a]}</span><span>{val}</span></div>'
 
     picks = (f'<div class="sm-pick"><span>Race</span><span>{c.race or "&mdash;"}</span></div>'
              f'<div class="sm-pick"><span>Class</span><span>{c.char_class or "&mdash;"}</span></div>'
@@ -241,12 +305,13 @@ def _derived_block(cm) -> str:
     maxlvl_txt = "unlimited" if maxlvl is None else str(maxlvl)
     xp = '<span class="badge">+10% XP</span>' if c.xp_bonus() else ""
     return (
-        '<div class="side-sub">At 1st level</div>'
+        f'<div class="side-sub">At {_ordinal(c.level)} level</div>'
         '<div class="dstats">'
         f'<div class="ds"><span>Hit Die</span><span>d{c.hit_die()}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{c.max_hp()}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{c.attack_bonus():+d}</span></div>'
         f'<div class="ds"><span>THAC0</span><span>{c.thac0()}</span></div>'
+        f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Wpn slots</span><span>{c.weapon_slots()}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{c.nonweapon_slots()}</span></div>'
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}</span></div>'
@@ -261,7 +326,7 @@ def _derived_block(cm) -> str:
 
 def _adj_text(race) -> str:
     adj = cr.RACES[race].adjustments
-    return ", ".join(f"{d:+d} {_ABBR[a]}" for a, d in adj.items()) or "No adjustments"
+    return ", ".join(f"{d:+d} {ABBR[a]}" for a, d in adj.items()) or "No adjustments"
 
 
 def _race_classes_text(race) -> str:
@@ -289,9 +354,9 @@ def _race_card(cm, race) -> str:
         f'<div class="pc-classes">{_race_classes_text(race)}</div>'
     )
     if r.notes:
-        body += f'<div class="pc-note">{_esc(r.notes[0])}</div>'
+        body += f'<div class="pc-note">{esc(r.notes[0])}</div>'
     if not eligible:
-        why = "; ".join(f"{_ABBR[a]} {lo}–{hi} (have {v})" for a, lo, hi, v in fails)
+        why = "; ".join(f"{ABBR[a]} {lo}–{hi} (have {v})" for a, lo, hi, v in fails)
         body += f'<div class="pc-bad">Requires {why}</div>'
 
     if eligible:
@@ -311,7 +376,7 @@ def _class_unavailable_reason(c, class_name) -> str:
         return f"{c.race}s cannot be {class_name}s"
     fails = cr.meets_class_minimums(class_name, c.final_abilities())
     if fails:
-        return "Needs " + ", ".join(f"{_ABBR[a]} {m}+ (have {v})" for a, m, v in fails)
+        return "Needs " + ", ".join(f"{ABBR[a]} {m}+ (have {v})" for a, m, v in fails)
     return ""
 
 
@@ -322,8 +387,8 @@ def _class_card(cm, class_name) -> str:
     selected = c.char_class == class_name
     cls = "pick-card" + (" sel" if selected else "") + ("" if available else " dis")
 
-    mins = ", ".join(f"{_ABBR[a]} {m}" for a, m in k.minimums.items()) or "none"
-    prime = "/".join(_ABBR[a] for a in k.prime_requisites)
+    mins = ", ".join(f"{ABBR[a]} {m}" for a, m in k.minimums.items()) or "none"
+    prime = "/".join(ABBR[a] for a in k.prime_requisites)
     hd = cr.hit_die(class_name, c.house_rules)
     align = (" · " + "/".join(k.allowed_alignments)) if k.allowed_alignments else ""
     maxlvl = ""
@@ -348,7 +413,9 @@ def _class_card(cm, class_name) -> str:
 
 def _class_body(cm, saved=None) -> str:
     cards = "".join(_class_card(cm, k) for k in cr.CLASSES)
-    return f'<div class="pick-grid">{cards}</div>{_exstr_callout(cm)}'
+    # Level lives here, not on Details: it sets the proficiency-slot budgets that
+    # the later Proficiencies step spends.
+    return f'<div class="pick-grid">{cards}</div>{_exstr_callout(cm)}{_level_field(cm)}'
 
 
 # ── Alignment step ───────────────────────────────────────────────────────────
@@ -389,28 +456,6 @@ def _alignment_body(cm, saved=None):
 
 # ── Details step ─────────────────────────────────────────────────────────────
 
-def _handedness_field(cm) -> str:
-    """House-rule handedness roll (d10, 10 = ambidextrous). Rendered in the
-    Proficiencies step, not Details: ambidexterity affects which weapon
-    proficiencies you take (a natural 10 grants it free; otherwise warriors and
-    rogues may buy it for a slot)."""
-    c = cm.character
-    if c.handedness_roll is None and not c.ambidextrous:
-        hand = '<span class="hint">Not yet rolled.</span>'
-    elif c.ambidextrous:
-        why = "Ranger — automatically ambidextrous" if c.char_class == "Ranger" \
-            else f"Rolled {c.handedness_roll}"
-        hand = f'<span class="hand-res">Ambidextrous</span> <span class="hint">({why})</span>'
-    else:
-        hand = (f'<span class="hand-res">Right-handed</span> '
-                f'<span class="hint">(rolled {c.handedness_roll})</span>')
-    return (
-        '<div class="field"><label>Handedness '
-        '<span class="hint">(house rule: d10, 10 = ambidextrous)</span></label>'
-        '<div class="hand-row"><a class="btn" href="dnd:///cm/handedness">🎲 Roll d10</a>'
-        f'{hand}</div></div>'
-    )
-
 
 def _details_body(cm, saved=None):
     c = cm.character
@@ -418,10 +463,10 @@ def _details_body(cm, saved=None):
 
     return (
         '<div class="field"><label>Name <span class="req">*</span></label>'
-        f'<input class="tf" value="{_esc(c.name)}" placeholder="Character name" '
+        f'<input class="tf" value="{esc(c.name)}" placeholder="Character name" '
         'onchange="cmText(\'name\', this.value)" autocomplete="off"></div>'
         '<div class="field"><label>Gender</label>'
-        f'<input class="tf" value="{_esc(c.gender)}" placeholder="(optional)" '
+        f'<input class="tf" value="{esc(c.gender)}" placeholder="(optional)" '
         'onchange="cmText(\'gender\', this.value)" autocomplete="off"></div>'
         f'{aging}'
     )
@@ -459,13 +504,21 @@ def _review_age_row(c) -> str:
 
 
 def _review_profs(c) -> str:
-    weapons = list(c.weapon_profs) + (["Ambidexterity"] if c.bought_ambidexterity else [])
-    wp = ", ".join(_esc(w) for w in weapons) or "none"
+    weapons = [w if rung == "proficient" else f"{w} ({cr.RUNG_LABELS[rung]})"
+               for w, rung in c.weapon_profs.items()]
+    weapons += [f"{g} group" for g in c.weapon_groups]
+    weapons += [f"{s} (shield prof.)" for s in c.shield_profs]
+    weapons += [f"{a} (armor prof.)" for a in c.armor_profs]
+    weapons += [f"{s} style" + (" (specialised)" if c.style_specialisation(s) else "")
+                for s in c.fighting_styles]
+    weapons += [f"{d} ({cr.RUNG_LABELS[r]})" for d, r in c.unarmed_profs.items()]
+    weapons += list(c.special_talents)
+    wp = ", ".join(esc(w) for w in weapons) or "none"
     nwp = ""
     for name in c.nonweapon_profs:
         skill = c.proficiency_skill(name)
         tag = f' ({skill})' if skill is not None else ""
-        nwp += f'<span class="chip">{_esc(name)}{tag}</span>'
+        nwp += f'<span class="chip">{esc(name)}{tag}</span>'
     nwp = nwp or '<span class="hint">none</span>'
     return (f'<div class="ds"><span>Weapons</span><span>{wp}</span></div>'
             f'<div class="side-sub" style="margin-top:8px">Nonweapon</div>'
@@ -474,9 +527,9 @@ def _review_profs(c) -> str:
 
 def _review_equipment(c) -> str:
     items = "".join(
-        f'<span class="chip">{_esc(n)}{(" ×" + str(q)) if q > 1 else ""}</span>'
+        f'<span class="chip">{esc(n)}{(" ×" + str(q)) if q > 1 else ""}</span>'
         for n, q in c.inventory.items()) or '<span class="hint">none</span>'
-    worn = ", ".join(_esc(n) for n in c.worn) or "none"
+    worn = ", ".join(esc(n) for n in c.worn) or "none"
     enc = c.encumbrance() or "—"
     return (
         f'<div class="ds"><span>Coins</span><span>{_money(c.money_cp)}</span></div>'
@@ -487,11 +540,59 @@ def _review_equipment(c) -> str:
 
 
 def _review_spells(c) -> str:
-    if not c.spellcasting_group():
-        return '<span class="hint">No spells at 1st level.</span>'
-    sp = "".join(f'<span class="chip">{_esc(n)}</span>' for n in c.spells) \
-        or '<span class="hint">none chosen</span>'
-    return f'<div class="chips">{sp}</div>'
+    slots = c.spell_slots()
+    if not slots:
+        return f'<span class="hint">No spells at {_ordinal(c.level)} level.</span>'
+    if not c.spells:
+        return '<span class="hint">none chosen</span>'
+    out = ""
+    for lvl in sorted(slots):
+        names = sorted(c.spells_at(lvl))
+        if not names:
+            continue
+        chips = "".join(f'<span class="chip">{esc(n)}</span>' for n in names)
+        out += (f'<div class="side-sub">{_ordinal(lvl)} level</div>'
+                f'<div class="chips">{chips}</div>')
+    return out or '<span class="hint">none chosen</span>'
+
+
+def _review_thief_skills(c) -> str:
+    """A thief's or bard's percentage skills, only for the classes that have them."""
+    if not c.has_thief_skills():
+        return ""
+    rows = "".join(
+        f'<div class="ds"><span>{esc(skill)}</span><span>{score}%</span></div>'
+        for skill, score in c.thief_skill_scores().items())
+    left = c.thief_points_left()
+    note = (f'<div class="hint">{left} discretionary points still unspent.</div>'
+            if left else "")
+    return ('<div class="rv-block"><div class="rv-h">Thieving Skills</div>'
+            f'{rows}{note}</div>')
+
+
+def _review_turn_undead(c) -> str:
+    """The character's row of PHB Table 61, for clerics and paladins of 3rd or better."""
+    results = c.turn_undead()
+    if not results:
+        return ""
+    rows = ""
+    for kind, result in results.items():
+        if result is None:
+            shown = '<span class="hint">&mdash;</span>'
+        elif result == "D*":
+            shown = 'D <span class="badge">+2d4</span>'
+        elif result in ("T", "D"):
+            shown = result
+        else:
+            shown = f"{result}+"
+        rows += f'<div class="ds"><span>{esc(kind)}</span><span>{shown}</span></div>'
+    turns_as = c.turn_undead_level()
+    aside = (f" (as a {_ordinal(turns_as)}-level priest)"
+             if c.char_class == "Paladin" else "")
+    return ('<div class="rv-block"><div class="rv-h">Turn Undead</div>'
+            f'<div class="hint">Roll d20 and meet the number{aside}. '
+            'T turns automatically, D destroys.</div>'
+            f'{rows}</div>')
 
 
 def _review_body(cm, saved=None):
@@ -501,7 +602,7 @@ def _review_body(cm, saved=None):
     for a in c.ability_names():
         v = final.get(a)
         exc = c.exceptional_str if a == "Strength" else None
-        ab += (f'<div class="rv-ab"><span class="rv-abn">{_ABBR[a]}</span>'
+        ab += (f'<div class="rv-ab"><span class="rv-abn">{ABBR[a]}</span>'
                f'<span class="rv-abv">{v}</span>'
                f'<span class="rv-abs">{_ability_summary(a, v, exc) if v is not None else ""}</span></div>')
 
@@ -522,16 +623,18 @@ def _review_body(cm, saved=None):
     hd = c.hit_die()
     sheet = (
         '<div class="sheet">'
-        f'<div class="sheet-head"><div class="sheet-name">{_esc(c.name) or "Unnamed"}</div>'
-        f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · {c.alignment or "—"}</div></div>'
+        f'<div class="sheet-head"><div class="sheet-name">{esc(c.name) or "Unnamed"}</div>'
+        f'<div class="sheet-sub">{c.race or "—"} {c.char_class or ""} · '
+        f'{_ordinal(c.level)} level · {c.alignment or "—"}</div></div>'
         f'<div class="rv-abgrid">{ab}</div>'
         '<div class="rv-cols">'
-        '<div class="rv-block"><div class="rv-h">Combat (1st level)</div>'
+        f'<div class="rv-block"><div class="rv-h">Combat ({_ordinal(c.level)} level)</div>'
         f'<div class="ds"><span>Hit Die</span><span>{"d" + str(hd) if hd else "—"}</span></div>'
         f'<div class="ds"><span>Max HP</span><span>{_f(c.max_hp())}</span></div>'
         f'<div class="ds"><span>Armor Class</span><span>{_f(c.armor_class())}</span></div>'
         f'<div class="ds"><span>Attack bonus</span><span>{_f(c.attack_bonus(), sign=True)}</span></div>'
         f'<div class="ds"><span>THAC0</span><span>{_f(c.thac0())}</span></div>'
+        f'<div class="ds"><span>Attacks/round</span><span>{_attacks_label(c)}</span></div>'
         f'<div class="ds"><span>Weapon slots</span><span>{_f(c.weapon_slots())}</span></div>'
         f'<div class="ds"><span>NWP slots</span><span>{_f(c.nonweapon_slots())}</span></div>'
         f'<div class="ds"><span>Max level</span><span>{maxlvl_txt}{xp}</span></div>'
@@ -549,9 +652,15 @@ def _review_body(cm, saved=None):
         '<div class="rv-block"><div class="rv-h">Spells</div>'
         f'{_review_spells(c)}'
         '</div>'
+        f'{_review_thief_skills(c)}'
+        f'{_review_turn_undead(c)}'
         '</div>'
         '</div>'
     )
+
+    # Level up the finished character in place (same widget as the Class step).
+    advance = f'<div class="saved-box" style="margin-bottom:16px">{_level_field(cm)}</div>' \
+        if c.char_class else ""
 
     save_label = "💾 Update saved" if cm.saved_id else "💾 Save character"
     saved_note = '<span class="saved-ok">Saved ✓</span>' if cm.saved_id else ""
@@ -562,7 +671,7 @@ def _review_body(cm, saved=None):
         '<a class="nav-btn" href="dnd:///cm/restart">＋ New character</a>'
         '</div>'
     )
-    return sheet + actions + _saved_list(saved, heading="Saved characters")
+    return sheet + advance + actions + _saved_list(saved, heading="Saved characters")
 
 
 # ── saved-character list (shared: review + abilities entry) ──────────────────
@@ -577,8 +686,8 @@ def _saved_list(saved, heading="Load a saved character", compact=False) -> str:
         meta = " · ".join(x for x in (race, klass, align) if x)
         rows += (
             '<div class="sc-row">'
-            f'<a class="sc-load" href="dnd:///cm/load/{cid}">{_esc(name) or "Unnamed"}'
-            f'<span class="sc-meta">{_esc(meta)}</span></a>'
+            f'<a class="sc-load" href="dnd:///cm/load/{cid}">{esc(name) or "Unnamed"}'
+            f'<span class="sc-meta">{esc(meta)}</span></a>'
             f'<a class="sc-del" href="dnd:///cm/delete/{cid}" title="Delete">✕</a>'
             '</div>'
         )
@@ -590,169 +699,6 @@ def ch_alignments():
     # imported lazily to avoid a hard import cycle at module load
     from character import ALIGNMENTS
     return ALIGNMENTS
-
-
-# ── Proficiencies step ───────────────────────────────────────────────────────
-
-def _prof_meta(p) -> str:
-    """The compact 'Str +0' / 'no check' meta shown on a proficiency chip."""
-    if p.ability:
-        return f'{_ABBR.get(p.ability, p.ability)} {p.modifier:+d}'
-    return "no check"
-
-
-def _prof_tooltip(p) -> str:
-    """A one-line hover summary of a proficiency's rules text."""
-    desc = " ".join((p.description or "").split())
-    return desc if len(desc) <= 280 else desc[:277].rstrip() + "…"
-
-
-def _prof_description_html(p) -> str:
-    """The full rules text as an expandable block (paragraphs preserved)."""
-    if not p.description:
-        return ""
-    paras = "".join(f"<p>{_esc(par)}</p>"
-                    for par in p.description.split("\n\n") if par.strip())
-    return (f'<details class="pr-desc"><summary>What it does</summary>'
-            f'<div class="pr-desc-body">{paras}</div></details>')
-
-
-def _slot_cost_label(cost: int) -> str:
-    return "free" if cost == 0 else str(cost)
-
-
-def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> str:
-    left = total - used
-    pct = 0 if total <= 0 else min(100, round(used / total * 100))
-    return (
-        '<div class="budget">'
-        f'<div class="budget-top"><span>{label}</span>'
-        f'<span class="budget-num">{left} left</span></div>'
-        f'<div class="bar"><div class="bar-fill" style="width:{pct}%"></div></div>'
-        f'<div class="budget-sub">{used} of {total} {unit}</div>'
-        '</div>'
-    )
-
-
-def _weapon_section(cm) -> str:
-    c = cm.character
-    total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
-
-    chosen = ""
-    for w in c.weapon_profs:
-        cost = cr.weapon_slot_cost(w, c.house_rules)
-        chosen += (f'<a class="chip-x" href="dnd:///cm/rmweapon/{w}">{w}'
-                   f'<span class="cx-cost">{_slot_cost_label(cost)}</span>✕</a>')
-    if c.bought_ambidexterity:
-        chosen += ('<a class="chip-x" href="dnd:///cm/ambi">Ambidexterity'
-                   '<span class="cx-cost">1</span>✕</a>')
-    if not chosen:
-        chosen = '<span class="hint">No weapons chosen yet.</span>'
-
-    opts = ""
-    if c.can_buy_ambidexterity() and not c.bought_ambidexterity:
-        cost = cr.HOUSE_RULES.ambidexterity_slot_cost
-        dis = "" if cost <= left else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/ambi"><span class="opt-name">Ambidexterity</span>'
-                 f'<span class="opt-cost">{cost}</span></a>')
-    for w in cr.WEAPONS:
-        if w in c.weapon_profs:
-            continue
-        cost = cr.weapon_slot_cost(w, c.house_rules)
-        dis = "" if cost <= left else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/addweapon/{w}"><span class="opt-name">{w}</span>'
-                 f'<span class="opt-cost">{_slot_cost_label(cost)}</span></a>')
-
-    return (
-        '<section class="prof-sec">'
-        '<h3 class="prof-h">Weapon Proficiencies</h3>'
-        f'{_handedness_field(cm)}'
-        f'{_budget_bar(used, total, "Weapon slots")}'
-        '<div class="hint">House rules: crossbows are free, bows cost 2 slots.</div>'
-        f'<div class="chosen">{chosen}</div>'
-        f'<div class="opt-grid">{opts}</div>'
-        '</section>'
-    )
-
-
-def _nonweapon_section(cm) -> str:
-    c = cm.character
-    total, used, left = c.nonweapon_slots_total(), c.nonweapon_slots_used(), c.nonweapon_slots_left()
-    known = c.nonweapon_profs
-
-    # ── chosen ────────────────────────────────────────────────────────────────
-    chosen = ""
-    for name, invested in known.items():
-        p = cr.NONWEAPON_PROFICIENCIES[name]
-        skill = c.proficiency_skill(name)
-        if skill is not None:
-            detail = f'{_ABBR.get(p.ability, p.ability)} &middot; check {skill} (d20+skill &ge; 21)'
-        else:
-            detail = "no check"
-        minus = (f'<a class="slot-btn" href="dnd:///cm/profminus/{name}">&minus;</a>'
-                 if invested > p.slots else '<span class="slot-btn off">&minus;</span>')
-        plus = (f'<a class="slot-btn" href="dnd:///cm/profplus/{name}">+</a>'
-                if left >= 1 else '<span class="slot-btn off">+</span>')
-        chosen += (
-            '<div class="prof-row">'
-            f'<a class="pr-rm" href="dnd:///cm/rmprof/{name}" title="Remove">✕</a>'
-            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
-            f'<span class="pr-detail">{detail}</span>{_prof_description_html(p)}</div>'
-            f'<div class="pr-slots">{minus}<span class="pr-sn">{invested}</span>{plus}</div>'
-            '</div>'
-        )
-    if not chosen:
-        chosen = '<span class="hint">No proficiencies chosen yet.</span>'
-
-    # ── available: only skills this class can learn, split ready vs. locked ────
-    pool = (cr.proficiencies_for_class(c.char_class) if c.char_class
-            else cr.NONWEAPON_PROFICIENCIES.values())
-    ready, locked = [], []
-    for p in pool:
-        if p.name in known:
-            continue
-        (ready if cr.proficiency_prereqs_met(p, known) else locked).append(p)
-    ready.sort(key=lambda p: p.name)
-    locked.sort(key=lambda p: p.name)
-
-    def _chip(p, clickable: bool) -> str:
-        name = f'<span class="opt-name">{_esc(p.name)}</span>'
-        tip = _prof_tooltip(p)
-        if clickable:
-            cost = f'<span class="opt-cost">{p.slots}</span>' if p.slots != 1 else ""
-            meta = f'<span class="opt-meta">{_prof_meta(p)}</span>'
-            dis = "" if p.slots <= left else " dis"
-            return (f'<a class="opt{dis}" title="{tip}" href="dnd:///cm/addprof/{p.name}">'
-                    f'{name}{meta}{cost}</a>')
-        need = _esc(", ".join(p.prereq))
-        return (f'<span class="opt locked" title="{tip}">{name}'
-                f'<span class="opt-need" title="Prerequisite">{need}</span></span>')
-
-    avail_html = ""
-    if ready:
-        avail_html += ('<div class="grp-label">Available</div>'
-                       f'<div class="opt-grid">{"".join(_chip(p, True) for p in ready)}</div>')
-    if locked:
-        avail_html += ('<div class="grp-label">Needs a prerequisite first</div>'
-                       f'<div class="opt-grid">{"".join(_chip(p, False) for p in locked)}</div>')
-    if not avail_html:
-        avail_html = '<span class="hint">No further proficiencies available for this class.</span>'
-
-    return (
-        '<section class="prof-sec">'
-        f'<h3 class="prof-h">Nonweapon Proficiencies '
-        f'<span class="prof-src">from {_esc(cr.PROFICIENCY_BOOK)}</span></h3>'
-        f'{_budget_bar(used, total, "Nonweapon slots")}'
-        '<div class="hint">House rule: each extra slot on a proficiency adds +2 to its check. '
-        'Only skills your class can learn are shown; hover a skill for its rules.</div>'
-        f'<div class="chosen-list">{chosen}</div>'
-        f'<div class="avail">{avail_html}</div>'
-        '</section>'
-    )
-
-
-def _proficiencies_body(cm, saved=None) -> str:
-    return f'<div class="prof-wrap">{_weapon_section(cm)}{_nonweapon_section(cm)}</div>'
 
 
 # ── equipment step ───────────────────────────────────────────────────────────
@@ -785,10 +731,10 @@ def _eq_item_detail(it: dict) -> str:
     if it.get("category") == "Armor" and it.get("ac_bonus"):
         bits.append(f'+{it["ac_bonus"]} AC')
     if it.get("category") == "Weapon" and it.get("damage"):
-        bits.append(f'{_esc(it["damage"])} dmg')
+        bits.append(f'{esc(it["damage"])} dmg')
     if it.get("weight"):
         bits.append(f'{it["weight"]:g} lb')
-    return " &middot; ".join(bits) if bits else _esc(it.get("category", ""))
+    return " &middot; ".join(bits) if bits else esc(it.get("category", ""))
 
 
 def _eq_item_plain(it: dict) -> str:
@@ -833,11 +779,11 @@ def _equipment_body(cm, saved=None) -> str:
         qtytag = f' ×{qty}' if qty > 1 else ""
         # Hover an owned item for its stat line + notes (the buy chips already do
         # this; the owned rows didn't).
-        tip = _esc("; ".join(x for x in (_eq_item_plain(it), it.get("notes")) if x))
+        tip = esc("; ".join(x for x in (_eq_item_plain(it), it.get("notes")) if x))
         owned += (
             f'<div class="prof-row" title="{tip}">'
             f'<a class="pr-rm" href="dnd:///cm/sell/{name}" title="Sell / return">✕</a>'
-            f'<div class="pr-main"><span class="pr-name">{_esc(name)}{qtytag}</span>'
+            f'<div class="pr-main"><span class="pr-name">{esc(name)}{qtytag}</span>'
             f'<span class="pr-detail">{_eq_item_detail(it)}</span></div>'
             f'{wear}</div>')
     owned = owned or '<span class="hint">Nothing bought yet.</span>'
@@ -852,9 +798,9 @@ def _equipment_body(cm, saved=None) -> str:
             dis = "" if it["cost_cp"] <= money else " dis"
             wt = f'{it["weight"]:g} lb' if it.get("weight") else ""
             meta = f'<span class="opt-meta">{wt}</span>' if wt else ""
-            tip = _esc(it.get("notes") or "")
+            tip = esc(it.get("notes") or "")
             chips += (f'<a class="opt{dis}" href="dnd:///cm/buy/{it["name"]}" title="{tip}">'
-                      f'<span class="opt-name">{_esc(it["name"])}</span>{meta}'
+                      f'<span class="opt-name">{esc(it["name"])}</span>{meta}'
                       f'<span class="opt-cost">{_cost_label(it["cost_cp"])}</span></a>')
         cat_html += f'<div class="grp-label">{cat}</div><div class="opt-grid">{chips}</div>'
 
@@ -876,79 +822,95 @@ def _spell_description_html(s) -> str:
     desc = s.get("description") or ""
     if not desc.strip():
         return ""
-    paras = "".join(f"<p>{_esc(par)}</p>" for par in desc.split("\n\n") if par.strip())
+    paras = "".join(f"<p>{esc(par)}</p>" for par in desc.split("\n\n") if par.strip())
     return (f'<details class="pr-desc"><summary>What it does</summary>'
             f'<div class="pr-desc-body">{paras}</div></details>')
 
 
-def _spells_body(cm, saved=None) -> str:
+def _spell_level_section(cm, spell_level: int, catalog: dict) -> str:
+    """One spell level's budget, chosen spells and available picks."""
     c = cm.character
     group = c.spellcasting_group()
-    if not group:
-        return (
-            '<section class="prof-sec"><h3 class="prof-h">Spells</h3>'
-            '<div class="placeholder"><div class="ph-ico">✦</div>'
-            '<div class="ph-title">No spells at 1st level</div>'
-            f'<p>A {_esc(c.char_class or "character")} doesn\'t cast spells at 1st level — '
-            'skip ahead.</p></div></section>')
-
-    catalog = {s["name"]: s for s in cm.spell_catalog}
+    limit = c.spell_limit(spell_level)
+    full = not c.can_add_spell(spell_level)
     chosen_names = set(c.spells)
 
-    # Chosen spells: rows with a collapsible description, like the chosen NWPs.
     chosen = ""
-    for name in c.spells:
+    for name in sorted(c.spells_at(spell_level)):
         s = catalog.get(name, {"name": name})
-        meta = _esc(s.get("school") or "")
         chosen += (
             '<div class="prof-row">'
             f'<a class="pr-rm" href="dnd:///cm/rmspell/{name}" title="Remove">✕</a>'
-            f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
-            f'<span class="pr-detail">{meta}</span>{_spell_description_html(s)}</div>'
+            f'<div class="pr-main"><span class="pr-name">{esc(name)}</span>'
+            f'<span class="pr-detail">{esc(s.get("school") or "")}</span>'
+            f'{_spell_description_html(s)}</div>'
             '</div>')
-    chosen = chosen or '<span class="hint">No spells chosen yet.</span>'
+    chosen = chosen or '<span class="hint">None chosen at this level.</span>'
 
-    # Once the level-1 limit is spent, available spells grey out (dispatch also
-    # refuses the add, so this can't be worked around by clicking a stale link).
-    full = not c.can_add_spell()
     by_school: dict = {}
     for s in cm.spell_catalog:
-        if s["name"] in chosen_names:
+        if s["name"] in chosen_names or int(s.get("level") or 1) != spell_level:
             continue
         by_school.setdefault(s.get("school") or "Other", []).append(s)
     avail = ""
     for school in sorted(by_school):
         chips = ""
         for s in sorted(by_school[school], key=lambda x: x["name"]):
-            tip = _esc(" ".join((s.get("description") or "").split())[:280])
+            tip = esc(" ".join((s.get("description") or "").split())[:280])
             dis = " dis" if full else ""
             chips += (f'<a class="opt{dis}" href="dnd:///cm/addspell/{s["name"]}" title="{tip}">'
-                      f'<span class="opt-name">{_esc(s["name"])}</span></a>')
-        avail += f'<div class="grp-label">{_esc(school)}</div><div class="opt-grid">{chips}</div>'
-    avail = avail or '<span class="hint">No spell data loaded for this class.</span>'
+                      f'<span class="opt-name">{esc(s["name"])}</span></a>')
+        avail += f'<div class="grp-label">{esc(school)}</div><div class="opt-grid">{chips}</div>'
+    avail = avail or '<span class="hint">No spell data loaded for this level.</span>'
 
-    limit = c.spell_limit()
     if limit is None:
         budget = ('<div class="hint">Intelligence 19+ — your spellbook may hold every '
-                  '1st-level spell.</div>')
+                  'spell of this level.</div>')
     else:
         unit = "known" if group == "wizard" else "memorized"
-        budget = _budget_bar(len(c.spells), limit, "Spells", unit=unit)
-
-    guide = ("A 1st-level mage begins with a small spellbook — Read Magic (free) plus "
-             "Intelligence-capped picks." if group == "wizard" else
-             "Choose the 1st-level priest spells you'll memorize; Wisdom grants bonus slots.")
-    full_note = ('<div class="hint">Spell limit reached — remove one to choose another.</div>'
-                 if full and limit else "")
+        budget = budget_bar(len(c.spells_at(spell_level)), limit,
+                             f"{_ordinal(spell_level)}-level spells", unit=unit)
+    full_note = ('<div class="hint">Limit reached at this level — remove one to choose '
+                 'another.</div>' if full and limit else "")
     return (
-        '<section class="prof-sec">'
-        f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; 1st level</span></h3>'
+        f'<div class="grp-label" style="margin-top:18px">{_ordinal(spell_level)} level</div>'
         f'{budget}'
-        f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
-        '<div class="side-sub">Chosen</div>'
         f'<div class="chosen-list">{chosen}</div>'
         f'{full_note}'
-        f'<div class="avail">{avail}</div>'
+        f'<div class="avail">{avail}</div>')
+
+
+def _spells_body(cm, saved=None) -> str:
+    c = cm.character
+    group = c.spellcasting_group()
+    slots = c.spell_slots()
+    if not group or not slots:
+        # Either a non-caster, or a caster below the level its progression starts
+        # (a ranger before 8th, a paladin before 9th, a bard at 1st).
+        if group and c.char_class:
+            why = (f'A {esc(c.char_class)} gains no spells until a higher level — '
+                   f'they cast nothing at {_ordinal(c.level)} level.')
+        else:
+            why = (f'A {esc(c.char_class or "character")} doesn\'t cast spells — '
+                   'skip ahead.')
+        return (
+            '<section class="prof-sec"><h3 class="prof-h">Spells</h3>'
+            '<div class="placeholder"><div class="ph-ico">✦</div>'
+            f'<div class="ph-title">No spells at {_ordinal(c.level)} level</div>'
+            f'<p>{why}</p></div></section>')
+
+    catalog = {s["name"]: s for s in cm.spell_catalog}
+    guide = ("Your spellbook's size at each level is capped by Intelligence."
+             if group == "wizard" else
+             "Choose the priest spells you'll memorize; Wisdom grants bonus spells.")
+    sections = "".join(_spell_level_section(cm, lvl, catalog) for lvl in sorted(slots))
+    return (
+        '<section class="prof-sec">'
+        f'<h3 class="prof-h">Spells <span class="prof-src">{group} &middot; '
+        f'{_ordinal(c.level)} level &middot; up to {_ordinal(max(slots))}-level spells'
+        '</span></h3>'
+        f'<div class="hint">{guide} Expand a chosen spell for its full effect.</div>'
+        f'{sections}'
         '</section>')
 
 
@@ -990,9 +952,33 @@ _STEP_REFS = {
         ("Alignment Overview", "PHB/DD01515.htm", "phb"),
         ("The Nine Alignments", "PHB/DD01518.htm", "phb"),
     ],
-    "proficiencies": [
-        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+    "weapons": [
         ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
+        ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
+        ("Weapon Specialization", "PHB/DD01530.htm", "phb"),
+        ("Specialization & Mastery", "CT/DD02618.htm", "ct"),      # Ch4
+        ("Weapon Mastery", "CT/DD02629.htm", "ct"),
+        ("Weapon Groups", "CT/DD02744.htm", "ct"),
+        ("Barred Weapons", "CT/DD02624.htm", "ct"),
+        ("Shield Proficiency", "CT/DD02627.htm", "ct"),
+        ("Armor Proficiency", "CT/DD02628.htm", "ct"),
+        ("Fighting Style Specialization", "CT/DD02645.htm", "ct"),
+        ("Special Talents", "CT/DD02653.htm", "ct"),
+        ("Unarmed Combat", "CT/DD02666.htm", "ct"),                # Ch5
+        ("Martial Arts", "CT/DD02700.htm", "ct"),
+        ("Martial Arts Talents", "CT/DD02705.htm", "ct"),
+    ],
+    "nonweapon": [
+        ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
+        ("Nonweapon Proficiencies", "PHB/DD01533.htm", "phb"),
+        ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
+        ("Proficiency Groups (Table 37)", "PHB/DD01538.htm", "phb"),
+        ("Siege Proficiencies", "CT/DD02824.htm", "ct"),
+        ("Thieving Skills", "PHB/DD01505.htm", "phb"),
+        ("Thief Base Scores (Table 26)", "PHB/DD01501.htm", "phb"),
+        ("Thief Racial Adj. (Table 27)", "PHB/DD01502.htm", "phb"),
+        ("Thief Dexterity Adj. (Table 28)", "PHB/DD01503.htm", "phb"),
+        ("Thief Armor Adj. (Table 29)", "PHB/DD01504.htm", "phb"),
     ],
     "equipment": [
         ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book
@@ -1008,7 +994,7 @@ _STEP_REFS = {
     ],
 }
 
-_REF_BADGE = {"phb": "PHB", "app": "APP"}
+_REF_BADGE = {"phb": "PHB", "app": "APP", "ct": "C&amp;T"}
 
 
 def _step_refs(step) -> str:
@@ -1019,7 +1005,7 @@ def _step_refs(step) -> str:
     # Prefix with newtab/ so references open beside the builder, not over it.
     chips = "".join(
         f'<a class="phb-ref {kind}" href="dnd:///newtab/{url}">'
-        f'<span class="phb-badge">{_REF_BADGE[kind]}</span>{_esc(label)}</a>'
+        f'<span class="phb-badge">{_REF_BADGE[kind]}</span>{esc(label)}</a>'
         for label, url, kind in refs
     )
     return (f'<div class="phb-refs"><span class="phb-refs-label">References</span>'
@@ -1042,7 +1028,8 @@ def _side_rail(cm) -> str:
 
 _BODIES = {
     "abilities": _abilities_body, "race": _race_body, "class": _class_body,
-    "alignment": _alignment_body, "proficiencies": _proficiencies_body,
+    "alignment": _alignment_body,
+    "weapons": _weapons_body, "nonweapon": _nonweapon_body,
     "equipment": _equipment_body, "spells": _spells_body,
     "details": _details_body, "review": _review_body,
 }
@@ -1079,7 +1066,26 @@ def _next_hint(cm) -> str:
     }.get(cm.step, "")
 
 
-def generate(cm, saved=None) -> str:
+# Actions that always want the top of the page: they replace the character or move
+# to a different step, so the reader's old position means nothing.
+_SCROLL_TO_TOP_VERBS = frozenset({"restart", "load", "next", "back", "goto"})
+
+
+def keeps_scroll(path: str, step_before: str, step_after: str) -> bool:
+    """Whether a builder action should preserve the reader's scroll position.
+
+    Picking a weapon or stepping a rung leaves you exactly where you were; changing
+    step, loading a character or starting over should land you at the top."""
+    if step_before != step_after:
+        return False
+    return path.split("/", 1)[0] not in _SCROLL_TO_TOP_VERBS
+
+
+def generate_wrap(cm, saved=None) -> str:
+    """The builder's content — everything inside `<div class="wrap">`.
+
+    Split out from `generate()` so an in-place action can replace just this node in
+    the live document (see `swap_wrap_js`) instead of reloading the whole page."""
     body = _BODIES.get(cm.step, _placeholder_body)(cm, saved)
     step = (f'<section class="step"><h2 class="step-h">{STEP_TITLES[cm.step]}</h2>'
             f'{body}</section>')
@@ -1089,6 +1095,34 @@ def generate(cm, saved=None) -> str:
         step_block = step
     else:
         step_block = f'<div class="step-layout">{step}{_side_rail(cm)}</div>'
+    return f"""<div class="wrap">
+  <header class="head">
+    <div class="tag">2nd Edition · Character Builder</div>
+    <h1>Create a Character</h1>
+  </header>
+  {_rail(cm)}
+  {step_block}
+  {_footer(cm)}
+</div>"""
+
+
+def swap_wrap_js(wrap_html: str, scroll_to_top: bool) -> str:
+    """JS that replaces the live document's `.wrap` node with fresh markup.
+
+    Re-rendering with `setHtml` tears the document down and rebuilds it, so the view
+    blanks and repaints — the flicker no amount of scroll juggling can hide. Swapping
+    one node inside the *existing* document leaves the scroll offset alone, keeps the
+    page's `cm()` helpers defined, and never blanks.
+
+    Returns `false` when the current document isn't the builder, so the caller can
+    fall back to a full render."""
+    payload = json.dumps(wrap_html)
+    scroll = "window.scrollTo(0,0);" if scroll_to_top else ""
+    return ("(function(){var w=document.querySelector('.wrap');"
+            f"if(!w){{return false;}}w.outerHTML={payload};{scroll}return true;}})();")
+
+
+def generate(cm, saved=None) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1097,15 +1131,7 @@ def generate(cm, saved=None) -> str:
 <style>{_CSS}</style>
 </head>
 <body>
-<div class="wrap">
-  <header class="head">
-    <div class="tag">2nd Edition · Character Builder</div>
-    <h1>Create a Character</h1>
-  </header>
-  {_rail(cm)}
-  {step_block}
-  {_footer(cm)}
-</div>
+{generate_wrap(cm, saved)}
 <script>
   function cm(path) {{ if (path.endsWith('/')) return; window.location.href = 'dnd:///cm/' + path; }}
   function cmText(verb, v) {{ window.location.href = 'dnd:///cm/' + verb + '/' + encodeURIComponent(v); }}
@@ -1302,6 +1328,9 @@ _CSS = f"""
   .bar {{ height: 7px; background: #23263a; border-radius: 4px; overflow: hidden; }}
   .bar-fill {{ height: 100%; background: {ACCENT}; border-radius: 4px; transition: width .15s; }}
   .budget-sub {{ font-size: 10.5px; color: #7b83a6; margin-top: 4px; }}
+  .budget.over .budget-num {{ color: #e06c75; }}
+  .budget.over .bar-fill {{ background: #e06c75; }}
+  .budget-over {{ font-size: 11px; color: #e06c75; margin-top: 5px; }}
   .chosen {{ display: flex; flex-wrap: wrap; margin: 10px 0; }}
   .chip-x {{ display: inline-flex; align-items: center; text-decoration: none; background: {ACCENT}18;
             border: 1px solid {ACCENT}55; color: #e6e9f6; border-radius: 20px; padding: 3px 10px;
@@ -1400,4 +1429,8 @@ _CSS = f"""
   .phb-ref.app {{ border-color: #35506b; color: #9fc0dc; }}
   .phb-ref.app:hover {{ background: #5b9bd518; border-color: #5b9bd5; color: #cfe4f6; }}
   .phb-ref.app .phb-badge {{ background: #2f4a63; color: #cfe4f6; }}
+  /* Combat & Tactics — crimson, so a C&T rule never reads as core PHB */
+  .phb-ref.ct {{ border-color: #6b3540; color: #dc9fa8; }}
+  .phb-ref.ct:hover {{ background: #d55b6b18; border-color: #d55b6b; color: #f6cfd5; }}
+  .phb-ref.ct .phb-badge {{ background: #632f3a; color: #f6cfd5; }}
 """

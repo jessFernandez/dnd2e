@@ -44,8 +44,9 @@ def test_full_happy_path_through_the_flow():
     cm.set_class("Ranger")                             # qualifies with these stats
     assert cm.is_complete("class") and cm.advance() and cm.step == "alignment"
     cm.set_alignment("Neutral Good")                   # allowed for ranger
-    assert cm.is_complete("alignment") and cm.advance() and cm.step == "proficiencies"
-    assert cm.advance() and cm.step == "equipment"     # proficiencies optional in v1
+    assert cm.is_complete("alignment") and cm.advance() and cm.step == "weapons"
+    assert cm.advance() and cm.step == "nonweapon"     # weapon profs optional in v1
+    assert cm.advance() and cm.step == "equipment"     # nonweapon profs optional too
     assert cm.advance() and cm.step == "spells"        # equipment optional
     assert cm.advance() and cm.step == "details"       # spells optional
     assert not cm.is_complete("details")               # name required
@@ -77,6 +78,193 @@ def test_changing_race_clears_illegal_class():
     assert cm.character.char_class == "Mage"
     cm.set_race("Dwarf")                               # dwarves can't be mages
     assert cm.character.char_class is None
+
+
+def test_works_without_an_injected_rng():
+    # Every roll goes through Charactermancer._roll, which falls back to the
+    # `random` module. Tests always inject an rng, so this path was uncovered.
+    cm = Charactermancer()
+    for a in cm.character.ability_names():
+        cm.set_ability(a, 18)
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.roll_exceptional_strength()
+    cm.roll_handedness()
+    cm.roll_money()
+    cm.dispatch("level/5")
+    cm.dispatch("rerollhp")
+    c = cm.character
+    assert 1 <= c.exceptional_str <= 100
+    assert 1 <= c.handedness_roll <= 10
+    assert c.money_cp > 0
+    assert c.level == 5 and len(c.hp_rolls) == 4
+
+
+def test_dispatch_level_and_rerollhp():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    assert cm.dispatch("level/7")
+    assert cm.character.level == 7 and len(cm.character.hp_rolls) == 6
+    before = list(cm.character.hp_rolls)
+    assert cm.dispatch("rerollhp")
+    assert cm.character.hp_rolls != before and len(cm.character.hp_rolls) == 6
+    assert not cm.dispatch("level/0")            # below 1 is refused
+    assert not cm.dispatch("level/abc")          # non-numeric is refused
+    assert cm.character.level == 7
+
+
+def test_dispatch_level_clamps_to_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Dwarf"); cm.set_class("Fighter")
+    cm.dispatch("level/20")
+    assert cm.character.level == 15               # dwarf fighter cap
+
+
+def test_html_class_step_has_level_control():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.index = STEPS.index("class")
+    html = cmh.generate(cm)
+    assert 'href="dnd:///cm/level/2"' in html      # step up
+    assert "At 1st level" in html                  # side-rail header is level-aware
+    cm.dispatch("level/7")
+    html = cmh.generate(cm)
+    assert "At 7th level" in html
+    assert "dnd:///cm/rerollhp" in html            # rolled hit dice can be rerolled
+
+
+def test_html_level_control_disables_plus_at_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Dwarf"); cm.set_class("Fighter")
+    cm.dispatch("level/15")
+    cm.index = STEPS.index("class")                  # where the level field lives
+    html = cmh.generate(cm)
+    assert 'href="dnd:///cm/level/16"' not in html   # cannot exceed the cap
+    assert "racial level limit" in html
+
+
+def test_html_review_shows_level_and_advance_control():
+    cm = _complete()
+    cm.dispatch("level/9")
+    cm.index = STEPS.index("review")
+    html = cmh.generate(cm)
+    assert "Combat (9th level)" in html
+    assert "Attacks/round" in html and "3/2" in html   # warrior 3/2 from 7th
+    assert "dnd:///cm/level/" in html                  # level up from the sheet
+
+
+def test_html_spells_step_shows_a_section_per_castable_level():
+    cm = _cleric_at_profs()                       # Wis 14
+    cm.dispatch("level/5")                        # Table 24 row 5 = 3/3/1, +2 Wis bonus at 1st
+    cm.index = STEPS.index("spells")
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1},
+                        {"name": "Silence", "school": "Guardian", "level": 2}]
+    html = cmh.generate(cm)
+    assert "up to 3rd-level spells" in html
+    for label in ("1st level", "2nd level", "3rd level"):
+        assert label in html
+    assert "dnd:///cm/addspell/Silence" in html    # 2nd-level spells are now offered
+    # per-spell-level budgets: 5 first-level (3 base + 2 Wisdom bonus), 3 second, 1 third
+    assert "0 of 5 memorized" in html
+    assert "0 of 3 memorized" in html
+    assert "0 of 1 memorized" in html
+
+
+def test_html_spells_step_placeholder_for_late_casters():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Ranger")   # rangers cast nothing before 8th
+    cm.index = STEPS.index("spells")
+    html = cmh.generate(cm)
+    assert "No spells at 1st level" in html
+    assert "gains no spells until a higher level" in html
+
+
+def test_spell_added_at_its_own_level_and_budgeted_separately():
+    cm = _cleric_at_profs()
+    cm.dispatch("level/5")
+    cm.spell_catalog = [{"name": "Bless", "school": "C", "level": 1},
+                        {"name": "Silence", "school": "G", "level": 2},
+                        {"name": "Prayer", "school": "C", "level": 3},
+                        {"name": "Chant", "school": "C", "level": 3}]
+    cm.dispatch("addspell/Bless")
+    cm.dispatch("addspell/Silence")
+    cm.dispatch("addspell/Prayer")
+    assert cm.character.spells == {"Bless": 1, "Silence": 2, "Prayer": 3}
+    # only one 3rd-level slot at 5th level, so the second 3rd-level pick is refused
+    cm.dispatch("addspell/Chant")
+    assert "Chant" not in cm.character.spells
+    # ...but the 1st-level budget (5) is untouched by that
+    assert cm.character.can_add_spell(1) and not cm.character.can_add_spell(3)
+
+
+def test_keeps_scroll_only_for_in_place_actions():
+    # Picking things leaves you where you were...
+    for path in ("addweapon/Long Sword", "wpnup/Long Sword", "addspell/Bless",
+                 "level/5", "rerollhp", "save", "delete/3", "ambi"):
+        assert cmh.keeps_scroll(path, "weapons", "weapons")
+    # ...but changing step, loading, or starting over goes to the top.
+    for path in ("next", "back", "goto/review", "restart", "load/2"):
+        assert not cmh.keeps_scroll(path, "weapons", "weapons")
+    # and any action that moved the step resets regardless
+    assert not cmh.keeps_scroll("addweapon/Club", "weapons", "nonweapon")
+
+
+def test_swap_wrap_js_replaces_the_node_in_the_live_document():
+    wrap = cmh.generate_wrap(_complete())
+    js = cmh.swap_wrap_js(wrap, scroll_to_top=False)
+    assert "document.querySelector('.wrap')" in js
+    assert "w.outerHTML=" in js
+    assert "window.scrollTo(0,0)" not in js          # staying put
+    assert "return false" in js                       # signals "not the builder page"
+    # the markup is JSON-encoded, so quotes and newlines in it can't break the script
+    assert '\\"' in js or "\n" in js
+
+
+def test_swap_wrap_js_can_reset_to_the_top():
+    js = cmh.swap_wrap_js("<div class=\"wrap\"></div>", scroll_to_top=True)
+    assert "window.scrollTo(0,0)" in js
+
+
+def test_generate_wrap_is_the_body_of_the_full_page():
+    cm = _complete()
+    wrap = cmh.generate_wrap(cm)
+    assert wrap.startswith('<div class="wrap">') and wrap.endswith("</div>")
+    assert wrap in cmh.generate(cm)                   # the full page embeds it verbatim
+
+
+def test_cm_action_swaps_in_place_and_resets_on_step_change():
+    win = _win()
+    win._cm = _fighter_at_profs()
+    app.MainWindow._cm_action(win, "addweapon/Long Sword")
+    assert win._render_calls == [False]                # in place, scroll untouched
+    win._render_calls.clear()
+    app.MainWindow._cm_action(win, "next")             # moves to equipment
+    assert win._render_calls == [True]                 # back to the top
+
+
+def test_ordinal_suffixes():
+    assert [cmh._ordinal(n) for n in (1, 2, 3, 4, 11, 12, 13, 21, 22)] == \
+        ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd"]
+
+
+def test_changing_race_reclamps_level_to_the_new_racial_cap():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.character.set_level(18, rng=random.Random(1))
+    assert cm.character.level == 18                     # humans are uncapped
+    cm.set_race("Dwarf")                               # dwarf fighters cap at 15
+    assert cm.character.level == 15
+    assert len(cm.character.hp_rolls) == cr.hp_die_levels("Fighter", 15)
+
+
+def test_changing_class_resyncs_the_hit_dice_count():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Fighter")
+    cm.character.set_level(10, rng=random.Random(2))
+    assert len(cm.character.hp_rolls) == 8              # warrior name level is 9
+    cm.set_class("Mage")                               # wizard name level is 10
+    assert cm.character.char_class == "Mage"
+    assert len(cm.character.hp_rolls) == 9              # a 9th die is rolled
+    assert cm.character.max_hp() is not None            # and HP still computes
 
 
 def test_changing_class_clears_illegal_alignment():
@@ -267,7 +455,9 @@ import app
 
 def _win(**over):
     calls = []
-    win = SimpleNamespace(_cm=None, _render_charactermancer=lambda: calls.append("render"),
+    win = SimpleNamespace(_cm=None,
+                          _render_charactermancer=lambda: calls.append("full"),
+                          _cm_rerender=lambda scroll_to_top: calls.append(scroll_to_top),
                           _set_spell_catalog=lambda: None)
     win._render_calls = calls
     for k, v in over.items():
@@ -280,7 +470,7 @@ def test_cm_action_creates_dispatches_and_rerenders():
     app.MainWindow._cm_action(win, "assign/Strength/15")
     assert isinstance(win._cm, Charactermancer)
     assert win._cm.character.abilities.get("Strength") == 15
-    assert win._render_calls == ["render"]
+    assert win._render_calls == [False]                   # swapped in place, same step
 
 
 def test_cm_action_unquotes_path():
@@ -401,6 +591,7 @@ def _win_with_db(cm, user_db=None):
     win = SimpleNamespace(_cm=cm, user_db=user_db,
                           _char_library=CharacterLibrary(user_db),
                           _render_charactermancer=lambda: None,
+                          _cm_rerender=lambda scroll_to_top: None,
                           _set_spell_catalog=lambda: None)
     win._cm_save = lambda: app.MainWindow._cm_save(win)
     win._cm_load = lambda cid: app.MainWindow._cm_load(win, cid)
@@ -535,7 +726,7 @@ def test_details_step_has_aging_and_dispatch_applies_it():
 
 def _fighter_at_profs():
     cm = _complete()                                     # Human Fighter, FULL stats
-    cm.index = STEPS.index("proficiencies")
+    cm.index = STEPS.index("weapons")
     return cm
 
 
@@ -585,8 +776,509 @@ def _cleric_at_profs() -> Charactermancer:
     cm.set_race("Human")
     cm.set_class("Cleric")
     cm.set_alignment("Lawful Good")
-    cm.index = STEPS.index("proficiencies")
+    cm.index = STEPS.index("weapons")
     return cm
+
+
+def test_weapon_mastery_ladder_climb_and_descend():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    c = cm.character
+    assert c.weapon_profs == {"Long Sword": "proficient"} and c.weapon_slots_used() == 1
+    cm.dispatch("wpnup/Long Sword")
+    assert c.weapon_profs["Long Sword"] == "specialist" and c.weapon_slots_used() == 2
+    cm.dispatch("wpnup/Long Sword")                  # mastery needs 5th level
+    assert c.weapon_profs["Long Sword"] == "specialist"
+    cm.dispatch("wpndown/Long Sword")
+    assert c.weapon_profs["Long Sword"] == "proficient" and c.weapon_slots_used() == 1
+    cm.dispatch("wpndown/Long Sword")                # can't go below proficient
+    assert c.weapon_profs["Long Sword"] == "proficient"
+
+
+def test_mastery_unlocks_with_level():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/9")                           # 6 weapon slots at 9th
+    cm.dispatch("addweapon/Long Sword")
+    for _ in range(4):
+        cm.dispatch("wpnup/Long Sword")
+    c = cm.character
+    assert c.weapon_profs["Long Sword"] == "grand_master"
+    assert c.weapon_slots_used() == 5                # 1 + 4 extra slots
+
+
+def test_a_fighter_may_specialise_in_only_one_weapon():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    cm.dispatch("addweapon/Dagger")
+    cm.dispatch("wpnup/Long Sword")
+    assert cm.character.weapon_profs["Long Sword"] == "specialist"
+    cm.dispatch("wpnup/Dagger")                      # refused: already specialised
+    assert cm.character.weapon_profs["Dagger"] == "proficient"
+    assert cm.character.specialised_weapon() == "Long Sword"
+
+
+def _fighter_with_four_weapons(level=19):
+    cm = _fighter_at_profs()
+    cm.dispatch(f"level/{level}")
+    for w in ("Long Sword", "Battle Axe", "Spear", "Mace"):
+        cm.dispatch("addweapon/" + w)
+    cm.dispatch("wpnup/Long Sword")                    # specialise the first
+    return cm
+
+
+def test_respecialisation_surcharge_escalates():
+    # CT: the first specialisation costs one extra slot; changing it costs two extra,
+    # "any more changes cost three slots each".
+    assert [cr.respecialisation_surcharge(n) for n in range(4)] == [0, 1, 2, 2]
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter") == 2
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter", respecialisations=1) == 3
+    assert cr.weapon_prof_cost("Long Sword", "specialist", "Fighter", respecialisations=2) == 4
+
+
+def test_moving_a_specialisation_costs_two_slots_then_three():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    assert c.specialised_weapon() == "Long Sword" and c.weapon_slots_used() == 5
+
+    assert c.respecialisation_cost("Battle Axe") == 2      # the first change
+    cm.dispatch("respec/Battle Axe")
+    assert c.specialised_weapon() == "Battle Axe" and c.weapon_slots_used() == 7
+
+    assert c.respecialisation_cost("Spear") == 3           # every later change
+    cm.dispatch("respec/Spear")
+    assert c.specialised_weapon() == "Spear" and c.weapon_slots_used() == 10
+    assert c.respecialisations == 2
+
+
+def test_the_old_weapon_keeps_proficiency_and_its_slots_stay_spent():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    cm.dispatch("respec/Battle Axe")
+    # "loses all benefits of specializing in the previous one (although she is still
+    # proficient with it and always will be)"
+    assert c.weapon_profs["Long Sword"] == "proficient"
+    # ...and the slot it cost is sunk, not handed back
+    assert c.sunk_slots == 1
+    assert c.weapon_slots_used() == 7                      # 4 profs + 2 (new spec) + 1 sunk
+
+
+def test_respecialisation_is_refused_without_the_slots():
+    cm = _fighter_with_four_weapons(level=13)              # only 8 slots
+    c = cm.character
+    cm.dispatch("respec/Battle Axe")                       # costs 2 -> used 7
+    assert c.specialised_weapon() == "Battle Axe"
+    assert c.weapon_slots_left() == 1
+    cm.dispatch("respec/Spear")                            # costs 3 -> refused
+    assert c.specialised_weapon() == "Battle Axe" and c.respecialisations == 1
+
+
+def test_only_a_proficient_weapon_can_receive_the_specialisation():
+    cm = _fighter_with_four_weapons()
+    c = cm.character
+    cm.dispatch("respec/Halberd")                          # not even proficient
+    assert c.specialised_weapon() == "Long Sword"
+    cm.dispatch("respec/Long Sword")                       # already the specialised one
+    assert c.respecialisations == 0
+    # and a class that never specialises cannot respecialise either
+    assert not _cleric_at_profs().character.can_respecialise("Mace")
+
+
+def test_respecialisation_survives_a_round_trip():
+    from character import Character
+    cm = _fighter_with_four_weapons()
+    cm.dispatch("respec/Battle Axe")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.respecialisations == 1 and back.sunk_slots == 1
+    assert back.weapon_slots_used() == cm.character.weapon_slots_used()
+
+
+def test_html_offers_to_move_the_specialisation():
+    cm = _fighter_with_four_weapons()
+    html = cmh.generate(cm)
+    assert "dnd:///cm/respec/Battle Axe" in html
+    assert "specialise here (2 slots)" in html
+
+
+def test_nonfighters_cannot_climb_past_their_rung():
+    cm = _cleric_at_profs()
+    cm.dispatch("addweapon/Mace")
+    cm.dispatch("wpnup/Mace")
+    assert cm.character.weapon_profs["Mace"] == "proficient"   # priests stop here
+
+
+def test_rung_climb_refused_when_slots_are_short():
+    cm = _fighter_at_profs()
+    for w in ("Long Sword", "Dagger", "Spear", "Club"):
+        cm.dispatch("addweapon/" + w)                # 4 slots, all spent
+    c = cm.character
+    assert c.weapon_slots_left() == 0
+    cm.dispatch("wpnup/Long Sword")                  # no slot for the extra rung
+    assert c.weapon_profs["Long Sword"] == "proficient"
+
+
+def test_familiarity_is_reported_for_untrained_weapons():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Short Sword")             # Ancient/Middle Eastern/Short
+    c = cm.character
+    assert c.weapon_rung("Scimitar") == "familiar"   # shares Middle Eastern
+    assert c.weapon_rung("Halberd") == "nonproficient"
+    assert c.weapon_rung("Quarterstaff") == "nonproficient"   # group-less
+    assert c.weapon_rung("Short Sword") == "proficient"
+
+
+def test_weapon_group_grants_the_whole_tight_group_for_two_slots():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Medium")                   # Broad Sword + Long Sword
+    c = cm.character
+    assert c.weapon_groups == ["Medium"]
+    assert c.weapon_slots_used() == cr.WEAPON_GROUP_SLOT_COST == 2
+    for w in cr.weapon_group_members("Medium"):
+        assert c.weapon_rung(w) == "proficient"
+    assert c.weapon_profs == {}                      # no per-weapon entries needed
+
+
+def test_buying_a_group_refunds_the_proficiencies_it_now_grants():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")              # 1 slot
+    assert cm.character.weapon_slots_used() == 1
+    cm.dispatch("addgroup/Medium")                   # covers Long Sword
+    c = cm.character
+    assert c.weapon_profs == {}                      # the redundant entry is refunded
+    assert c.weapon_slots_used() == 2                # just the group
+
+
+def test_group_covered_weapon_can_still_be_specialised_for_the_extra_slot_only():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Medium")
+    c = cm.character
+    cm.dispatch("wpnup/Long Sword")                  # proficiency already paid by the group
+    assert c.weapon_profs == {"Long Sword": "specialist"}
+    assert c.weapon_prof_cost("Long Sword") == 1     # only the extra rung slot
+    assert c.weapon_slots_used() == 3                # 2 group + 1 extra
+    cm.dispatch("wpndown/Long Sword")                # back to group-granted proficiency
+    assert c.weapon_profs == {} and c.weapon_slots_used() == 2
+
+
+def test_group_covered_weapon_is_not_bought_individually():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Crossbows")
+    cm.dispatch("addweapon/Light Crossbow")          # already granted -> no entry
+    assert cm.character.weapon_profs == {}
+
+
+def test_group_members_confer_familiarity():
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Middle Eastern")           # Short Sword + Scimitar
+    c = cm.character
+    # Short Sword is also Ancient and Short, so those groups' weapons are familiar
+    assert c.weapon_rung("Broad Sword") == "familiar"     # shares Ancient
+    assert c.weapon_rung("Dagger") == "familiar"          # shares Short
+    assert c.weapon_rung("Halberd") == "nonproficient"
+
+
+def test_removing_a_group_is_refused_when_it_would_overdraw():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addgroup/Medium")
+    assert c.can_remove_weapon_group("Medium")
+    cm.dispatch("rmgroup/Medium")
+    assert c.weapon_groups == [] and c.weapon_slots_used() == 0
+
+
+def test_weapon_groups_survive_a_save_load_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addgroup/Axes")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.weapon_groups == ["Axes"]
+    assert back.weapon_rung("Battle Axe") == "proficient"
+
+
+def test_shield_proficiency_raises_ac_and_costs_a_slot():
+    cm = _fighter_at_profs()
+    c = cm.character
+    c.inventory = {"Shield, Aspis": 1}
+    c.worn = ["Shield, Aspis"]
+    before = c.armor_class()
+    cm.dispatch("addshieldprof/Shield, Aspis")
+    assert c.shield_profs == ["Shield, Aspis"]
+    assert c.weapon_slots_used() == cr.SHIELD_PROF_SLOT_COST == 1
+    assert c.armor_class() == before + 1          # aspis +2 -> +3 when proficient
+    cm.dispatch("rmshieldprof/Shield, Aspis")
+    assert c.shield_profs == [] and c.armor_class() == before
+
+
+def test_armor_proficiency_halves_that_armors_encumbrance():
+    cm = _fighter_at_profs()
+    c = cm.character
+    c.inventory = {"Chain, Full": 1, "Dagger": 1}
+    full = c.total_weight()
+    cm.dispatch("addarmorprof/Chain, Full")
+    assert c.item_weight("Chain, Full") == 20.0   # chain mail 40 lb -> 20
+    assert c.total_weight() == full - 20.0        # the dagger is untouched
+    assert c.weapon_slots_used() == 1
+
+
+def test_armor_proficiency_is_refused_for_shields_and_vice_versa():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addarmorprof/Shield, Aspis")     # shields take a shield proficiency
+    assert c.armor_profs == []
+    cm.dispatch("addshieldprof/Chain, Full")      # ...and armor an armor one
+    assert c.shield_profs == []
+
+
+def test_shield_and_armor_profs_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addshieldprof/Shield, Buckler")
+    cm.dispatch("addarmorprof/Plate, Full")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.shield_profs == ["Shield, Buckler"]
+    assert back.armor_profs == ["Plate, Full"]
+
+
+def test_warriors_know_every_fighting_style_for_free():
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert all(c.knows_style(s) for s in cr.FIGHTING_STYLES)
+    assert c.weapon_slots_used() == 0                 # knowing them costs nothing
+    cm.dispatch("styleup/Two-Weapon")
+    cm.dispatch("styleup/Weapon and Shield")
+    assert c.weapon_slots_used() == 2                 # a warrior may specialise in many
+    assert sorted(c.specialised_styles()) == ["Two-Weapon", "Weapon and Shield"]
+
+
+def test_nonwarriors_pay_to_learn_and_may_specialise_in_only_one():
+    cm = _cleric_at_profs()                            # Priest: 2 weapon slots
+    c = cm.character
+    assert not c.knows_style("Two-Weapon")
+    cm.dispatch("learnstyle/Two-Weapon")
+    assert c.fighting_styles == {"Two-Weapon": 0} and c.weapon_slots_used() == 1
+    cm.dispatch("styleup/Two-Weapon")
+    assert c.fighting_styles == {"Two-Weapon": 1} and c.weapon_slots_used() == 2
+    # a second specialised style is refused even with slots (priests get only one)
+    c.weapon_profs = {}                                # free the budget artificially
+    cm.dispatch("learnstyle/Weapon and Shield")
+    cm.dispatch("styleup/Weapon and Shield")
+    assert c.style_specialisation("Weapon and Shield") == 0
+
+
+def test_wizards_may_learn_a_style_but_never_specialise():
+    cm = _at_abilities_done()
+    cm.set_ability("Intelligence", 12)
+    cm.set_race("Human"); cm.set_class("Mage")
+    cm.dispatch("learnstyle/One-Handed Weapon")
+    cm.dispatch("styleup/One-Handed Weapon")
+    assert cm.character.fighting_styles == {"One-Handed Weapon": 0}
+    assert not cr.can_specialise_styles("Mage")
+
+
+def test_one_handed_and_two_weapon_styles_take_a_second_slot():
+    # CT: one-handed weapon style's second slot raises the AC bonus from +1 to +2;
+    # two-weapon's allows two weapons of equal size. Every other style caps at one.
+    assert cr.max_style_specialisation("One-Handed Weapon") == 2
+    assert cr.max_style_specialisation("Two-Weapon") == 2
+    for style in ("Weapon and Shield", "Two-Handed Weapon", "Missile or Thrown Weapon"):
+        assert cr.max_style_specialisation(style) == 1
+    cm = _fighter_at_profs()
+    cm.dispatch("level/7")                             # enough slots
+    c = cm.character
+    cm.dispatch("styleup/One-Handed Weapon")
+    cm.dispatch("styleup/One-Handed Weapon")
+    assert c.fighting_styles["One-Handed Weapon"] == 2
+    cm.dispatch("styleup/One-Handed Weapon")           # ...and no further
+    assert c.fighting_styles["One-Handed Weapon"] == 2
+
+
+def test_rangers_get_the_first_two_weapon_specialisation_free():
+    cm = _at_abilities_done()
+    cm.set_race("Human"); cm.set_class("Ranger")
+    c = cm.character
+    assert c.style_specialisation("Two-Weapon") == 1   # held without ever buying it
+    assert c.style_cost("Two-Weapon") == 0
+    assert c.weapon_slots_used() == 0
+
+
+def test_two_weapon_penalty_rewards_specialisation_and_ambidexterity():
+    assert cr.two_weapon_penalty(specialised=False, ambidextrous=False) == (-2, -4)
+    assert cr.two_weapon_penalty(specialised=True, ambidextrous=False) == (0, -2)
+    assert cr.two_weapon_penalty(specialised=False, ambidextrous=True) == (-2, -2)
+    assert cr.two_weapon_penalty(specialised=True, ambidextrous=True) == (0, 0)
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert c.two_weapon_penalty() == (-2, -4)
+    cm.dispatch("styleup/Two-Weapon")
+    assert c.two_weapon_penalty() == (0, -2)
+    c.bought_ambidexterity = True
+    assert c.two_weapon_penalty() == (0, 0)            # the ambidexterity payoff
+
+
+def test_fighting_styles_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("styleup/Two-Weapon")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.fighting_styles == {"Two-Weapon": 1}
+
+
+def test_ambidexterity_is_the_ct_special_talent():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Ambidexterity")
+    assert c.special_talents == {"Ambidexterity": "weapon"}
+    assert c.bought_ambidexterity is True             # the old attribute still works
+    assert c.weapon_slots_used() == cr.HOUSE_RULES.ambidexterity_slot_cost == 1
+    cm.dispatch("ambi")                                # the legacy verb toggles it off
+    assert c.special_talents == {} and c.bought_ambidexterity is False
+
+
+def test_talents_are_gated_by_class_group():
+    assert len(cr.talents_for_class("Fighter")) == 12
+    # only the "All"/"General" talents are open to a wizard
+    assert {t.name for t in cr.talents_for_class("Mage")} == {"Alertness", "Trouble Sense"}
+    cm = _cleric_at_profs()
+    cm.dispatch("addtalent/Leadership")                # warrior-only
+    assert cm.character.special_talents == {}
+    cm.dispatch("addtalent/Iron Will")                 # warrior + priest
+    assert "Iron Will" in cm.character.special_talents
+
+
+def test_asterisked_talents_may_use_a_nonweapon_slot():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalentnwp/Endurance")              # CT asterisks Endurance
+    assert c.special_talents["Endurance"] == "nonweapon"
+    assert c.nonweapon_slots_used() == 2 and c.weapon_slots_used() == 0
+    cm.dispatch("addtalentnwp/Iron Will")              # not asterisked -> refused
+    assert "Iron Will" not in c.special_talents
+    assert {t.name for t in cr.SPECIAL_TALENTS.values() if t.slot_source == "either"} == \
+        {"Alertness", "Endurance"}
+
+
+def test_talent_skill_applies_the_ability_modifier():
+    cm = _fighter_at_profs()                           # Wis 14
+    c = cm.character
+    cm.dispatch("addtalent/Iron Will")                 # Wisdom −2
+    assert c.talent_skill("Iron Will") == c.final_abilities()["Wisdom"] - 2
+    assert c.talent_skill("Ambidexterity") == c.final_abilities()["Dexterity"]
+
+
+def test_legacy_bought_ambidexterity_bool_migrates_into_the_talents():
+    from character import Character
+    c = _fighter_at_profs().character
+    legacy = c.to_dict()
+    legacy.pop("special_talents")
+    legacy["bought_ambidexterity"] = True              # the old flat flag
+    back = Character.from_dict(legacy)
+    assert back.special_talents == {"Ambidexterity": "weapon"}
+    assert back.bought_ambidexterity is True
+
+
+def test_everyone_is_familiar_with_pummeling_wrestling_and_overbearing():
+    c = _fighter_at_profs().character
+    for d in ("Pummeling", "Wrestling", "Overbearing"):
+        assert c.unarmed_rung(d) == "familiar"
+    for style in cr.MARTIAL_ARTS_STYLES:
+        assert c.unarmed_rung(style) == "nonproficient"   # familiarity has no effect
+    assert c.weapon_slots_used() == 0                     # all of it is free
+
+
+def test_overbearing_cannot_be_advanced():
+    cm = _fighter_at_profs()
+    assert cr.unarmed_rung_ladder("Overbearing", "Fighter", 9) == ()
+    cm.dispatch("addunarmed/Overbearing")
+    assert cm.character.unarmed_profs == {}
+
+
+def test_pummeling_climbs_the_ladder_to_mastery_for_a_fighter():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    cm.dispatch("addunarmed/Pummeling")
+    assert c.unarmed_profs == {"Pummeling": "proficient"} and c.weapon_slots_used() == 1
+    for _ in range(3):
+        cm.dispatch("unarmedup/Pummeling")
+    assert c.unarmed_profs["Pummeling"] == "master"
+    assert c.weapon_slots_used() == 3                     # CT: mastery costs 3 slots
+
+
+def test_nonfighters_reach_expertise_but_not_specialisation():
+    cm = _cleric_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    assert cr.unarmed_rung_ladder("Wrestling", "Cleric", 5) == ("proficient", "expert")
+    cm.dispatch("addunarmed/Wrestling")
+    cm.dispatch("unarmedup/Wrestling")
+    cm.dispatch("unarmedup/Wrestling")                    # specialisation is refused
+    assert c.unarmed_profs["Wrestling"] == "expert"
+
+
+def test_martial_arts_styles_are_learned_separately_and_grant_no_familiarity():
+    cm = _fighter_at_profs()
+    cm.dispatch("level/5")
+    c = cm.character
+    cm.dispatch("addunarmed/Martial Arts: Style A")
+    cm.dispatch("addunarmed/Martial Arts: Style B")       # proficiency in several is fine
+    assert len(c.martial_art_styles_known()) == 2
+    assert c.unarmed_rung("Martial Arts: Style C") == "nonproficient"   # no weapon group
+    cm.dispatch("unarmedup/Martial Arts: Style A")
+    assert c.unarmed_profs["Martial Arts: Style A"] == "expert"
+    cm.dispatch("unarmedup/Martial Arts: Style B")        # expert in only one style
+    assert c.unarmed_profs["Martial Arts: Style B"] == "proficient"
+
+
+def test_martial_arts_talents_need_a_style_and_vanish_with_it():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Flying Kick")                  # no style yet -> refused
+    assert c.special_talents == {}
+    cm.dispatch("addunarmed/Martial Arts: Style A")
+    cm.dispatch("addtalent/Flying Kick")
+    assert c.special_talents == {"Flying Kick": "weapon"}
+    cm.dispatch("rmunarmed/Martial Arts: Style A")        # last style gone
+    assert c.special_talents == {}                        # so is the talent
+
+
+def test_siege_proficiencies_cost_a_nonweapon_slot_and_are_warrior_only():
+    cm = _fighter_at_profs()
+    c = cm.character
+    cm.dispatch("addtalent/Artillerist")
+    assert c.special_talents == {"Artillerist": "nonweapon"}
+    assert c.nonweapon_slots_used() == 1 and c.weapon_slots_used() == 0
+    assert {t.name for t in cr.SIEGE_PROFICIENCIES.values()} == {"Artillerist", "Vehicle Handling"}
+    cm2 = _cleric_at_profs()
+    cm2.dispatch("addtalent/Vehicle Handling")            # warrior-only
+    assert cm2.character.special_talents == {}
+
+
+def test_unarmed_profs_survive_a_round_trip():
+    from character import Character
+    cm = _fighter_at_profs()
+    cm.dispatch("addunarmed/Wrestling")
+    back = Character.from_dict(cm.character.to_dict())
+    assert back.unarmed_profs == {"Wrestling": "proficient"}
+    assert back.unarmed_rung("Pummeling") == "familiar"
+
+
+def test_legacy_weapon_prof_list_migrates_to_rungs():
+    from character import Character
+    c = _fighter_at_profs().character
+    legacy = c.to_dict()
+    legacy["weapon_profs"] = ["Long Sword", "Dagger"]   # the old flat list
+    back = Character.from_dict(legacy)
+    assert back.weapon_profs == {"Long Sword": "proficient", "Dagger": "proficient"}
+
+
+def test_html_weapon_section_shows_rungs_and_steppers():
+    cm = _fighter_at_profs()
+    cm.dispatch("addweapon/Long Sword")
+    html = cmh.generate(cm)
+    assert "dnd:///cm/wpnup/Long Sword" in html
+    assert "Proficient" in html and "Specialist" in html      # rung + ladder text
+    cm.dispatch("wpnup/Long Sword")
+    html = cmh.generate(cm)
+    assert "dnd:///cm/wpndown/Long Sword" in html
 
 
 def test_proficiency_class_availability_gating():
@@ -627,24 +1319,94 @@ def test_ambidexterity_purchase_costs_one_slot():
     assert c.bought_ambidexterity is False
 
 
-def test_html_proficiencies_step_renders_with_house_rules():
+def test_html_weapons_step_renders_with_house_rules():
+    cm = _fighter_at_profs()                       # the weapons step
+    html = cmh.generate(cm)
+    assert "Weapon Proficiencies" in html
+    assert "crossbows are free" in html
+    assert "dnd:///cm/addweapon/Long Bow" in html
+    # Handedness roll lives here (it affects which weapon proficiencies you take).
+    assert "dnd:///cm/handedness" in html and "Roll d10" in html
+    # ...and the Combat & Tactics sections it now shares the page with
+    for section in ("Weapon groups", "Shield &amp; armor proficiency",
+                    "Fighting styles", "Unarmed combat", "Special talents"):
+        assert section in html
+    assert "dnd:///cm/addprof/Swimming" not in html    # nonweapon skills moved out
+
+
+def test_ct_sections_have_what_it_does_blocks():
+    cm = _fighter_at_profs()
+    for verb in ("styleup/Two-Weapon", "addunarmed/Pummeling",
+                 "addunarmed/Martial Arts: Style A", "addtalent/Ambidexterity"):
+        cm.dispatch(verb)
+    cm.dispatch("addtalent/Flying Kick")               # needs the style above
+    html = cmh.generate(cm)
+    assert html.count("What it does") >= 5             # styles, unarmed, both talent kinds
+    for name in ("Two-Weapon", "Pummeling", "Martial Arts: Style A",
+                 "Ambidexterity", "Flying Kick"):
+        assert cr.ct_summary(name)[:40] in html        # the mechanical summary, not prose
+        assert f"newtab/{cr.ct_page(name)}" in html    # ...and a link to the full rule
+    assert "Read the full rule" in html
+
+
+def test_ct_rules_cover_every_style_discipline_and_talent():
+    named = (set(cr.FIGHTING_STYLES) | set(cr.UNARMED_DISCIPLINES) | set(cr.TALENTS))
+    missing = sorted(n for n in named if not cr.ct_summary(n))
+    assert missing == [], f"no Combat & Tactics summary for: {missing}"
+    for name in named:
+        assert cr.ct_page(name).startswith("CT/")
+        summary = cr.ct_summary(name)
+        # a summary is a summary, not the whole page
+        assert 40 < len(summary) < 460, name
+        # the block escapes its text, so markdown emphasis would render literally
+        assert "*" not in summary, name
+
+
+def test_combat_and_tactics_references_are_not_badged_as_phb():
+    import re
+    for step in STEPS:
+        for label, url, kind in cmh._STEP_REFS.get(step, []):
+            if url.startswith("CT/"):
+                assert kind == "ct", f"{label} is a C&T page badged {kind!r}"
+            elif url.startswith("PHB/"):
+                assert kind == "phb", f"{label} is a PHB page badged {kind!r}"
+    assert cmh._REF_BADGE["ct"] == "C&amp;T"
+    # the chips must render with their own class, so the CSS can colour them
     cm = _fighter_at_profs()
     html = cmh.generate(cm)
-    assert "Weapon Proficiencies" in html and "Nonweapon Proficiencies" in html
-    assert "crossbows are free" in html and "adds +2" in html
-    assert "dnd:///cm/addweapon/Long Bow" in html
+    assert 'class="phb-ref ct"' in html and ".phb-ref.ct" in html
+
+
+def test_rail_shortens_the_long_step_labels():
+    # Ten steps means ~85px columns, so the rail abbreviates while the heading doesn't.
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("nonweapon")
+    html = cmh.generate(cm)
+    assert '<span class="rl">Nonweapon</span>' in html
+    assert '<h2 class="step-h">Nonweapon Proficiencies</h2>' in html
+    assert '<span class="rl">Weapons</span>' in html
+
+
+def test_html_nonweapon_step_is_its_own_page():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("nonweapon")
+    html = cmh.generate(cm)
+    assert "Nonweapon Proficiencies" in html
+    assert "adds +2" in html                            # the house-rule slot bonus
     assert "dnd:///cm/addprof/Swimming" in html
-    # Handedness roll now lives here (it affects which proficiencies you take).
-    assert "dnd:///cm/handedness" in html and "Roll d10" in html
+    assert "dnd:///cm/addweapon/Long Bow" not in html   # weapons stayed behind
+    assert "Fighting styles" not in html
 
 
 def test_html_review_lists_chosen_proficiencies():
     cm = _complete()
-    cm.character.weapon_profs = ["Long Sword"]
+    cm.character.weapon_profs = {"Long Sword": "specialist", "Dagger": "proficient"}
     cm.character.nonweapon_profs = {"Swimming": 1}
     cm.index = STEPS.index("review")
     html = cmh.generate(cm)
-    assert "Long Sword" in html and "Swimming" in html
+    assert "Long Sword (Specialist)" in html      # the rung is named on the sheet
+    assert "Dagger" in html and "Dagger (" not in html   # plain proficiency isn't
+    assert "Swimming" in html
 
 
 # ── Equipment + Spells steps ─────────────────────────────────────────────────
@@ -682,12 +1444,12 @@ def test_cannot_overspend_on_equipment():
 def test_spell_pick_validated_against_catalog():
     cm = _cleric_at_profs()
     cm.index = STEPS.index("spells")
-    cm.spell_catalog = [{"name": "Bless", "school": "Combat"}]
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1}]
     cm.dispatch("addspell/Bless")
     cm.dispatch("addspell/Fireball")                       # not in catalog -> rejected
-    assert cm.character.spells == ["Bless"]
+    assert cm.character.spells == {"Bless": 1}
     cm.dispatch("rmspell/Bless")
-    assert cm.character.spells == []
+    assert cm.character.spells == {}
 
 
 def test_html_equipment_and_spells_steps_render():
@@ -698,7 +1460,7 @@ def test_html_equipment_and_spells_steps_render():
     assert "Equipment" in h and "Armor Class" in h and "dnd:///cm/buy/" in h
     cm2 = _cleric_at_profs()
     cm2.index = STEPS.index("spells")
-    cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "description": "x"}]
+    cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1, "description": "x"}]
     assert "dnd:///cm/addspell/Bless" in cmh.generate(cm2)
 
 
@@ -706,10 +1468,10 @@ def test_spell_pick_respects_level1_limit():
     cm = _cleric_at_profs()                                # Wis 14 -> 3 spells
     cm.index = STEPS.index("spells")
     names = ["Bless", "Cure Light Wounds", "Sanctuary", "Command"]
-    cm.spell_catalog = [{"name": n, "school": "Combat"} for n in names]
+    cm.spell_catalog = [{"name": n, "school": "Combat", "level": 1} for n in names]
     for n in names:
         cm.dispatch("addspell/" + n)
-    assert cm.character.spells == names[:3]                # capped at the 3-spell limit
+    assert set(cm.character.spells) == set(names[:3])      # capped at the 3-spell limit
     cm.dispatch("rmspell/Bless")                           # free up a slot
     cm.dispatch("addspell/Command")
     assert "Command" in cm.character.spells and len(cm.character.spells) == 3
@@ -718,9 +1480,83 @@ def test_spell_pick_respects_level1_limit():
 def test_html_spells_shows_limit_and_collapsible_info():
     cm = _cleric_at_profs()
     cm.index = STEPS.index("spells")
-    cm.spell_catalog = [{"name": "Bless", "school": "Combat",
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1,
                          "description": "The caster raises morale for nearby allies."}]
     cm.dispatch("addspell/Bless")
     h = cmh.generate(cm)
     assert "left" in h and "memorized" in h                # spell budget bar
     assert "What it does" in h and "raises morale for nearby allies" in h   # collapsible
+
+
+def test_dropping_a_level_forgets_spells_that_level_can_no_longer_cast():
+    cm = _cleric_at_profs()
+    cm.set_level(5)                                        # 3rd-level spells online
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1},
+                        {"name": "Prayer", "school": "Combat", "level": 3}]
+    cm.dispatch("addspell/Bless")
+    cm.dispatch("addspell/Prayer")
+    assert cm.character.spells == {"Bless": 1, "Prayer": 3}
+
+    cm.set_level(1)
+    # A 1st-level cleric cannot know a 3rd-level spell at all — that isn't an
+    # overspent budget the player can trim, so the build drops it.
+    assert cm.character.spells == {"Bless": 1}
+
+
+def test_changing_to_a_non_caster_empties_the_spellbook():
+    cm = _cleric_at_profs()
+    cm.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1}]
+    cm.dispatch("addspell/Bless")
+    assert cm.character.spells
+    cm.set_class("Fighter")
+    assert cm.character.spells == {}
+
+
+def _overspent_fighter():
+    """A 13th-level fighter who spent six weapon slots, then dropped to 1st."""
+    cm = _fighter_at_profs()
+    cm.set_level(13)
+    for w in ["Long Sword", "Dagger", "Spear", "Battle Axe", "Club", "Mace"]:
+        cm.add_weapon(w)
+    cm.set_level(1)
+    return cm
+
+
+def test_an_overspent_slot_budget_blocks_the_step():
+    cm = _overspent_fighter()
+    c = cm.character
+    assert c.weapon_slots_left() == -2                 # the level drop shrank it
+    assert not cm.is_complete("weapons")
+    cm.index = STEPS.index("weapons")
+    assert not cm.can_advance()
+    assert not cm.goto("review")                       # and the rail won't skip past
+
+    cm.remove_weapon("Mace")
+    cm.remove_weapon("Club")
+    assert c.weapon_slots_left() == 0
+    assert cm.is_complete("weapons") and cm.can_advance()
+
+
+def test_an_overspent_budget_says_so_in_the_bar():
+    cm = _overspent_fighter()
+    cm.index = STEPS.index("weapons")
+    html = cmh.generate(cm)
+    assert 'class="budget over"' in html
+    assert "Over budget by 2" in html
+
+
+def test_a_budget_within_its_means_is_not_flagged():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("weapons")
+    assert cm.is_complete("weapons")
+    assert "budget over" not in cmh.generate(cm)
+
+
+def test_the_nonweapon_step_gates_on_its_own_budget():
+    cm = _fighter_at_profs()
+    c = cm.character
+    assert cm.is_complete("nonweapon")
+    # Spend one slot more than the level affords, the way a level drop would.
+    c.nonweapon_profs = {"Riding, Land-Based": c.nonweapon_slots_total() + 1}
+    assert c.nonweapon_slots_left() == -1
+    assert not cm.is_complete("nonweapon")

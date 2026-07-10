@@ -62,7 +62,8 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         "character_name": c.name or "",
         "player_race": c.race or "",
         "player_class": c.char_class or "",
-        "player_level": 1,
+        "player_level": c.level,
+        "xp": c.xp,
         "alignment": c.alignment or "",
         "gender": c.gender or "",
         "strength": final.get("Strength", 10),
@@ -95,8 +96,14 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
             })
     out["weapons"] = weapons
 
-    # Weapon proficiencies (the trained-with list) -> the sheet's WP section.
-    out["weapon_profs"] = list(c.weapon_profs)
+    # Weapon proficiencies -> the sheet's WP section. Each carries the slots it cost
+    # and its Combat & Tactics mastery rung, so the sheet's `wpsslots` column is real.
+    out["weapon_profs"] = [
+        {"name": name, "slots": c.weapon_prof_cost(name), "rung": rung}
+        for name, rung in c.weapon_profs.items()
+    ]
+
+    out["thief_skills"] = _thief_skills(c)
 
     # Nonweapon proficiencies: the sheet computes total = stat + base, so base is the
     # part of our skill that isn't the ability score itself.
@@ -114,34 +121,38 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         nwp.append({"name": name, "stat": stat, "base": base})
     out["nwp"] = nwp
 
-    # All carried gear (weight + cost drive the sheet's encumbrance/wealth).
+    # All carried gear (weight + cost drive the sheet's encumbrance/wealth). Weight
+    # is the *encumbering* weight, so armor the character is proficient in counts
+    # half (Combat & Tactics) — the sheet's encumbrance then matches the builder's.
     gear = []
     for name, qty in c.inventory.items():
         it = cr.item(name) or {}
         gear.append({
             "name": name, "qty": qty,
-            "weight": it.get("weight") or 0, "cost": it.get("cost_cp") or 0,
+            "weight": c.item_weight(name), "cost": it.get("cost_cp") or 0,
         })
     out["gear"] = gear
 
     # Worn armor -> the sheet's Armor section, so its AC worker recomputes Armor
-    # Class from equipped pieces (10 base + these + Dex, ascending).
+    # Class from equipped pieces (10 base + these + Dex, ascending). A shield gives
+    # a bigger bonus to a proficient wielder.
     armor = []
     for name in c.worn:
         it = cr.item(name)
         if it and it.get("category") == "Armor":
-            armor.append({"name": name, "aac": it.get("ac_bonus", 0),
+            armor.append({"name": name, "aac": c.item_ac_bonus(name),
                           "amagic": 0, "adex": 0, "aequipped": 1})
     out["armor"] = armor
 
-    # Known spells (all 1st level at creation), enriched from the DB: full stat
-    # block, description, and V/S/M components.
+    # Known spells, enriched from the DB: full stat block, description, and V/S/M
+    # components. The level comes from the character (that's what the builder
+    # validated against its slots), and drives the sheet's repeating_spells<N>.
     spells = []
-    for name in c.spells:
+    for name, spell_level in c.spells.items():
         d = spell_details.get(name, {})
         comp = (d.get("components") or "").upper()
         spells.append({
-            "level": d.get("level", 1), "name": name,
+            "level": spell_level, "name": name,
             "school": d.get("school", ""), "range": d.get("range", ""),
             "castingTime": _casting_segments(d.get("casting_time")),
             "save": d.get("save", ""), "aoe": d.get("aoe", ""),
@@ -164,3 +175,43 @@ def _norm_damage(dmg) -> str:
 def _int_or_zero(v) -> int:
     m = re.match(r"\s*(\d+)", str(v or ""))
     return int(m.group(1)) if m else 0
+
+
+#: Sheet suffixes for its "OG" (2e PHB) thief table: thiefO<key>{B,A,Ar,P} are
+#: base / race+Dex adjustment / armor adjustment / discretionary points, and the
+#: sheet's own `C` column sums them.
+_THIEF_SHEET_KEYS = {
+    "Pick Pockets": "PP",
+    "Open Locks": "OL",
+    "Find/Remove Traps": "FRT",
+    "Move Silently": "MS",
+    "Hide in Shadows": "HS",
+    "Detect Noise": "DN",
+    "Climb Walls": "CW",
+    "Read Languages": "RL",
+}
+
+
+def _thief_skills(c) -> list:
+    """The four columns of the sheet's thief table, one row per skill this class has.
+
+    Empty for every class but Thief and Bard. The armor column is the adjustment
+    for what the character is *currently wearing*; the sheet's own "Armor Equiped"
+    dropdown would recompute it, so the import deliberately leaves that alone.
+    """
+    if not c.has_thief_skills():
+        return []
+    dex = c.final_abilities().get("Dexterity") or 0
+    armor_kind = c.thief_armor_kind()
+    rows = []
+    for skill in c.thief_skill_names():
+        rows.append({
+            "key": _THIEF_SHEET_KEYS[skill],
+            "name": skill,
+            "base": cr.thief_skill_base(c.char_class, skill),
+            "adj": (cr.thief_racial_adjustment(c.race, skill)
+                    + cr.thief_dex_adjustment(dex, skill)),
+            "armor": cr.thief_armor_adjustment(armor_kind, skill),
+            "points": c.thief_points_in(skill),
+        })
+    return rows

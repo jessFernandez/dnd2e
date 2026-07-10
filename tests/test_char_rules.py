@@ -62,6 +62,71 @@ def test_priest_spell_slots_level1_includes_only_castable_bonus():
     assert cr.priest_spell_slots(1, 18) == {1: 3}
 
 
+# ── Spell progression (PHB Tables 21, 24, 17, 18, 32) ────────────────────────
+
+def test_wizard_progression_matches_table_21():
+    assert cr.wizard_spell_slots(1) == {1: 1}
+    assert cr.wizard_spell_slots(5) == {1: 4, 2: 2, 3: 1}
+    assert cr.wizard_spell_slots(12) == {1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 1}
+    assert cr.wizard_spell_slots(20) == {1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 4, 7: 3, 8: 3, 9: 2}
+
+
+def test_intelligence_caps_the_highest_wizard_spell_level():
+    # Int 9 -> max spell level 4, so a 12th-level mage loses his 5th and 6th
+    assert cr.wizard_spell_slots(12, int_score=9) == {1: 4, 2: 4, 3: 4, 4: 4}
+    assert cr.max_spell_level("Mage", 20, int_score=18) == 9
+
+
+def test_specialist_wizard_gains_one_extra_spell_per_level():
+    assert cr.wizard_spell_slots(5) == {1: 4, 2: 2, 3: 1}
+    assert cr.spell_slots("Illusionist", 5, int_score=18) == {1: 5, 2: 3, 3: 2}
+    assert cr.spell_slots("Mage", 5, int_score=18) == {1: 4, 2: 2, 3: 1}   # not a specialist
+
+
+def test_priest_progression_matches_table_24_with_wisdom_bonus():
+    # base row 9 is 4/4/3/2/1; Wis 13 adds one 1st-level bonus spell
+    assert cr.priest_spell_slots(9, 13) == {1: 5, 2: 4, 3: 3, 4: 2, 5: 1}
+    assert cr.priest_spell_slots(9, 10) == {1: 4, 2: 4, 3: 3, 4: 2, 5: 1}   # no bonus
+
+
+def test_priest_top_two_spell_levels_are_gated_on_wisdom():
+    # Table 24 footnotes: 6th needs Wis 17+, 7th needs Wis 18+
+    assert 6 not in cr.priest_spell_slots(11, 16)
+    assert 6 in cr.priest_spell_slots(11, 17)
+    assert 7 not in cr.priest_spell_slots(14, 17)
+    assert 7 in cr.priest_spell_slots(14, 18)
+
+
+def test_paladin_and_ranger_cast_late_and_get_no_wisdom_bonus():
+    assert cr.spell_slots("Paladin", 8) == {}           # nothing before 9th
+    assert cr.spell_slots("Paladin", 9) == {1: 1}
+    assert cr.spell_slots("Ranger", 7) == {}            # nothing before 8th
+    assert cr.spell_slots("Ranger", 8) == {1: 1}
+    # PHB is explicit: neither gains bonus spells for high Wisdom
+    assert cr.spell_slots("Paladin", 9, wis=18) == {1: 1}
+    assert cr.spell_slots("Ranger", 8, wis=18) == {1: 1}
+    # a ranger's slots stop improving after the table's last row (16th)
+    assert cr.spell_slots("Ranger", 20) == cr.spell_slots("Ranger", 16) == {1: 3, 2: 3, 3: 3}
+
+
+def test_bard_casts_wizard_spells_from_second_level():
+    assert cr.spell_slots("Bard", 1, int_score=16) == {}
+    assert cr.spell_slots("Bard", 2, int_score=16) == {1: 1}
+    assert cr.spell_slots("Bard", 20, int_score=18) == {1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 3}
+
+
+def test_spell_caster_group_and_noncasters():
+    assert cr.spell_caster_group("Mage") == "wizard"
+    assert cr.spell_caster_group("Bard") == "wizard"      # bards cast wizard spells
+    assert cr.spell_caster_group("Cleric") == "priest"
+    assert cr.spell_caster_group("Paladin") == "priest"   # ...and paladins priest spells
+    assert cr.spell_caster_group("Ranger") == "priest"
+    for cls in ("Fighter", "Thief"):
+        assert cr.spell_caster_group(cls) is None
+        assert cr.spell_slots(cls, 20) == {}
+        assert cr.max_spell_level(cls, 20) == 0
+
+
 def test_charisma_henchmen_and_reaction():
     assert cr.charisma_mods(18).max_henchmen == 15
     assert cr.charisma_mods(18).loyalty_base == 8
@@ -110,6 +175,180 @@ def test_racial_requirements_pass_and_fail():
     low_con = dict(ok, Constitution=9)                 # dwarf needs Con ≥ 11
     fails = cr.meets_racial_requirements("Dwarf", low_con)
     assert fails == [("Constitution", 11, 18, 9)]
+
+
+# ── Leveling: HP accumulation + attacks per round ────────────────────────────
+
+def test_hp_die_levels_stops_at_name_level():
+    # Warriors stop rolling HD after 9th; wizards after 10th.
+    assert [cr.hp_die_levels("Fighter", n) for n in (1, 2, 9, 10, 15)] == [0, 1, 8, 8, 8]
+    assert cr.hp_die_levels("Mage", 12) == 9
+
+
+def test_hp_at_level_1_matches_best_case():
+    assert cr.hp_at_level("Fighter", 1, 16, []) == cr.max_hp_at_first_level("Fighter", 16)
+
+
+def test_hp_accumulates_roll_plus_con_per_hit_die():
+    b = cr.con_hp_bonus("Fighter", 16)                 # +2 per HD for a warrior
+    assert cr.hp_at_level("Fighter", 3, 16, [5, 6]) == (10 + b) + (5 + b) + (6 + b)
+
+
+def test_hp_past_name_level_is_flat_with_no_die_or_con():
+    b = cr.con_hp_bonus("Fighter", 16)
+    hp = cr.hp_at_level("Fighter", 11, 16, [6] * 8)    # 8 rolled HD, then 2 flat levels
+    assert hp == (10 + b) + 8 * (6 + b) + 2 * cr.GROUPS["Warrior"].hp_after
+
+
+def test_each_level_yields_at_least_one_hp():
+    # Mage (house d6) with Con 3 (-2/HD): a rolled 1 would be -1, clamped to +1.
+    assert cr.hp_at_level("Mage", 2, 3, [1]) == cr.max_hp_at_first_level("Mage", 3) + 1
+
+
+def test_hp_at_level_requires_enough_rolls():
+    with pytest.raises(ValueError):
+        cr.hp_at_level("Fighter", 5, 16, [4, 5])       # needs 4 rolls, given 2
+
+
+def test_attacks_per_round_warriors_only():
+    assert [cr.attacks_per_round("Fighter", n) for n in (1, 6, 7, 12, 13, 20)] == \
+        [(1, 1), (1, 1), (3, 2), (3, 2), (2, 1), (2, 1)]
+    assert cr.attacks_per_round("Paladin", 7) == (3, 2)   # paladins/rangers are warriors
+    assert cr.attacks_per_round("Ranger", 13) == (2, 1)
+    for cls in ("Mage", "Cleric", "Thief"):
+        assert cr.attacks_per_round(cls, 20) == (1, 1)    # never advances
+
+
+# ── Combat & Tactics: weapon groups + barred weapons (CT Ch4/Ch7) ────────────
+
+def test_every_weapon_has_group_and_access_data():
+    # data integrity: the CT tables must cover the whole roster, no strays
+    assert set(cr.WEAPON_TIGHT_GROUPS) == set(cr.WEAPONS)
+    assert set(cr.WEAPON_ACCESS) == set(cr.WEAPONS)
+    for w in cr.WEAPONS:
+        for tight in cr.weapon_tight_groups(w):
+            assert tight in cr.TIGHT_TO_BROAD, f"{w}: tight group {tight} has no broad group"
+
+
+def test_weapon_belongs_to_several_tight_groups():
+    # CT/DD02744: a short sword is Ancient, Middle Eastern and Short
+    assert cr.weapon_tight_groups("Short Sword") == ("Ancient", "Middle Eastern", "Short")
+    assert cr.weapon_tight_groups("Broad Sword") == ("Ancient", "Roman", "Medium")
+    assert cr.weapon_broad_groups("Short Sword") == ("Swords",)   # all three roll up to Swords
+
+
+def test_weapons_outside_any_group():
+    # "Unrelated" is not a group; absent weapons belong to none.
+    for w in ("Trident", "Quarterstaff", "Sling"):
+        assert cr.weapon_tight_groups(w) == ()
+        assert cr.weapon_broad_groups(w) == ()
+
+
+def test_weapon_group_members():
+    assert cr.weapon_group_members("Crossbows") == ("Light Crossbow", "Heavy Crossbow")
+    assert cr.weapon_group_members("Bows") == ("Short Bow", "Long Bow")
+    assert cr.weapon_group_members("Large") == ("Bastard Sword", "Two-Handed Sword")
+    assert cr.weapon_group_members("Nonexistent") == ()
+
+
+def test_familiarity_is_union_over_tight_groups():
+    # proficient in Short Sword -> familiar with everything sharing any of its
+    # three tight groups: Broad Sword (Ancient), Scimitar (Middle Eastern), Dagger (Short)
+    profs = ["Short Sword"]
+    for w in ("Broad Sword", "Scimitar", "Dagger"):
+        assert cr.is_familiar(w, profs), w
+    assert not cr.is_familiar("Short Sword", profs)      # already proficient
+    assert not cr.is_familiar("Halberd", profs)          # unrelated group
+    assert not cr.is_familiar("Quarterstaff", profs)     # group-less: never familiar
+    # crossbows are their own tight group
+    assert cr.is_familiar("Heavy Crossbow", ["Light Crossbow"])
+
+
+def test_barred_weapon_penalty_matches_ct_worked_example():
+    # CT/DD02624: a wizard pays 2 slots total for a long sword (available to rogues)
+    # and 3 for a two-handed sword (warrior-only). Base cost is 1 slot.
+    assert 1 + cr.barred_weapon_penalty("Long Sword", "Mage") == 2
+    assert 1 + cr.barred_weapon_penalty("Two-Handed Sword", "Mage") == 3
+    # rogues/priests reaching for a warrior weapon pay one extra slot
+    assert cr.barred_weapon_penalty("Two-Handed Sword", "Thief") == 1
+    assert cr.barred_weapon_penalty("Halberd", "Cleric") == 1
+    # nobody is barred from their own tier, and warriors are never barred
+    assert cr.barred_weapon_penalty("Dagger", "Mage") == 0
+    assert cr.barred_weapon_penalty("Long Sword", "Thief") == 0
+    for w in cr.WEAPONS:
+        assert cr.barred_weapon_penalty(w, "Fighter") == 0
+
+
+def test_weapon_rung_ladder_is_class_and_level_gated():
+    # Only a single-class fighter climbs past specialisation, and only with levels.
+    assert cr.weapon_rung_ladder("Fighter", 1) == ("proficient", "specialist")
+    assert cr.weapon_rung_ladder("Fighter", 5) == ("proficient", "specialist", "master")
+    assert cr.weapon_rung_ladder("Fighter", 6)[-1] == "high_master"
+    assert cr.weapon_rung_ladder("Fighter", 9)[-1] == "grand_master"
+    # paladins and rangers take expertise instead, and stop there
+    for cls in ("Paladin", "Ranger"):
+        assert cr.weapon_rung_ladder(cls, 20) == ("proficient", "expert")
+    # everyone else stops at proficiency, however high they climb
+    for cls in ("Mage", "Cleric", "Thief", "Bard"):
+        assert cr.weapon_rung_ladder(cls, 20) == ("proficient",)
+    assert cr.max_weapon_rung("Fighter", 9) == "grand_master"
+
+
+def test_rung_costs_layer_house_rules_and_barred_penalty_on_ct():
+    # CT: proficiency 1 slot, expertise/specialisation 2, mastery 3, high 4, grand 5
+    for rung, total in (("proficient", 1), ("specialist", 2), ("master", 3),
+                        ("high_master", 4), ("grand_master", 5)):
+        assert cr.weapon_prof_cost("Long Sword", rung, "Fighter") == total
+    # house rules ride on top of the proficiency slot: crossbows free, bows cost 2
+    assert cr.weapon_prof_cost("Light Crossbow", "proficient", "Fighter") == 0
+    assert cr.weapon_prof_cost("Light Crossbow", "specialist", "Fighter") == 1
+    assert cr.weapon_prof_cost("Long Bow", "proficient", "Fighter") == 2
+    # ...and so does the barred-weapon penalty (a wizard's long sword costs 2)
+    assert cr.weapon_prof_cost("Long Sword", "proficient", "Mage") == 2
+
+
+def test_next_and_prev_rung_walk_the_ladder():
+    assert cr.next_weapon_rung("proficient", "Fighter", 1) == "specialist"
+    assert cr.next_weapon_rung("specialist", "Fighter", 1) is None      # needs 5th
+    assert cr.next_weapon_rung("specialist", "Fighter", 5) == "master"
+    assert cr.next_weapon_rung("expert", "Ranger", 20) is None          # top for a ranger
+    assert cr.prev_weapon_rung("master", "Fighter", 5) == "specialist"
+    assert cr.prev_weapon_rung("proficient", "Fighter", 5) is None
+
+
+def test_specialises_flags_the_mastery_rungs():
+    assert not cr.specialises("proficient") and not cr.specialises("expert")
+    for rung in ("specialist", "master", "high_master", "grand_master"):
+        assert cr.specialises(rung)
+
+
+def test_barred_penalty_is_zero_before_a_class_is_chosen():
+    assert cr.barred_weapon_penalty("Two-Handed Sword", None) == 0
+    assert cr.weapon_prof_cost("Two-Handed Sword", "proficient", None) == 1
+
+
+def test_shield_types_map_to_ct_table():
+    assert set(cr.SHIELD_TYPES.values()) <= set(cr.SHIELD_PROFICIENCY)
+    assert cr.SHIELD_TYPES["Shield, Aspis"] == "medium"          # DM ruling
+    assert cr.SHIELD_PROFICIENCY["medium"]["proficient_ac"] == 3
+    assert cr.SHIELD_PROFICIENCY["buckler"]["attackers"] == 1
+
+
+def test_shield_keeps_its_homebrew_bonus_until_proficient():
+    # The homebrew item owns the normal bonus (our aspis is +2 where CT's medium
+    # shield is +1); CT's table only supplies the proficient upgrade.
+    assert cr.shield_ac_bonus("Shield, Aspis") == cr.item("Shield, Aspis")["ac_bonus"] == 2
+    assert cr.shield_ac_bonus("Shield, Aspis", proficient=True) == 3
+    # a buckler gains no AC from proficiency, and never drops below its own value
+    assert cr.shield_ac_bonus("Shield, Buckler") == 1
+    assert cr.shield_ac_bonus("Shield, Buckler", proficient=True) == 1
+    assert cr.shield_ac_bonus("Chain, Full") == 0                # not a shield
+
+
+def test_armor_items_excludes_shields():
+    items = cr.armor_items()
+    assert "Chain, Full" in items and "Helm, Full" in items
+    assert not any(cr.is_shield(i) for i in items)
 
 
 def test_race_base_movement():

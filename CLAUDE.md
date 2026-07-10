@@ -51,19 +51,31 @@ character.py         Character — the mutable in-progress build; derives everyt
                      by delegating to char_rules (can't disagree with the rulebook)
 charactermancer.py   Charactermancer — the step-flow controller (state machine)
 character_library.py CharacterLibrary — save/load/delete builds + Roll20 payload
-charactermancer_html.py   the builder's HTML view (string templating)
+charactermancer_html.py   the builder's HTML view (string templating): document
+                     shell, progress rail, and every step but the two below
+charactermancer_profs_html.py   the Weapon/Nonweapon Proficiency steps — the CT
+                     mastery ladder, groups, styles, unarmed, talents, thief skills
+charactermancer_common.py   the few primitives both views need (esc, budget_bar),
+                     so neither imports the other
 app.py               MainWindow — Qt shell that wires the above to the UI
 ```
+
+Don't confuse `charactermancer_profs_html.py` (a builder step) with
+`proficiencies_html.py` (the *Codex of Worldly Craft* reference screen).
 
 `roll20_export.py` and `calculator.py` **re-export** the house-rule conversions
 from `char_rules` rather than reimplementing them, so the calculator, the builder,
 and the Roll20 sheet can never disagree. Preserve that — don't duplicate a rule.
 
-The builder currently makes **level-1, single-class PHB** characters, but
-`char_rules` is already fully parameterized by level. The top planned feature —
-character leveling / advancement — is scoped in
-[`docs/leveling-plan.md`](docs/leveling-plan.md), including which 2e tables are
-still missing from the engine.
+The builder makes **single-class PHB** characters at any level their race allows:
+hit points, THAC0, saves, attacks/round, spell progressions, thief skills and
+turning undead are all parameterized by level. That work is recorded in
+[`docs/leveling-plan.md`](docs/leveling-plan.md) (complete). So is the adoption of
+the *Combat & Tactics* character-building rules — weapon mastery ladder, weapon
+groups, fighting styles, unarmed disciplines, special talents, but **not** its
+weapon list or spells — in
+[`docs/combat-tactics-chargen-plan.md`](docs/combat-tactics-chargen-plan.md)
+(complete). Multi-classing and dual-classing remain unmodeled.
 
 ### "Ask the Rules" (Jarvis)
 

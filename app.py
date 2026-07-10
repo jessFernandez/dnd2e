@@ -1364,30 +1364,56 @@ class MainWindow(QMainWindow):
         return True
 
     def _render_charactermancer(self) -> bool:
-        """Render the interactive character builder's current step. The build is
-        window-level state (self._cm) so leaving and returning keeps your progress."""
+        """Load the builder as a fresh document. The build is window-level state
+        (self._cm) so leaving and returning keeps your progress."""
         if self._cm is None:
             self._cm = Charactermancer()
         saved = self._char_library.all()
         self._set_spell_catalog()
         self.content._view.setHtml(charactermancer_html.generate(self._cm, saved))
+        self._cm_status()
+        return True
+
+    def _cm_status(self):
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title("Character Builder")
         self.status.showMessage(f"  Character Builder  ·  {self._cm.title}")
-        return True
+
+    def _cm_rerender(self, scroll_to_top: bool):
+        """Re-render the builder after an action, *without* reloading the document.
+
+        `setHtml` tears the page down and rebuilds it, so the view blanks and
+        repaints — that's the flicker. Replacing the `.wrap` node inside the live
+        document leaves the scroll offset untouched and never blanks. If the current
+        document isn't the builder (nothing to swap) the JS returns false and we
+        fall back to a full load."""
+        if not HAS_WEBENGINE:
+            self._render_charactermancer()
+            return
+        self._set_spell_catalog()
+        wrap = charactermancer_html.generate_wrap(self._cm, self._char_library.all())
+        js = charactermancer_html.swap_wrap_js(wrap, scroll_to_top)
+        self.content._view.page().runJavaScript(
+            js, lambda swapped: None if swapped else self._render_charactermancer())
+        self._cm_status()
 
     def _set_spell_catalog(self):
-        """Load the level-1 spell list for the build's class onto the controller so
-        the Spells step can render and validate picks. Empty for non-casters."""
-        group = self._cm.character.spellcasting_group()
-        if not group:
+        """Load the spell list for the build's class onto the controller so the Spells
+        step can render and validate picks: every spell of a level the character can
+        actually cast. Empty for non-casters (and for casters below the level their
+        progression starts, e.g. a 7th-level ranger)."""
+        char = self._cm.character
+        group = char.spellcasting_group()
+        max_level = char.max_spell_level()
+        if not group or max_level < 1:
             self._cm.spell_catalog = []
             return
         if self._all_spells is None:
             self._all_spells = db.all_spells(self.db)
-        self._cm.spell_catalog = [s for s in self._all_spells
-                                  if s.get("caster") == group and s.get("level") == 1]
+        self._cm.spell_catalog = [
+            s for s in self._all_spells
+            if s.get("caster") == group and 1 <= (s.get("level") or 0) <= max_level]
 
     def _cm_action(self, path: str):
         """Apply a cm/ link action to the builder and re-render it in place. Save/
@@ -1396,6 +1422,7 @@ class MainWindow(QMainWindow):
         if self._cm is None:
             self._cm = Charactermancer()
         self._set_spell_catalog()          # so addspell validates against the class
+        step_before = self._cm.step
         if path == "restart":
             self._cm = Charactermancer()
         elif path == "save":
@@ -1409,7 +1436,8 @@ class MainWindow(QMainWindow):
             return
         else:
             self._cm.dispatch(unquote(path))
-        self._render_charactermancer()
+        keep = charactermancer_html.keeps_scroll(path, step_before, self._cm.step)
+        self._cm_rerender(scroll_to_top=not keep)
 
     def _cm_export_roll20(self):
         """Build the Roll20 import JSON for the current character (enriching its

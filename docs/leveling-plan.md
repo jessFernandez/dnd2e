@@ -1,6 +1,6 @@
 # Feature plan: character leveling / advancement
 
-Status: **planned, not started** · Owner: TBD · Last updated: 2026-07-07
+Status: **complete** (phases 1, 1b, 2, 3) · Last updated: 2026-07-10
 
 Turn the character builder from a level-1 generator into a real character manager
 that can set a character's level (or track XP and level up) and recompute every
@@ -13,16 +13,23 @@ of any D&D feature (transcribing the 2e progression tables) is done and currentl
 unused above level 1. See the readiness table below. This is the highest
 value-to-effort item in the codebase.
 
-## Step zero: character state
+## Step zero: character state — ✅ **DONE (Phase 1)**
 
-`Character` (character.py) has **no `level` or `xp` field**. Every derived method
-already takes `level: int = 1` and just defaults to 1, but three things hardcode
-level 1 and must be threaded:
+`Character` now carries `level`, `xp` and `hp_rolls`, and the level-1 hardcoding is
+gone:
 
-- `weapon_slots_total()` / `nonweapon_slots_total()` — call `cr.*_slots(cls, 1)`
-- `max_hp()` — only best-case level-1 HP
-- `to_dict()` / `from_dict()` — don't persist level/xp
-- `roll20_export.py` — hardcodes `"player_level": 1`
+- `weapon_slots_total()` / `nonweapon_slots_total()` use `self.level`
+- `max_hp()` / `thac0()` / `attack_bonus()` / `saving_throws()` default to the
+  character's own level (an explicit `level=` argument still overrides)
+- `set_level(level, rng)` clamps to the racial cap and keeps `hp_rolls` in sync
+  (levelling up rolls new hit dice, down truncates); `reroll_hp()` rerolls them
+- `to_dict()` / `from_dict()` persist all three, and **legacy saves without them
+  load as a level-1 character** (dataclass defaults) — covered by a test
+- `roll20_export.py` sends the real `player_level` (and now `xp`, which the sheet's
+  import worker writes into its previously-unpopulated `attr_xp` field)
+- `charactermancer._resync_level()` re-applies the level after a race or class
+  change (both move the racial cap **and** the hit-dice count), *after*
+  `_revalidate()` clears an illegal class
 
 ## What the engine already provides (ready — just pass `level`)
 
@@ -41,33 +48,43 @@ level 1 and must be threaded:
 
 ### 🔴 Required for a correct level-up
 
-1. **HP accumulation across levels.** Only `max_hp_at_first_level` exists. The
-   data to compute HP at level N is all there (HD, Con bonus, `name_level`,
-   `hp_after`), but no function sums it. Rules: levels 1..`name_level` each add a
-   hit-die roll **+ Con bonus per HD**; levels past `name_level` add `hp_after`
-   flat with **no die and no Con bonus**. Needs a **design decision** (see below)
-   because 2e HP is rolled per level.
-2. **Spellcaster spell-slot tables** — the biggest transcription gap:
-   - Wizard **Table 21** (spells of each level by class level 1–20) — absent
-   - Priest **Table 24** (base priest spells by class level) — **partially added**:
-     `char_rules.priest_spell_slots(level, wis)` + `_PRIEST_SPELL_SLOTS` now exist
-     but only **class level 1** is tabulated (added for the builder's level-1 spell
-     limit). Fill in levels 2–20 here. It already combines the base with
-     `priest_bonus_spells(wis)`, capping the bonus to castable spell levels.
-   - Wizard highest castable level is currently gated only by Intelligence
-     (`max_spell_level`), not by class level
-   - The builder filters spells to `level == 1` today (`_set_spell_catalog`)
-3. **Multiple attacks per round (warriors)** — 1/round → 3/2 at 7th → 2/1 at
-   13th. Small table, but numeric and level-based (Fighter/Paladin/Ranger).
+1. ✅ **HP accumulation across levels — DONE.** `cr.hp_at_level(class, level, con,
+   rolls)` + `cr.hp_die_levels(class, level)`. 1st level is best-case; levels
+   2..`name_level` add a stored roll **+ Con bonus per HD** (a level never yields
+   less than 1 hp); levels past `name_level` add `hp_after` flat with **no die and
+   no Con bonus**. Con is applied at call time, not baked into the rolls, so a
+   later Constitution change recomputes correctly.
+2. ✅ **Spellcaster spell-slot tables — DONE (Phase 2).** All five transcribed into
+   `char_rules`, with `spell_slots(class, level, wis, int)` / `max_spell_level()` /
+   `spell_caster_group()` over them:
+   - Wizard **Table 21** (levels 1–20, spell levels 1–9), capped by Intelligence's
+     highest-castable-level; **specialists** (Illusionist) gain +1 spell per level
+   - Priest **Table 24** (levels 1–20, spell levels 1–7) + the Wisdom bonus spells.
+     Its footnotes are enforced: **6th-level spells need Wis 17+, 7th need Wis 18+**
+   - Paladin **Table 17** (9th+), Ranger **Table 18** (8th+), Bard **Table 32** (2nd+).
+     PHB is explicit that **neither paladins nor rangers get Wisdom bonus spells**;
+     the ranger's slots stop improving after 16th ("maximum spell ability")
+   - `_set_spell_catalog` now offers every spell of a castable level, not just 1st
+3. ✅ **Multiple attacks per round (warriors) — DONE.** `cr.attacks_per_round(class,
+   level)` returns `(attacks, rounds)`: 1/1 → 3/2 at 7th → 2/1 at 13th, Warrior
+   group only. (Weapon specialisation grants further attacks — that's Combat &
+   Tactics, see [`combat-tactics-chargen-plan.md`](combat-tactics-chargen-plan.md).)
 
 ### 🟡 Substantial subsystems (in-scope classes, real work)
 
-4. **Thief skills (Table 29)** — Thief/Bard get 30%/level across 8 skills, with
-   Dex (Table 27), race (Table 28), and armor adjustments. **Completely
-   unmodeled today.** A Thief level-up without this is a major omission.
-5. **Turn Undead (Table 61)** — Cleric from 1st, Paladin from 3rd (as cleric −2).
-6. **Sub-caster progressions** — Ranger priest spells @8th, Paladin priest spells
-   @9th, Bard wizard spells (Table 25). Tie into #2 with their own capped tables.
+4. ✅ **Thief skills — DONE (Phase 3).** Base scores (Table 26) plus race
+   (Table 27), Dexterity (Table 28) and armor (Table 29) adjustments, then the
+   discretionary points: 60 at 1st and +30 per level (bards 20/+15, over their
+   four skills from Table 33), at most 30 + 15/level into any one skill, and no
+   skill above 95%. Note the numbering — an earlier draft of this plan had
+   Tables 27/28/29 mislabelled.
+5. ✅ **Turn Undead (Table 61) — DONE (Phase 3).** Cleric from 1st, Paladin from
+   3rd (as a priest two levels lower). Druids never turn.
+6. ✅ **Sub-caster progressions — DONE (Phase 2).** Ranger @8th, Paladin @9th, Bard
+   @2nd, each with its own capped table. `spellcasting_group()` now reports what a
+   class *ever* casts (bards → wizard, paladins/rangers → priest) while
+   `casts_spells()` / `spell_slots()` answer for *this* level, so the Spells step
+   shows a proper "no spells until a higher level" placeholder.
 
 ### ⚪ Out of scope (narrative / DM-adjudicated / optional — the rulebook browser already covers these)
 
@@ -75,28 +92,59 @@ Paladin lay-on-hands & auras, Ranger species enemy / tracking / followers, Bard
 lore & influence, Druid shapechange, weapon specialization, strongholds/henchmen
 at name level.
 
-## Open design decision (blocks Phase 1)
+## Design decision: HP per level — **DECIDED 2026-07-09**
 
-**How is HP determined per level?** This drives the `Character` schema and the UI:
-- **Rolled & stored** — store each level's HD roll (a list); reroll button. Most
-  faithful; requires new persisted state.
-- **Average** — deterministic (e.g. HD/2+1 per level); simplest, no stored rolls.
-- **Max** — matches the existing level-1 best-case behaviour.
-- **Manual entry** — player types their real rolled total.
+**Max at 1st level, rolled & stored for 2nd+.** (Was the blocker on Phase 1; the
+recommendation below was accepted.)
 
-Recommendation: keep **max at 1st level** (matches today) and offer rolled/average
-for 2nd+, storing per-level values so Con changes recompute correctly. Confirm the
-campaign's house rule before building.
+- 1st level keeps today's best-case behaviour (`max_hp()` unchanged at level 1).
+- Each level from 2nd up **rolls its hit die and stores the result**, with a reroll
+  button in the UI.
+- Levels past `name_level` add the flat `hp_after` with **no die and no Con bonus**.
+- Because the per-level rolls are persisted, a later Constitution change (aging,
+  a magic item) recomputes total HP correctly — the Con bonus is applied *per hit
+  die* at display time rather than baked into the stored roll.
+
+**Schema impact (Phase 1):** `Character` gains `level`, `xp`, and `hp_rolls: list[int]`
+(one entry per level ≥ 2). `to_dict`/`from_dict` must persist them and **migrate
+legacy saves** that have none (treat as level 1, empty rolls).
+
+Alternatives considered and rejected: *average* (deterministic but unfaithful —
+the table rolls), *max at every level* (too generous), *manual entry* (no rules
+modelling; still worth offering as an override later).
 
 ## Suggested phasing
 
-- **Phase 1 — advance the core stats (all classes):** add `level`/`xp` state; HP
-  accumulation (after the decision above); un-hardcode the slot budgets and Roll20
-  `player_level`; enforce racial caps; add warrior multiple-attacks. Mostly wiring
-  + one small table — makes every character levelable for the numbers that matter.
-- **Phase 2 — casters:** Wizard Table 21 + Priest Table 24 (+ specialist / Ranger
-  @8 / Paladin @9 / Bard hooks); extend the Spells step beyond level 1.
-- **Phase 3 — Thief skills** subsystem and Turn Undead.
+- ✅ **Phase 1 — advance the core stats (all classes): DONE.** `level`/`xp`/`hp_rolls`
+  state, HP accumulation, un-hardcoded slot budgets, Roll20 `player_level` + `xp`,
+  racial caps enforced in `set_level`, warrior multiple-attacks.
+- ✅ **Phase 1b — builder level control: DONE.** A level stepper (`cm/level/<n>`,
+  `cm/rerollhp`) on the **Class step** — deliberately *not* Details, because the
+  level sets the proficiency-slot budgets that the later Proficiencies step spends
+  — and again on the finished **Review** sheet so a saved character can level up in
+  place. The `+` disables at the racial cap; the stored hit dice are listed with a
+  reroll link; the side rail and sheet now read "At *N*th level" and show
+  attacks/round. (It also warned that spell progression above 1st wasn't modelled —
+  Phase 2 made that warning unnecessary and removed it.)
+- ✅ **Phase 2 — casters: DONE.** All five progression tables, the Intelligence cap,
+  the priest Wisdom gates, the specialist bonus, and the sub-casters. The Spells
+  step now renders **one budgeted section per castable spell level** (so a 5th-level
+  cleric picks 1st-, 2nd- and 3rd-level spells against separate budgets), and the
+  "progression isn't modelled" warning is gone. `Character.spells` became
+  `{name: spell_level}`; legacy saves holding a flat name list migrate to `{n: 1}`.
+- ✅ **Phase 3 — Thief skills and Turn Undead: DONE.** `char_rules` holds Tables
+  26–29 and 61; `Character` grew `thief_skills` (skill → points spent) with the
+  budget/cap/95% ceiling around it, plus `turn_undead()`. The Nonweapon
+  Proficiencies step gained a Thieving Skills block (points spend in blocks of 5,
+  each score hovers to show its arithmetic), and the Review sheet shows the skills
+  and the character's row of Table 61. Lowering a level or changing class reclaims
+  points that no longer exist. The Roll20 export fills the sheet's "OG" thief
+  table (`thiefO<key>{B,A,Ar,P}`); the sheet has no turning fields, so turning
+  stays in the builder.
+
+  Table 61 is transcribed by hand, so `test_thief_skills.py` asserts the diagonal
+  property the real table has (each row is the one above, shifted a column) —
+  that's what catches a typo.
 
 ## Conventions to follow (per CLAUDE.md)
 

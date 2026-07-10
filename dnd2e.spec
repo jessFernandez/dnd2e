@@ -35,6 +35,8 @@ a = Analysis(
         'askscreen_html',
         'rules_agent',
         'charactermancer_html',
+        'charactermancer_profs_html',
+        'charactermancer_common',
         'charactermancer',
         'character',
         'character_library',
