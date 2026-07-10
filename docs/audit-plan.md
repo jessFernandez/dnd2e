@@ -1,7 +1,10 @@
 # Code / architecture audit
 
-Status: **proposed** · Last updated: 2026-07-10 · Baseline: `master` @ `577421c`
-(413 passed, 1 skipped; 70% line coverage overall, 92% across the pure layers)
+Status: **complete** (phases 1–8 landed) · Last updated: 2026-07-10
+Baseline was `master` @ `577421c` (413 passed, 1 skipped; 70% line coverage). After
+the audit: **955 passed, 1 skipped**; char_rules 98%, character 96%, the tables now
+checked against the rulebook itself. Each phase is a commit on `feat/combat-tactics-phase0`
+(`925f7ab` … `cd72f4b`).
 
 Everything below is measured, not guessed. Each finding names the probe that produced
 it so it can be re-run after the fix.
@@ -146,7 +149,28 @@ Worth recording so nobody re-audits it:
 
 ---
 
-## Proposed order
+## Outcome (all phases landed)
+
+1. ✅ **Table-transcription tests** — `test_rulebook_tables.py` checks Tables 26–29,
+   60, 61, 21, 24 against their `dnd2e.db` pages, asserting parsed row/column counts
+   first. The two mutations that used to survive now die.
+2. ✅ **Property tests** — `test_rules_invariants.py`: saves/THAC0 never worsen, XP
+   strictly ascends and `level_for_xp` inverts `xp_for_level`, spell slots never
+   shrink, attacks never decrease.
+3. ✅ **The sweep** — every legal race × class × level built and fully derived
+   (~470 parametrized cases); zero exceptions, zero invariant violations.
+4. ✅ **Combat math moved to `char_rules`** — `to_hit_need`/`hit_chance` left the Qt
+   module; `is_critical` (with `CRIT_MIN_ROLL`/`CRIT_MIN_MARGIN`) implements the
+   previously-prose-only crit rule and the converter now displays it live.
+5. ✅ **`proficiencies_html` tested** — 21% → 100%.
+6. ✅ **Hygiene** — `retrieval_report.py` moved to `scripts/`; the bare test got an
+   assertion; the silent `except` is commented.
+7. ✅ **`dispatch` is tables** — 127-line chain → three dicts + 7 explicit branches,
+   proven equivalent over 918 verb×tail cases; `handles()` + a wiring test catch a
+   dead button.
+8. ✅ **Session coercions extracted** — `session.py`, pure and tested.
+
+## Proposed order (as executed)
 
 Cheapest and highest-value first; each phase is independently shippable.
 
