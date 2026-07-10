@@ -20,3 +20,4 @@ verify_hr.py
 # Misc
 *.log
 .env
+.coverage
