@@ -40,7 +40,8 @@ def test_ask_stop_survives_deleted_worker(qapp):
 
 def test_ask_stop_with_no_worker_is_noop(qapp):
     win = SimpleNamespace(_ask_worker=None)
-    app.MainWindow._ask_stop(win)             # must not raise
+    app.MainWindow._ask_stop(win)             # must not raise with nothing running
+    assert win._ask_worker is None            # and leaves the (absent) worker alone
 
 
 def test_ask_stop_cancels_a_running_worker(qapp):

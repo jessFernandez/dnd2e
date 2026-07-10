@@ -489,7 +489,7 @@ class AskWorker(QThread):
             try:
                 detail = json.loads(e.read().decode("utf-8", "replace")).get("error", "")
             except Exception:
-                pass
+                pass    # best-effort: a non-JSON error body just leaves detail empty
             if e.code == 404 or "not found" in detail.lower():
                 self.failed.emit(
                     f"The model \"{self.model}\" isn't installed in Ollama.\n"

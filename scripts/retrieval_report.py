@@ -1,17 +1,22 @@
-"""Baseline retrieval report — run:  python tests/retrieval_report.py
+"""Baseline retrieval report — run:  python scripts/retrieval_report.py
 
 Prints, for every golden question, the rank at which the correct page is first
 retrieved, plus aggregate recall@1/3/5 and MRR. Use it to see exactly where
 retrieval is silently failing and to track improvements as we tune the retriever.
 Deterministic and model-free (no Ollama needed).
+
+This is the human-readable sibling of tests/test_retrieval_eval.py, which is the
+automated gate. It reads the same golden dataset (tests/golden_retrieval.py), so
+it puts both the repo root and tests/ on the import path.
 """
 import os
 import sys
 import io
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # tests/
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # repo root
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "tests"))                        # golden_retrieval
 
 import rules_agent
 from rules_agent import AskWorker
