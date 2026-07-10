@@ -49,6 +49,10 @@ class Charactermancer:
         self.saved_id = None            # DB row id once this build has been saved (set by app.py)
         self._rng = rng                 # injectable for deterministic tests
         self.spell_catalog = []         # level-1 spells for this class (injected by app.py)
+        # Equipment categories the player has expanded. Collapsed by default so the
+        # long buy-list stays short; kept here (not in the DOM) so it survives the
+        # in-place re-render every purchase triggers.
+        self.expanded_categories = set()
 
     @property
     def _roll(self) -> random.Random:
@@ -487,6 +491,13 @@ class Charactermancer:
             self.character.money_cp = cr.roll_starting_money(
                 self.character.char_class, self._roll)
 
+    def toggle_category(self, category: str):
+        """Expand or collapse one equipment buy-list category."""
+        if category in self.expanded_categories:
+            self.expanded_categories.discard(category)
+        else:
+            self.expanded_categories.add(category)
+
     def buy_item(self, name: str):
         """Buy one of a catalog item if it's affordable (deducts its cp cost)."""
         c = self.character
@@ -572,6 +583,7 @@ class Charactermancer:
         "profplus": "add_proficiency_slot", "profminus": "remove_proficiency_slot",
         "buy": "buy_item", "sell": "sell_item", "wear": "toggle_worn",
         "addspell": "add_spell", "rmspell": "remove_spell",
+        "eqcat": "toggle_category",
     }
 
     #: verb -> method, called with the tail even when it's empty (clears the field).

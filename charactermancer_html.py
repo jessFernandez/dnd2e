@@ -853,21 +853,35 @@ def _equipment_body(cm, saved=None) -> str:
             f'{wear}</div>')
     owned = owned or '<span class="hint">Nothing bought yet.</span>'
 
+    # The buy-list is long, so each category is collapsed by default and expands on
+    # click. Which are open lives in cm state (not the DOM), so it survives the
+    # in-place re-render every purchase triggers — expand a category, buy several
+    # things from it, and it stays open.
     cat_html = ""
     for cat in cr.ITEM_CATEGORY_ORDER:
         items = cr.items_in_category(cat)
         if not items:
             continue
-        chips = ""
-        for it in items:
-            dis = "" if it["cost_cp"] <= money else " dis"
-            wt = f'{it["weight"]:g} lb' if it.get("weight") else ""
-            meta = f'<span class="opt-meta">{wt}</span>' if wt else ""
-            tip = esc(it.get("notes") or "")
-            chips += (f'<a class="opt{dis}" href="dnd:///cm/buy/{it["name"]}" title="{tip}">'
-                      f'<span class="opt-name">{esc(it["name"])}</span>{meta}'
-                      f'<span class="opt-cost">{_cost_label(it["cost_cp"])}</span></a>')
-        cat_html += f'<div class="grp-label">{cat}</div><div class="opt-grid">{chips}</div>'
+        is_open = cat in cm.expanded_categories
+        owned_here = sum(1 for n in c.inventory if (cr.item(n) or {}).get("category") == cat)
+        owned_tag = f'<span class="eq-cat-owned">{owned_here} owned</span>' if owned_here else ""
+        arrow = "▾" if is_open else "▸"
+        header = (f'<a class="eq-cat-h" href="dnd:///cm/eqcat/{cat}">'
+                  f'<span class="eq-cat-ar">{arrow}</span> {esc(cat)}'
+                  f'<span class="eq-cat-n">{len(items)}</span>{owned_tag}</a>')
+        body = ""
+        if is_open:
+            chips = ""
+            for it in items:
+                dis = "" if it["cost_cp"] <= money else " dis"
+                wt = f'{it["weight"]:g} lb' if it.get("weight") else ""
+                meta = f'<span class="opt-meta">{wt}</span>' if wt else ""
+                tip = esc(it.get("notes") or "")
+                chips += (f'<a class="opt{dis}" href="dnd:///cm/buy/{it["name"]}" title="{tip}">'
+                          f'<span class="opt-name">{esc(it["name"])}</span>{meta}'
+                          f'<span class="opt-cost">{_cost_label(it["cost_cp"])}</span></a>')
+            body = f'<div class="opt-grid">{chips}</div>'
+        cat_html += f'<div class="eq-cat">{header}{body}</div>'
 
     return (
         '<section class="prof-sec">'
@@ -1431,6 +1445,14 @@ _CSS = f"""
   .opt-meta {{ flex: 0 0 auto; margin-left: 6px; color: #7b83a6; font-size: 10px; }}
   .grp-label {{ font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
                color: #7b83a6; margin: 14px 0 4px; }}
+  .eq-cat {{ margin-top: 6px; }}
+  .eq-cat-h {{ display: flex; align-items: center; text-decoration: none;
+              background: #1b1e2b; border: 1px solid #2f3346; border-radius: 8px;
+              padding: 8px 11px; color: #d8dcf0; font-size: 12.5px; font-weight: 600; }}
+  .eq-cat-h:hover {{ background: #23263a; border-color: #3a3f58; }}
+  .eq-cat-ar {{ color: {ACCENT}; font-size: 10px; margin-right: 8px; }}
+  .eq-cat-n {{ color: #7b83a6; font-size: 11px; font-weight: 700; margin-left: 8px; }}
+  .eq-cat-owned {{ color: {ACCENT}; font-size: 11px; font-weight: 700; margin-left: auto; }}
   .chosen-list {{ display: grid; gap: 6px; margin: 10px 0; }}
   .prof-row {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
               border-radius: 8px; padding: 6px 10px; }}

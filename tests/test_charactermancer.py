@@ -1563,7 +1563,37 @@ def test_html_equipment_and_spells_steps_render():
     cm.index = STEPS.index("equipment")
     cm.dispatch("money")
     h = cmh.generate(cm)
-    assert "Equipment" in h and "Armor Class" in h and "dnd:///cm/buy/" in h
+    assert "Equipment" in h and "Armor Class" in h
+    # Categories are collapsed by default: their expand links show, item buy links don't.
+    assert "dnd:///cm/eqcat/" in h
+    assert "dnd:///cm/buy/" not in h
+
+
+def test_equipment_categories_start_collapsed_and_expand_on_click():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    cm.dispatch("money")
+    assert cm.expanded_categories == set()
+    assert 'class="opt-grid"' not in cmh.generate(cm)      # nothing expanded -> no item grid
+    cm.dispatch("eqcat/Weapon")
+    assert cm.expanded_categories == {"Weapon"}
+    html = cmh.generate(cm)
+    assert 'class="opt-grid"' in html and "dnd:///cm/buy/" in html
+    cm.dispatch("eqcat/Weapon")                             # toggles shut again
+    assert cm.expanded_categories == set()
+
+
+def test_expanded_category_survives_a_purchase():
+    cm = _fighter_at_profs()
+    cm.index = STEPS.index("equipment")
+    c = cm.character
+    c.money_cp = 100000
+    cm.dispatch("eqcat/Weapon")
+    item = cr.items_in_category("Weapon")[0]["name"]
+    cm.dispatch("buy/" + item)
+    assert c.inventory.get(item) == 1
+    assert "Weapon" in cm.expanded_categories               # the re-render didn't collapse it
+    assert 'class="opt-grid"' in cmh.generate(cm)
     cm2 = _cleric_at_profs()
     cm2.index = STEPS.index("spells")
     cm2.spell_catalog = [{"name": "Bless", "school": "Combat", "level": 1, "description": "x"}]
