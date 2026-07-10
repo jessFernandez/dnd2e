@@ -42,7 +42,7 @@ a = Analysis(
         'ask_controller',
         'proficiencies_html',
         'roll20_export',
-        'nonweapon_book',
+        'nonweapon_book', 'ct_text',
         'equipment',
     ],
     hookspath=[],

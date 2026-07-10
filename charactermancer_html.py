@@ -730,6 +730,29 @@ def _budget_bar(used: int, total: int, label: str, unit: str = "slots used") -> 
     )
 
 
+def _ct_description_html(name: str) -> str:
+    """An expandable "What it does" block for a Combat & Tactics style, discipline or
+    talent — the same affordance the nonweapon proficiencies have. Ends with a link
+    into the rulebook page the text came from."""
+    desc = cr.ct_description(name)
+    if not desc:
+        return ""
+    paras = "".join(f"<p>{_esc(par)}</p>" for par in desc.split("\n\n") if par.strip())
+    page = cr.ct_page(name)
+    link = (f'<p><a class="reroll" href="dnd:///newtab/{page}">'
+            f'Read the full rule &rarr;</a></p>' if page else "")
+    return (f'<details class="pr-desc"><summary>What it does</summary>'
+            f'<div class="pr-desc-body">{paras}{link}</div></details>')
+
+
+def _ct_tooltip(name: str) -> str:
+    """A one-line hover summary for a buy-list chip."""
+    desc = " ".join(cr.ct_description(name).split())
+    if not desc:
+        return ""
+    return _esc(desc if len(desc) <= 280 else desc[:277].rstrip() + "…")
+
+
 def _weapon_row(cm, weapon: str, rung: str, from_group: bool = False) -> str:
     """A trained weapon: its rung, the slots it costs, and the mastery steppers."""
     c = cm.character
@@ -884,7 +907,7 @@ def _fighting_styles_block(cm) -> str:
             '<div class="prof-row">'
             f'{rm}'
             f'<div class="pr-main"><span class="pr-name">{_esc(style)}</span>'
-            f'<span class="pr-detail">{detail}</span></div>'
+            f'<span class="pr-detail">{detail}</span>{_ct_description_html(style)}</div>'
             f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
             '</div>')
 
@@ -893,7 +916,8 @@ def _fighting_styles_block(cm) -> str:
         if c.knows_style(style):
             continue
         dis = "" if c.can_learn_style(style) else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/learnstyle/{style}">'
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/learnstyle/{style}" '
+                 f'title="{_ct_tooltip(style)}">'
                  f'<span class="opt-name">{_esc(style)}</span>'
                  f'<span class="opt-cost">{cr.STYLE_LEARN_SLOT_COST}</span></a>')
 
@@ -945,7 +969,8 @@ def _unarmed_block(cm) -> str:
             '<div class="prof-row">'
             f'{rm}'
             f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
-            f'<span class="pr-detail">{_esc(" · ".join(bits))}</span></div>'
+            f'<span class="pr-detail">{_esc(" · ".join(bits))}</span>'
+            f'{_ct_description_html(name)}</div>'
             f'<div class="pr-slots">{down}<span class="pr-sn">{cost}</span>{up}</div>'
             '</div>')
 
@@ -956,7 +981,8 @@ def _unarmed_block(cm) -> str:
         if not cr.is_martial_art(name) and c.unarmed_rung(name) != "familiar":
             continue
         dis = "" if c.can_add_unarmed(name) else " dis"
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/addunarmed/{name}">'
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addunarmed/{name}" '
+                 f'title="{_ct_tooltip(name)}">'
                  f'<span class="opt-name">{_esc(name)}</span>'
                  f'<span class="opt-cost">{cr.unarmed_prof_cost("proficient")}</span></a>')
 
@@ -989,7 +1015,8 @@ def _talent_rows(cm, names) -> str:
             '<div class="prof-row">'
             f'<a class="pr-rm" href="dnd:///cm/rmtalent/{name}" title="Remove">✕</a>'
             f'<div class="pr-main"><span class="pr-name">{_esc(name)}</span>'
-            f'<span class="pr-detail">{" &middot; ".join(bits)}</span></div>'
+            f'<span class="pr-detail">{" &middot; ".join(bits)}</span>'
+            f'{_ct_description_html(name)}</div>'
             f'<div class="pr-slots"><span class="pr-sn">{talent.slots}</span></div></div>')
     return rows
 
@@ -1003,7 +1030,9 @@ def _talent_opts(cm, talents) -> str:
         dis = "" if c.can_add_talent(talent.name) else " dis"
         meta = (f'<span class="opt-meta">{_ABBR.get(talent.ability, talent.ability)}</span>'
                 if talent.ability else "")
-        opts += (f'<a class="opt{dis}" href="dnd:///cm/addtalent/{talent.name}">'
+        tip = _ct_tooltip(talent.name)
+        opts += (f'<a class="opt{dis}" href="dnd:///cm/addtalent/{talent.name}" '
+                 f'title="{tip}">'
                  f'<span class="opt-name">{_esc(talent.name)}</span>{meta}'
                  f'<span class="opt-cost">{talent.slots}</span></a>')
         if talent.slot_source == "either":
@@ -1452,13 +1481,26 @@ _STEP_REFS = {
     ],
     "weapons": [
         ("Weapon Proficiencies", "PHB/DD01526.htm", "phb"),
-        ("Specialization & Mastery", "CT/DD02618.htm", "phb"),    # Combat & Tactics Ch4
-        ("Unarmed Combat", "CT/DD02666.htm", "phb"),              # Combat & Tactics Ch5
+        ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
+        ("Weapon Specialization", "PHB/DD01530.htm", "phb"),
+        ("Specialization & Mastery", "CT/DD02618.htm", "ct"),      # Ch4
+        ("Weapon Mastery", "CT/DD02629.htm", "ct"),
+        ("Weapon Groups", "CT/DD02744.htm", "ct"),
+        ("Barred Weapons", "CT/DD02624.htm", "ct"),
+        ("Shield Proficiency", "CT/DD02627.htm", "ct"),
+        ("Armor Proficiency", "CT/DD02628.htm", "ct"),
+        ("Fighting Style Specialization", "CT/DD02645.htm", "ct"),
+        ("Special Talents", "CT/DD02653.htm", "ct"),
+        ("Unarmed Combat", "CT/DD02666.htm", "ct"),                # Ch5
+        ("Martial Arts", "CT/DD02700.htm", "ct"),
+        ("Martial Arts Talents", "CT/DD02705.htm", "ct"),
     ],
     "nonweapon": [
         ("The Codex of Worldly Craft", "proficiencies", "app"),   # campaign NWP book
         ("Nonweapon Proficiencies", "PHB/DD01533.htm", "phb"),
         ("Proficiency Slots (Table 34)", "PHB/DD01524.htm", "phb"),
+        ("Proficiency Groups (Table 37)", "PHB/DD01538.htm", "phb"),
+        ("Siege Proficiencies", "CT/DD02824.htm", "ct"),
     ],
     "equipment": [
         ("Economics of the Realm", "toc/ECO", "app"),             # campaign price/gear book
@@ -1474,7 +1516,7 @@ _STEP_REFS = {
     ],
 }
 
-_REF_BADGE = {"phb": "PHB", "app": "APP"}
+_REF_BADGE = {"phb": "PHB", "app": "APP", "ct": "C&amp;T"}
 
 
 def _step_refs(step) -> str:
@@ -1906,4 +1948,8 @@ _CSS = f"""
   .phb-ref.app {{ border-color: #35506b; color: #9fc0dc; }}
   .phb-ref.app:hover {{ background: #5b9bd518; border-color: #5b9bd5; color: #cfe4f6; }}
   .phb-ref.app .phb-badge {{ background: #2f4a63; color: #cfe4f6; }}
+  /* Combat & Tactics — crimson, so a C&T rule never reads as core PHB */
+  .phb-ref.ct {{ border-color: #6b3540; color: #dc9fa8; }}
+  .phb-ref.ct:hover {{ background: #d55b6b18; border-color: #d55b6b; color: #f6cfd5; }}
+  .phb-ref.ct .phb-badge {{ background: #632f3a; color: #f6cfd5; }}
 """

@@ -109,6 +109,8 @@ book-contents page and per-chapter house-rule callouts.) Background:
   (bookmarks, saved characters) so user data survives app updates.
 - Some modules are **generated — do not hand-edit**. They say so at the top:
   - `equipment.py` ← `scripts/build_items.py`
+  - `ct_text.py` (Combat & Tactics rules prose for the builder's "What it does"
+    blocks) ← `scripts/build_ct_text.py`
   - spell data ← `scripts/build_spells.py`; economics ← `scripts/build_economics.py`;
     nonweapon-proficiency book ← `scripts/build_nwp_book.py` / `scripts/build_chunks.py`;
     the `toc_tree` table ← `scripts/build_toc_tree.py` (from the site's TOC XML)

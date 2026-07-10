@@ -5,6 +5,9 @@ they had no tests. Each check asserts the generator returns a well-formed,
 non-trivial document containing the structure it's supposed to — enough to catch
 a template break, a bad f-string, or a missing section.
 """
+import os
+
+import pytest
 import actionsscreen_html
 import askscreen_html
 import charactermancer_html
@@ -53,6 +56,8 @@ def test_charactermancer_step_references():
     assert 'href="dnd:///newtab/PHB/DD01526.htm"' in weapons     # Weapon Proficiencies
     assert 'href="dnd:///newtab/CT/DD02618.htm"' in weapons      # Specialization & Mastery
     assert 'href="dnd:///newtab/CT/DD02666.htm"' in weapons      # Unarmed Combat
+    assert 'class="phb-ref ct"' in weapons               # C&T chips get their own colour
+    assert "C&amp;T" in weapons                          # ...and their own badge
     spells = charactermancer_html._step_refs("spells")
     assert 'href="dnd:///newtab/screen/spells"' in spells and "Spell Compendium" in spells
     equip = charactermancer_html._step_refs("equipment")
@@ -123,3 +128,23 @@ def test_askscreen_all_states_render():
 def test_askscreen_setup_without_ollama_explains_install():
     html = askscreen_html.generate("setup", ollama_ok=False)
     assert "Ollama" in html
+
+
+RULES_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dnd2e.db")
+needs_db = pytest.mark.skipif(not os.path.exists(RULES_DB), reason="rulebook DB not present")
+
+
+@needs_db
+def test_every_step_reference_points_at_a_real_page():
+    """A reference chip that 404s is worse than no chip. Check them against the DB —
+    this caught PHB/DD01530 being 'Weapon Specialization', not the nonweapon rules."""
+    import sqlite3
+    conn = sqlite3.connect(RULES_DB)
+    dead = []
+    for step, refs in charactermancer_html._STEP_REFS.items():
+        for label, url, kind in refs:
+            if kind != "phb" and not url.startswith(("PHB/", "CT/")):
+                continue                                  # in-app route, not a page
+            if not conn.execute("SELECT 1 FROM pages WHERE page_url = ?", (url,)).fetchone():
+                dead.append(f"{step}: {label} -> {url}")
+    assert dead == [], "dead reference links: " + "; ".join(dead)

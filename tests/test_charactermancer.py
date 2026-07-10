@@ -1235,6 +1235,43 @@ def test_html_weapons_step_renders_with_house_rules():
     assert "dnd:///cm/addprof/Swimming" not in html    # nonweapon skills moved out
 
 
+def test_ct_sections_have_what_it_does_blocks():
+    cm = _fighter_at_profs()
+    for verb in ("styleup/Two-Weapon", "addunarmed/Pummeling",
+                 "addunarmed/Martial Arts: Style A", "addtalent/Ambidexterity"):
+        cm.dispatch(verb)
+    cm.dispatch("addtalent/Flying Kick")               # needs the style above
+    html = cmh.generate(cm)
+    assert html.count("What it does") >= 5             # styles, unarmed, both talent kinds
+    for name in ("Two-Weapon", "Pummeling", "Martial Arts: Style A",
+                 "Ambidexterity", "Flying Kick"):
+        assert cr.ct_description(name)[:30] in html    # the rulebook prose is inlined
+        assert f"newtab/{cr.ct_page(name)}" in html    # ...with a link to its page
+
+
+def test_ct_text_covers_every_style_discipline_and_talent():
+    named = (set(cr.FIGHTING_STYLES) | set(cr.UNARMED_DISCIPLINES) | set(cr.TALENTS))
+    missing = sorted(n for n in named if not cr.ct_description(n))
+    assert missing == [], f"no Combat & Tactics text for: {missing}"
+    for name in named:
+        assert cr.ct_page(name).startswith("CT/")
+
+
+def test_combat_and_tactics_references_are_not_badged_as_phb():
+    import re
+    for step in STEPS:
+        for label, url, kind in cmh._STEP_REFS.get(step, []):
+            if url.startswith("CT/"):
+                assert kind == "ct", f"{label} is a C&T page badged {kind!r}"
+            elif url.startswith("PHB/"):
+                assert kind == "phb", f"{label} is a PHB page badged {kind!r}"
+    assert cmh._REF_BADGE["ct"] == "C&amp;T"
+    # the chips must render with their own class, so the CSS can colour them
+    cm = _fighter_at_profs()
+    html = cmh.generate(cm)
+    assert 'class="phb-ref ct"' in html and ".phb-ref.ct" in html
+
+
 def test_rail_shortens_the_long_step_labels():
     # Ten steps means ~85px columns, so the rail abbreviates while the heading doesn't.
     cm = _fighter_at_profs()
