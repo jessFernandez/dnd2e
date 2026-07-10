@@ -149,6 +149,30 @@ def test_table_61_turning_undead_matches_the_book(conn):
     assert compared == len(cr.TURN_UNDEAD_TYPES) == 13
 
 
+# ── Table 60: saving throws ──────────────────────────────────────────────────
+
+@needs_db
+def test_table_60_saving_throws_match_the_book(conn):
+    # The page is grouped: a class-name row ("Priests"), then one row per level band
+    # with a range and the five save numbers, in SAVE_CATEGORIES order.
+    group_of = {"Priests": "Priest", "Rogues": "Rogue",
+                "Warriors": "Warrior", "Wizards": "Wizard"}
+    group = None
+    book = {}                                    # group -> list of (band_max, [5 saves])
+    for r in _table_rows(conn, "PHB/DD01724.htm"):
+        if r[0] in group_of:
+            group = group_of[r[0]]
+            book[group] = []
+        elif group and len(r) >= 7 and re.fullmatch(r"\d+(-\d+)?\+?", r[1]):
+            band_max = 999 if r[1].endswith("+") else int(r[1].split("-")[-1])
+            book[group].append((band_max, [int(c) for c in r[2:7]]))
+
+    assert set(book) == set(cr._SAVES)           # all four groups parsed
+    for grp, bands in book.items():
+        ours = [(m, list(v)) for m, v in cr._SAVES[grp]]
+        assert bands == ours, f"{grp}: book {bands}, char_rules {ours}"
+
+
 # ── Tables 21 / 24: spell progressions ───────────────────────────────────────
 
 def _progression_rows(conn, url, width):
