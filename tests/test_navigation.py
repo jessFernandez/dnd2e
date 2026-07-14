@@ -1,5 +1,28 @@
-"""Tests for navigation.History — the per-tab back/forward state machine."""
-from navigation import History
+"""Tests for navigation.py — the per-tab back/forward state machine and the
+pure destination grammar (link_to_destination, takes_full_width)."""
+from navigation import (
+    History, FULLWIDTH_SCREENS, link_to_destination, takes_full_width,
+)
+
+
+# ── destination grammar ───────────────────────────────────────────────────────
+
+def test_link_to_destination_maps_routing_prefixes():
+    assert link_to_destination("toc/PHB") == "toc:PHB"
+    assert link_to_destination("screen/dmscreen") == "dmscreen"
+    # already-canonical paths pass through untouched
+    assert link_to_destination("PHB/DD01671.htm") == "PHB/DD01671.htm"
+    assert link_to_destination("proficiencies") == "proficiencies"
+    assert link_to_destination("proficiencies#thieving") == "proficiencies#thieving"
+
+
+def test_takes_full_width_screens_vs_book_pages():
+    for dest in FULLWIDTH_SCREENS:
+        assert takes_full_width(dest), dest
+    assert takes_full_width("proficiencies")
+    assert takes_full_width("proficiencies#thieving")     # matched by prefix
+    for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm", ""):
+        assert not takes_full_width(dest), dest
 
 
 def test_empty_history():

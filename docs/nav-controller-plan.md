@@ -1,6 +1,6 @@
 # Navigation controller extraction — plan
 
-**Status:** planned. Phase 1 in progress.
+**Status:** in progress. Phase 1 (grammar) done; phases 2–4 remaining.
 
 ## Goal
 
@@ -59,9 +59,10 @@ def pane_action(dest: str, trigger: Trigger) -> Pane: ...
 
 ## Migration — phased, each step ships green
 
-1. **Grammar.** Move `link_to_destination` + `takes_full_width` + the constant
-   into `navigation.py`; `app.py` delegates via thin wrappers so nothing else
-   changes. Add direct tests. *Small, near-zero risk.*
+1. **Grammar. ✅ done.** Moved `link_to_destination` + `takes_full_width` + the
+   `FULLWIDTH_SCREENS` constant into `navigation.py`, inlined the call sites, and
+   deleted the `app.py` shims. Grammar tested directly in `test_navigation.py`.
+   *Small, near-zero risk.*
 2. **Pane policy.** Introduce `Trigger`/`Pane` + `pane_action`; rewrite the three
    pane sites to use it. Port the `test_nav_reveal.py` decision assertions onto
    `pane_action` directly (they simplify — no SimpleNamespace for the decision).

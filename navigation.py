@@ -1,10 +1,51 @@
-"""navigation.py — back/forward history for a content tab.
+"""navigation.py — the pure navigation layer for a content tab.
 
-A tiny pure state machine: a list of destination strings plus a cursor. The
-caller does the rendering; History only tracks position, so the whole thing is
-unit-testable without Qt (see tests/test_navigation.py). A "destination" is the
-canonical string the app renders (a page_url, "toc:PHB", "spells", "ask", …).
+Everything here is Qt-free and unit-tested without a running app (see
+tests/test_navigation.py); app.py's MainWindow supplies the Qt shell and the
+side effects (rendering, showing/hiding the browse pane, opening tabs).
+
+Two pieces:
+
+* ``History`` — a tiny back/forward state machine: a list of destination strings
+  plus a cursor. The caller does the rendering; History only tracks position.
+* the *destination grammar* — small helpers that classify and translate the
+  canonical strings the rest of the app passes around.
+
+A "destination" is the canonical string the app renders: a page_url
+("PHB/DD01671.htm"), a book table of contents ("toc:PHB"), the Proficiencies
+codex ("proficiencies" / "proficiencies#anchor"), or a full-width screen name
+("splash", "dmscreen", "actions", "spells", "charactermancer", "ask").
 """
+
+# Built-in reference/tool screens that take the full content width; opening one
+# hides the book browser, while a book page or TOC keeps it. Single source of
+# truth for that split — see takes_full_width().
+FULLWIDTH_SCREENS = frozenset({"splash", "dmscreen", "actions",
+                               "spells", "charactermancer", "ask"})
+
+
+def link_to_destination(path: str) -> str:
+    """Map a dnd:// link path to a canonical destination string.
+
+    Links carry a routing prefix the destinations don't: "toc/PHB" addresses a
+    book's contents, "screen/dmscreen" a built-in screen. Everything else (a
+    page_url, "proficiencies", …) is already canonical.
+    """
+    if path.startswith("toc/"):
+        return "toc:" + path[len("toc/"):]
+    if path.startswith("screen/"):
+        return path[len("screen/"):]
+    return path
+
+
+def takes_full_width(dest: str) -> bool:
+    """Whether a destination is a full-width reference/tool screen (so the browse
+    pane makes way for it) rather than a book page or TOC (which keep the pane).
+
+    Proficiencies is the Codex reference screen; it carries a `#fragment`, so it
+    is matched by prefix rather than membership.
+    """
+    return dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
 
 
 class History:

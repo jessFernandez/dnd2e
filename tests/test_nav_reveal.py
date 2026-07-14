@@ -10,35 +10,16 @@ from types import SimpleNamespace
 
 import app
 
-FW = app.MainWindow._FULLWIDTH_SCREENS
-
-
-def _bind_full_width(win):
-    """Give a stand-in the real _takes_full_width predicate (the single source of
-    truth the reveal/hide/tab-change paths all defer to)."""
-    win._FULLWIDTH_SCREENS = FW
-    win._takes_full_width = app.MainWindow._takes_full_width.__get__(win)
-    return win
-
-
-# ── _takes_full_width, the shared predicate ───────────────────────────────────
-
-def test_takes_full_width_classifies_screens_vs_book_pages():
-    win = _bind_full_width(SimpleNamespace())
-    for dest in ("splash", "dmscreen", "actions", "spells", "charactermancer",
-                 "ask", "proficiencies", "proficiencies#thieving"):
-        assert win._takes_full_width(dest), dest
-    for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm", ""):
-        assert not win._takes_full_width(dest), dest
+# The full-width-vs-book classification these methods rely on now lives as the
+# pure navigation.takes_full_width / link_to_destination (tested directly in
+# test_navigation.py); here we only check MainWindow wires the side effects to it.
 
 
 # ── _reveal_nav_for in isolation ──────────────────────────────────────────────
 
 def _reveal_win():
     shown = []
-    win = _bind_full_width(SimpleNamespace(
-        _show_sidebar=lambda: shown.append(True),
-    ))
+    win = SimpleNamespace(_show_sidebar=lambda: shown.append(True))
     return win, shown
 
 
@@ -66,13 +47,12 @@ def test_reveal_leaves_full_width_screens_and_proficiencies_alone():
 
 def _nav_win():
     calls = {"shown": 0, "navigate": [], "newtab": 0}
-    win = _bind_full_width(SimpleNamespace(
-        _link_to_destination=app.MainWindow._link_to_destination,
+    win = SimpleNamespace(
         _show_sidebar=lambda: calls.__setitem__("shown", calls["shown"] + 1),
         _navigate=lambda d: calls["navigate"].append(d),
         _new_tab=lambda show_splash=True: calls.__setitem__("newtab", calls["newtab"] + 1),
         _on_jarvis_page=lambda: False,
-    ))
+    )
     # Bind the real _reveal_nav_for so the reveal decision is genuinely exercised.
     win._reveal_nav_for = lambda d: app.MainWindow._reveal_nav_for(win, d)
     return win, calls
@@ -126,12 +106,12 @@ def test_jarvis_citation_opens_pane_and_a_new_tab():
 
 def _navigate_win():
     calls = {"hidden": 0, "pushed": []}
-    win = _bind_full_width(SimpleNamespace(
+    win = SimpleNamespace(
         _render_destination=lambda d: True,
         _hide_sidebar=lambda: calls.__setitem__("hidden", calls["hidden"] + 1),
         _nav=SimpleNamespace(push=lambda d: calls["pushed"].append(d)),
         _update_nav_buttons=lambda: None,
-    ))
+    )
     return win, calls
 
 
@@ -165,13 +145,13 @@ def _tab_ctx(dest, page_url=None):
 
 def _tab_win(ctx):
     calls = {"hidden": 0, "synced": []}
-    win = _bind_full_width(SimpleNamespace(
+    win = SimpleNamespace(
         _tabs=[ctx],
         _update_nav_buttons=lambda: None,
         _update_bookmark_btn=lambda: None,
         _hide_sidebar=lambda: calls.__setitem__("hidden", calls["hidden"] + 1),
         _sync_tree_selection=lambda u: calls["synced"].append(u),
-    ))
+    )
     return win, calls
 
 

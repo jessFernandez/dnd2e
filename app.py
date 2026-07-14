@@ -19,7 +19,7 @@ from splash_html import generate as generate_splash_html
 import db
 import toc
 import toc_html
-from navigation import History
+from navigation import History, link_to_destination, takes_full_width
 import askscreen_html
 import charactermancer_html
 import proficiencies_html
@@ -1241,15 +1241,6 @@ class MainWindow(QMainWindow):
     #   "toc:<BOOK>"                                     a book's contents page
     #   "<BOOK>/<page>.htm"                              a scraped rules page
 
-    @staticmethod
-    def _link_to_destination(url: str) -> str:
-        """Map a dnd:// link path to a canonical destination."""
-        if url.startswith("toc/"):
-            return "toc:" + url[4:]
-        if url.startswith("screen/"):
-            return url[len("screen/"):]   # screen/dmscreen -> dmscreen
-        return url                        # a page_url
-
     def _on_content_navigate(self, url: str):
         """Handle a normal dnd:// link click from the content viewer."""
         # Interactive "Ask the Rules" routes are handled in place (no history entry).
@@ -1274,12 +1265,12 @@ class MainWindow(QMainWindow):
         # Links explicitly tagged to open beside the current page (e.g. the
         # builder's step references) — open in a new tab so the page stays put.
         if url.startswith("newtab/"):
-            dest = self._link_to_destination(url[len("newtab/"):])
+            dest = link_to_destination(url[len("newtab/"):])
             self._new_tab(show_splash=False)     # opens and switches to the new tab
             self._reveal_nav_for(dest)
             self._navigate(dest)
             return
-        dest = self._link_to_destination(url)
+        dest = link_to_destination(url)
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
@@ -1298,30 +1289,17 @@ class MainWindow(QMainWindow):
         alone; _navigate hides the pane for those. This only fires on link
         clicks, not history/next-prev/tree navigation, so a pane the reader
         deliberately closed stays closed while they page through."""
-        if not self._takes_full_width(dest):
+        if not takes_full_width(dest):
             self._show_sidebar()
 
     def _on_jarvis_page(self) -> bool:
         return self._nav.current() == "ask"
 
-    # Built-in reference/tool screens that take the full content width; opening
-    # one hides the book browser. Book pages (toc:/page urls) leave it as-is.
-    _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions",
-                          "spells", "charactermancer", "ask"}
-
-    def _takes_full_width(self, dest: str) -> bool:
-        """Whether a destination is a full-width reference/tool screen (so the
-        browse pane makes way for it) rather than a book page or TOC (which keep
-        the pane). The single source of truth for that split — the reveal, the
-        hide, and the tab-change reconciliation all defer to it. Proficiencies is
-        the Codex reference screen; it carries a `#fragment`, so match by prefix."""
-        return dest in self._FULLWIDTH_SCREENS or dest.startswith("proficiencies")
-
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
-        if self._takes_full_width(dest):
+        if takes_full_width(dest):
             self._hide_sidebar()
         if add_to_history:
             self._nav.push(dest)
@@ -1733,7 +1711,7 @@ class MainWindow(QMainWindow):
             url = url[len("newtab/"):]
         prev = self._content_tabs.currentIndex()
         self._new_tab(show_splash=False)
-        self._navigate(self._link_to_destination(url))
+        self._navigate(link_to_destination(url))
         # Keep focus on the originating tab (background-open behaviour)
         self._content_tabs.setCurrentIndex(prev)
 
@@ -1760,7 +1738,7 @@ class MainWindow(QMainWindow):
         # page leaves the pane as the reader left it (switching or closing a tab
         # is not a link click, so it never forces the pane open).
         dest = ctx.nav.current() or ""
-        if self._takes_full_width(dest):
+        if takes_full_width(dest):
             self._hide_sidebar()
         if ctx.current_page_url:
             self._sync_tree_selection(ctx.current_page_url)
