@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
     QLabel, QSizePolicy, QShortcut,
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter
+from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter, QIcon
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -51,6 +51,11 @@ def _bundle_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS)
     return Path(__file__).parent
+
+
+def _app_icon() -> QIcon:
+    """The window/taskbar icon, bundled under assets/ (see dnd2e.spec)."""
+    return QIcon(str(_bundle_dir() / "assets" / "dnd2e.png"))
 
 
 def _user_data_dir() -> Path:
@@ -1901,6 +1906,16 @@ class MainWindow(QMainWindow):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    # Windows: give the process an explicit AppUserModelID so the taskbar groups
+    # it under our own icon instead of the generic Python one.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "DnD2eRules.App")
+        except Exception:
+            pass
+
     if not DB_PATH.exists():
         app = QApplication(sys.argv)
         QMessageBox.critical(
@@ -1911,6 +1926,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("D&D 2e Rules")
+    app.setWindowIcon(_app_icon())
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
 
