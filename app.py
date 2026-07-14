@@ -1274,16 +1274,32 @@ class MainWindow(QMainWindow):
         # Links explicitly tagged to open beside the current page (e.g. the
         # builder's step references) — open in a new tab so the page stays put.
         if url.startswith("newtab/"):
+            dest = self._link_to_destination(url[len("newtab/"):])
             self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._navigate(self._link_to_destination(url[len("newtab/"):]))
+            self._reveal_nav_for(dest)
+            self._navigate(dest)
             return
+        dest = self._link_to_destination(url)
         # A cited link clicked on the Jarvis page opens in a new tab so the
         # question/answer stays put.
         if self._on_jarvis_page():
             self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._navigate(self._link_to_destination(url))
+            self._reveal_nav_for(dest)
+            self._navigate(dest)
             return
-        self._navigate(self._link_to_destination(url))
+        self._reveal_nav_for(dest)
+        self._navigate(dest)
+
+    def _reveal_nav_for(self, dest: str):
+        """Reaching a book page by clicking a link elsewhere (a splash chip, a
+        cross-reference, a reference-screen or Jarvis citation) opens the browse
+        pane too, so the reader can see where the page sits in the tree — which
+        _render_page then selects and scrolls to. Full-width screens are left
+        alone; _navigate hides the pane for those. This only fires on link
+        clicks, not history/next-prev/tree navigation, so a pane the reader
+        deliberately closed stays closed while they page through."""
+        if not self._takes_full_width(dest):
+            self._show_sidebar()
 
     def _on_jarvis_page(self) -> bool:
         return self._nav.current() == "ask"
@@ -1293,11 +1309,19 @@ class MainWindow(QMainWindow):
     _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions",
                           "spells", "charactermancer", "ask"}
 
+    def _takes_full_width(self, dest: str) -> bool:
+        """Whether a destination is a full-width reference/tool screen (so the
+        browse pane makes way for it) rather than a book page or TOC (which keep
+        the pane). The single source of truth for that split — the reveal, the
+        hide, and the tab-change reconciliation all defer to it. Proficiencies is
+        the Codex reference screen; it carries a `#fragment`, so match by prefix."""
+        return dest in self._FULLWIDTH_SCREENS or dest.startswith("proficiencies")
+
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
-        if dest in self._FULLWIDTH_SCREENS or dest.startswith("proficiencies"):
+        if self._takes_full_width(dest):
             self._hide_sidebar()
         if add_to_history:
             self._nav.push(dest)
@@ -1724,12 +1748,20 @@ class MainWindow(QMainWindow):
         self._update_bookmark_btn()
 
     def _on_tab_changed(self, idx: int):
-        """Sync UI state when the user switches tabs."""
+        """Sync UI state when the active tab changes — on a switch, and when
+        closing a tab hands focus to another."""
         if not (0 <= idx < len(self._tabs)):
             return
         self._update_nav_buttons()
         self._update_bookmark_btn()
         ctx = self._tabs[idx]
+        # Reconcile the browse pane with the newly-active tab, the same way
+        # _navigate does: a full-width screen reclaims the width, while a book
+        # page leaves the pane as the reader left it (switching or closing a tab
+        # is not a link click, so it never forces the pane open).
+        dest = ctx.nav.current() or ""
+        if self._takes_full_width(dest):
+            self._hide_sidebar()
         if ctx.current_page_url:
             self._sync_tree_selection(ctx.current_page_url)
 
