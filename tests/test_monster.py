@@ -79,6 +79,17 @@ def test_char_rules_initiative_table_covers_every_size():
 
 # ── parsing (pure, synthetic HTML) ────────────────────────────────────────────
 
+def test_monster_name_prefixes_plain_groups_not_category_groups():
+    from monster import _monster_name
+    assert _monster_name("Black", "Bear") == "Black Bear"           # plain group -> prefix base
+    assert _monster_name("Phase", "Spider") == "Phase Spider"
+    assert _monster_name("Death Kiss", "Beholder and Beholder-kin I") == "Death Kiss"  # category -> as-is
+    assert _monster_name("Cheetah", "Cat, Great") == "Cheetah"
+    assert _monster_name("Camel", "Mammal, Herd") == "Camel"
+    assert _monster_name("Rat", "Rat") == "Rat"                     # no "Rat Rat" duplication
+    assert _monster_name("", "Ankheg") == "Ankheg"                  # single monster
+
+
 def test_parses_a_single_monster_with_all_fields():
     html = _html([(lab, ["v_" + monster.FIELD_BY_LABEL[lab]]) for lab in LABELS])
     (m,) = parse_stat_block(html, title="Ankheg (Monstrous Manual)", source_page=ANKHEG)

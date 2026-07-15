@@ -358,7 +358,7 @@ def _group_to_monsters(rows, group, source_page, prose):
     for i in cols:
         variant = variant_cols[i].strip() if have_variants else ""
         m = Monster(
-            name=(f"{variant} {group}".strip() if variant else group),
+            name=_monster_name(variant, group),
             source_page=source_page, variant=variant,
             description=prose[0], combat=prose[1],
             habitat_society=prose[2], ecology=prose[3],
@@ -382,6 +382,21 @@ def _clean_title(title: str) -> str:
     suffix and render the scrape's '--' separator as a comma ('Cat-- Great')."""
     base = (title or "").split(" (Monstrous Manual")[0].strip()
     return re.sub(r"\s*--\s*", ", ", base)
+
+
+def _monster_name(variant: str, group: str) -> str:
+    """A variant's display name. A *category* group — 'Cat, Great', 'Beholder and
+    Beholder-kin I', 'Mammal, Herd', 'Ooze/Slime/Jelly' — already lists full creature
+    names in its columns ('Cheetah', 'Death Kiss'), so use the variant alone. A
+    *plain* group — 'Bear', 'Spider' — lists adjectives, so prefix them onto the base
+    ('Black' → 'Black Bear'). Avoid duplicating the base ('Rat' + 'Rat' → 'Rat')."""
+    if not variant:
+        return group
+    if any(mark in group for mark in (",", " and ", "-kin", "/")):
+        return variant
+    if variant.lower() == group.lower() or group.lower() in variant.lower():
+        return variant
+    return f"{variant} {group}"
 
 
 def importable_pages(conn) -> list:
