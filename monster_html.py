@@ -105,12 +105,15 @@ def _prose_panel(title, field, text, feature=False):
     )
 
 
-def generate(m, saved_id=None) -> str:
-    """The full monster sheet HTML for Monster ``m``. ``saved_id`` (if the monster
-    is saved) tunes the Save button label."""
+def generate(m, saved_id=None, image_url="") -> str:
+    """The full monster sheet HTML for Monster ``m``. ``saved_id`` (if the monster is
+    saved) tunes the Save button label; ``image_url`` (the app builds it from the
+    source site) shows the MM illustration."""
     variant_tag = f'<span class="tag">{esc(m.variant)}</span>' if m.variant else ""
     source = (f'<a class="src" href="dnd:///{esc(m.source_page)}">Monstrous Manual ↗</a>'
               if m.source_page else "")
+    image = (f'<img class="mon-img" src="{esc(image_url)}" alt="" '
+             f'onerror="this.style.display=\'none\'">') if image_url else ""
 
     rows = ""
     for label, field in _STAT_ROWS:
@@ -142,6 +145,7 @@ def generate(m, saved_id=None) -> str:
 
     body = f"""<div class="sheet">
   <header>
+    {image}
     <div class="title-row">
       <input class="name" value="{esc(m.name)}" placeholder="Monster name" spellcheck="false"
              autocomplete="off" onchange="monText('set/name', this.value)">
@@ -166,7 +170,15 @@ def generate(m, saved_id=None) -> str:
     <a class="nav-btn" href="dnd:///mon/new">＋ New monster</a>
   </div>
 </div>"""
-    return _document(m.name or "Monster", body)
+    return _document(m.name or "Monster", body, _AUTOGROW_JS)
+
+
+#: Auto-size every prose box to its content, so the full text shows without scrolling.
+_AUTOGROW_JS = """
+  document.querySelectorAll('textarea.pr').forEach(function(t) {
+    function fit() { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+    fit(); t.addEventListener('input', fit);
+  });"""
 
 
 def _count_badge(n) -> str:
@@ -331,6 +343,8 @@ _CSS = f"""
   .sub {{ color: #6a708c; font-size: 11.5px; margin-top: 8px; }}
   .src {{ color: {ACCENT}; text-decoration: none; margin-left: 6px; }}
   .src:hover {{ text-decoration: underline; }}
+  .mon-img {{ float: right; width: 160px; max-width: 42%; margin: 2px 0 10px 18px;
+    border-radius: 8px; border: 1px solid #2a2e3e; background: #0f1016; }}
 
   .combat-strip {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }}
   .tile {{ display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -359,10 +373,9 @@ _CSS = f"""
   .panel {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 12px; padding: 14px 16px; }}
   .panel.feature {{ border-color: {ACCENT}55; background: {ACCENT}0d; }}
   .panel.feature .panel-h {{ color: {ACCENT}; }}
-  textarea.pr {{ width: 100%; min-height: 66px; resize: vertical; background: #16181f;
-    border: 1px solid #2f3346; border-radius: 7px; color: #d3d7e6; padding: 9px 11px;
-    font-family: inherit; font-size: 12.5px; line-height: 1.62; }}
-  .panel.feature textarea.pr {{ min-height: 120px; }}
+  textarea.pr {{ width: 100%; min-height: 44px; overflow: hidden; resize: none;
+    background: #16181f; border: 1px solid #2f3346; border-radius: 7px; color: #d3d7e6;
+    padding: 9px 11px; font-family: inherit; font-size: 12.5px; line-height: 1.62; }}
   textarea.pr:focus {{ outline: none; border-color: {ACCENT}88; }}
 
   .actions {{ display: flex; flex-wrap: wrap; margin-top: 22px;

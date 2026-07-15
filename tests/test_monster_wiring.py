@@ -119,7 +119,7 @@ def test_render_monster_sheet_uses_current_monster():
     view = SimpleNamespace(setHtml=lambda h: calls.__setitem__("html", h))
     win = SimpleNamespace(
         _mon=Monster(name="Orc", armor_class="6", thac0="19"), _mon_saved_id=None,
-        content=SimpleNamespace(_view=view),
+        content=SimpleNamespace(_view=view), _mon_image_url=lambda m: "",
         _mon_status=lambda s: calls.__setitem__("status", s))
     assert app.MainWindow._render_monster_sheet(win) is True
     assert "Orc" in calls["html"] and calls["status"] == "Orc"
@@ -128,11 +128,19 @@ def test_render_monster_sheet_uses_current_monster():
 def test_render_monster_sheet_is_blank_when_none():
     calls = {}
     win = SimpleNamespace(
-        _mon=None, _mon_saved_id=None,
+        _mon=None, _mon_saved_id=None, _mon_image_url=lambda m: "",
         content=SimpleNamespace(_view=SimpleNamespace(setHtml=lambda h: calls.__setitem__("html", h))),
         _mon_status=lambda s: None)
     assert app.MainWindow._render_monster_sheet(win) is True
     assert "Stat Block" in calls["html"]            # a blank editable sheet
+
+
+def test_mon_image_url_builds_from_source_site():
+    win = SimpleNamespace()
+    m = Monster(source_page="MM/DD03797.htm", image="ANKHEG.gif")
+    url = app.MainWindow._mon_image_url(win, m)
+    assert url == app.BASE_URL + "MM/ANKHEG.gif"
+    assert app.MainWindow._mon_image_url(win, Monster()) == ""   # no image -> no url
 
 
 # ── end-to-end: real DB parse -> sheet -> save -> load (Qt view faked) ─────────
@@ -145,7 +153,7 @@ def test_import_pick_save_load_end_to_end(tmp_path):
         _mon=None, _mon_saved_id=None, _mon_index=None,
         _mon_library=MonsterLibrary(db.connect(tmp_path / "user.db")),
         content=SimpleNamespace(_view=SimpleNamespace(setHtml=htmls.append)),
-        _mon_status=lambda s: None,
+        _mon_image_url=lambda m: "", _mon_status=lambda s: None,
     )
 
     def _nav(dest):                                  # dispatch the monster destinations

@@ -84,6 +84,7 @@ class Monster:
     name: str = ""
     source_page: str = ""          # e.g. "MM/DD03797.htm" — back-link to the MM page
     variant: str = ""              # e.g. "Black" for a multi-variant page, else ""
+    image: str = ""                # the page's illustration filename, e.g. "ANKHEG.gif"
 
     climate_terrain: str = ""
     frequency: str = ""
@@ -167,7 +168,7 @@ def _map_numbers(text: str, fn, signed: bool = False) -> str:
 #: Monster fields the sheet lets the DM edit (everything textual; not the id-like
 #: source_page/variant or the numeric initiative override).
 EDITABLE_FIELDS = frozenset(
-    {f.name for f in fields(Monster)} - {"source_page", "variant", "initiative_override"})
+    {f.name for f in fields(Monster)} - {"source_page", "variant", "image", "initiative_override"})
 
 
 def house_rule_to_raw(field: str, value: str) -> str:
@@ -193,12 +194,13 @@ def _largest_size(size_text: str) -> str:
 
 
 def _base_thac0(thac0_text: str):
-    """The base THAC0 integer: the value after the first 'HD:' for HD-conditional
-    entries, else the first number in the field (the low end of a range). None if
-    there are no digits ('Nil', 'See below')."""
+    """The base THAC0 integer: the value after the first 'HD:'/'hp:' for creatures
+    whose THAC0 varies by Hit Dice or hit points ('45-49 hp: 11 …', '3+3 HD: 17 …'),
+    else the first number in the field (the low end of a range). None if there are no
+    digits ('Nil', 'See below')."""
     if not thac0_text:
         return None
-    m = re.search(r"HD:\s*(-?\d+)", thac0_text)
+    m = re.search(r"(?:HD|hp):\s*(-?\d+)", thac0_text, re.IGNORECASE)
     if m:
         return int(m.group(1))
     m = re.search(r"-?\d+", thac0_text)
@@ -216,6 +218,15 @@ def _norm_label(cell: str):
     return key if key in _CANONICAL else None
 
 
+def _clean_prose(text: str) -> str:
+    """Reflow scraped prose for a text box. The MM hard-wraps every line with <br>,
+    and tables embedded in the prose leave long runs of blank lines — so collapse
+    each paragraph's wrapped lines into flowing text, and blank-line runs into a
+    single paragraph break."""
+    paragraphs = re.split(r"\n[ \t]*\n+", text)
+    return "\n\n".join(p for p in (" ".join(para.split()) for para in paragraphs) if p)
+
+
 def _split_prose(text: str):
     """Split the post-table body into (description, combat, habitat, ecology) on the
     known section headers; text before the first header is the description."""
@@ -231,7 +242,7 @@ def _split_prose(text: str):
                 buckets[current].append(rest)
         else:
             buckets[current].append(line.rstrip())
-    return tuple("\n".join(buckets[k]).strip()
+    return tuple(_clean_prose("\n".join(buckets[k]))
                  for k in ("description", "combat", "habitat_society", "ecology"))
 
 
@@ -251,9 +262,12 @@ class _StatBlockHTML(HTMLParser):
         self._in_table = False
         self._seen_table = False
         self._prose: list = []
+        self.image = ""
 
     def handle_starttag(self, tag, attrs):
         t = tag.lower()
+        if t == "img" and not self.image:
+            self.image = dict(attrs).get("src", "") or ""
         if t == "table":
             self._in_table = self._seen_table = True
         elif self._in_table:
@@ -534,5 +548,8 @@ def parse_stat_block(content_html: str, title: str = "", source_page: str = "") 
         parser.feed(content_html or "")
     except Exception:
         return []
-    monsters = _grid_to_monsters(parser.rows, _clean_title(title), source_page, parser.prose())
-    return monsters or _parse_compact_table(parser.rows, source_page)
+    monsters = (_grid_to_monsters(parser.rows, _clean_title(title), source_page, parser.prose())
+                or _parse_compact_table(parser.rows, source_page))
+    for m in monsters:
+        m.image = parser.image
+    return monsters

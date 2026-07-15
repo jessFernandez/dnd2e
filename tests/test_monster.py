@@ -47,8 +47,15 @@ def test_attack_bonus_is_the_base_value():
     assert Monster(thac0="19").attack_bonus() == "1"
     assert Monster(thac0="17-13").attack_bonus() == "3"     # base (first) THAC0, not a range
     assert Monster(thac0="1+1 and 2+2 HD: 19 3+3 HD: 17").attack_bonus() == "1"  # first HD: value
+    assert Monster(thac0="45-49 hp: 11 50-59 hp: 9").attack_bonus() == "9"       # hp-conditional (Beholder)
     assert Monster(thac0="").attack_bonus() == ""
     assert Monster(thac0="Nil").attack_bonus() == ""
+
+
+def test_clean_prose_reflows_wraps_and_collapses_blank_runs():
+    from monster import _clean_prose
+    assert _clean_prose("The beast\nis fierce.") == "The beast is fierce."   # <br> wraps -> one line
+    assert _clean_prose("Para one.\n\n\n\n\nPara two.") == "Para one.\n\nPara two."  # table gap -> one break
 
 
 def test_ascending_ac_handles_negatives_and_notes():
@@ -179,6 +186,8 @@ def test_parse_real_ankheg(conn):
     assert "Overall 2" in m.armor_class and m.ascending_ac().startswith("Overall 18")
     assert m.size_category() == "H" and m.initiative_modifier() == 9
     assert m.combat and "acid" in m.combat.lower()
+    assert "\n\n\n" not in m.combat                   # prose reflowed, no blank-line runs
+    assert m.image == "ANKHEG.gif"                    # the page's illustration filename
 
 
 @needs_db

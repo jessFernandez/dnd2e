@@ -1511,9 +1511,19 @@ class MainWindow(QMainWindow):
 
     def _render_monster_sheet(self) -> bool:
         m = self._mon if self._mon is not None else monster.Monster()
-        self.content._view.setHtml(monster_html.generate(m, self._mon_saved_id))
+        self.content._view.setHtml(
+            monster_html.generate(m, self._mon_saved_id, self._mon_image_url(m)))
         self._mon_status(m.name or "Monster")
         return True
+
+    def _mon_image_url(self, m) -> str:
+        """The absolute URL of a monster's MM illustration, fetched from the source
+        site like the book-page images (BASE_URL + the page's folder + filename), or
+        '' when the page had no image."""
+        if m.image and "/" in m.source_page:
+            folder = m.source_page.rsplit("/", 1)[0] + "/"
+            return BASE_URL + folder + m.image
+        return ""
 
     def _render_variant_picker(self, page_url: str) -> bool:
         row = db.get_page(self.db, page_url)
