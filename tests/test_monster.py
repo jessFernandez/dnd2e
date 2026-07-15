@@ -196,15 +196,15 @@ def test_parse_real_cat_great_wrapped_columns(conn):
     assert cheetah.armor_class and not cheetah.armor_class.endswith(":")
 
 
-# Generic category pages that mention "ARMOR CLASS" in prose but carry no real
-# stat block; the parser correctly yields nothing for them.
+# Pages with no parseable stat block: family lore pages, front matter, and two
+# odd-format summary tables the parser doesn't yet handle. The parser correctly
+# yields nothing for them.
 CATEGORY_PAGES = {
     "MM/DD03842.htm",  # Dragon-- General
-    "MM/DD03954.htm",  # Human
-    "MM/DD03958.htm",  # Insect
+    "MM/DD03954.htm",  # Human (unusual format)
     "MM/DD04100.htm",  # Instructions for the Blank Monster Form
     "MM/DD03980.htm",  # Lycanthrope-- General
-    "MM/DD03990.htm",  # Mammal
+    "MM/DD03992.htm",  # Mammal-- Small (wrapped compact header)
     "MM/DD03794.htm",  # The Monsters
 }
 
@@ -218,6 +218,19 @@ def test_parse_real_beholder_all_variants(conn):
     assert any("Spectator" in m.name for m in ms)
     for m in ms:
         assert m.armor_class and not m.armor_class.endswith(":")
+
+
+@needs_db
+def test_parse_real_mammal_compact_table(conn):
+    """The Mammal page is a compact 'creature per row' summary table, not the
+    standard label-per-row stat block."""
+    ms = _parse_page(conn, "MM/DD03990.htm")
+    names = [m.name for m in ms]
+    assert len(ms) > 20
+    assert any(n.startswith("Ape") for n in names) and any(n == "Badger" for n in names)
+    ape = next(m for m in ms if m.name.startswith("Ape"))
+    assert ape.armor_class == "6" and ape.hit_dice == "5" and ape.attack_bonus() == "5"
+    assert all(m.name and m.armor_class for m in ms)     # no cross-reference junk rows
 
 
 @needs_db

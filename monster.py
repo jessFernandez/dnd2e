@@ -454,13 +454,67 @@ def importable_index(conn):
     return families, standalone
 
 
+# The compact "summary" pages (Mammal, Bird, Fish, Insect) list many minor
+# creatures as one row each under abbreviated column headers, rather than the
+# standard label-per-row stat block. Header text -> Monster field.
+_COMPACT_HEADERS = {
+    "#AP": "no_appearing", "NO. APP": "no_appearing", "APP": "no_appearing",
+    "NO. APPEARING": "no_appearing", "#APP": "no_appearing",
+    "AC": "armor_class", "ARMOR CLASS": "armor_class",
+    "MV": "movement", "MOVEMENT": "movement",
+    "HD": "hit_dice", "HIT DICE": "hit_dice",
+    "THAC0": "thac0", "THACO": "thac0",
+    "# OF ATT": "no_of_attacks", "NO. OF ATTACKS": "no_of_attacks",
+    "ATTACKS": "no_of_attacks", "# ATT": "no_of_attacks", "NO ATT": "no_of_attacks",
+    "DMG/ATT": "damage_attack", "DAMAGE/ATTACK": "damage_attack",
+    "DAMAGE": "damage_attack", "DMG": "damage_attack", "ATTACK": "damage_attack",
+    "MORALE": "morale", "ML": "morale",
+    "XP VALUE": "xp_value", "XP": "xp_value", "VALUE": "xp_value",
+    "SIZE": "size", "SZ": "size", "AL": "alignment", "ALIGNMENT": "alignment",
+    "INT": "intelligence", "INTELLIGENCE": "intelligence",
+    "NOTES": "special_attacks", "SA": "special_attacks",
+}
+
+
+def _parse_compact_table(rows, source_page):
+    """Parse a compact summary table (row 0 = abbreviated headers, each later row a
+    creature). Returns a Monster per data row, or [] if row 0 isn't such a header."""
+    if not rows:
+        return []
+    header = rows[0]
+    field_by_col = {}
+    for col, cell in enumerate(header[1:], start=1):       # column 0 is the creature name
+        key = " ".join(cell.strip().rstrip(".").upper().split())
+        field = _COMPACT_HEADERS.get(key)
+        if field:
+            field_by_col[col] = field
+    fields_present = set(field_by_col.values())
+    if not {"armor_class", "hit_dice"} <= fields_present:  # confidence: it's a stat table
+        return []
+
+    monsters = []
+    for row in rows[1:]:
+        if not row or not row[0].strip():                  # skip blank / continuation rows
+            continue
+        m = Monster(name=row[0].strip(), source_page=source_page)
+        for col, field in field_by_col.items():
+            if col < len(row):
+                setattr(m, field, row[col].strip())
+        if not m.armor_class:                              # cross-references ("See Raven"),
+            continue                                       # sub-headers, etc. carry no AC
+        monsters.append(m)
+    return monsters
+
+
 def parse_stat_block(content_html: str, title: str = "", source_page: str = "") -> list:
     """Parse a Monstrous Manual page into a list of Monsters — one per variant (a
-    single-creature page yields one). Returns [] for pages without a real stat
-    block (front matter, generic category pages, the blank form)."""
+    single-creature page yields one). Falls back to the compact summary-table format
+    (Mammal, Bird, …). Returns [] for pages without a real stat block (front matter,
+    generic category pages, the blank form)."""
     parser = _StatBlockHTML()
     try:
         parser.feed(content_html or "")
     except Exception:
         return []
-    return _grid_to_monsters(parser.rows, _clean_title(title), source_page, parser.prose())
+    monsters = _grid_to_monsters(parser.rows, _clean_title(title), source_page, parser.prose())
+    return monsters or _parse_compact_table(parser.rows, source_page)

@@ -49,13 +49,15 @@ def page_meta(conn, page_url):
 
 
 def list_monster_pages(conn):
-    """(page_url, title) for every Monstrous Manual page that carries a real stat
-    block — i.e. importable monsters, skipping front-matter and generic category
-    pages. The 'ARMOR CLASS:' label marks the stat-block pages; the one exception
-    is the blank stat-form template, excluded by its 'copy this form' boilerplate."""
+    """(page_url, title) for every Monstrous Manual page that might carry a stat
+    block — the candidates the parser then confirms (see monster.importable_pages).
+    Standard pages carry the 'ARMOR CLASS' label; the compact summary tables (Mammal,
+    Bird, …) instead carry a 'THAC0' column, so match either. The blank stat-form
+    template is excluded by its 'copy this form' boilerplate."""
     return conn.execute(
         "SELECT page_url, title FROM pages "
-        "WHERE book_code = 'MM' AND content_text LIKE '%ARMOR CLASS%' "
+        "WHERE book_code = 'MM' "
+        "AND (content_text LIKE '%ARMOR CLASS%' OR content_text LIKE '%THAC0%') "
         "AND content_text NOT LIKE '%copy this form%' "
         "ORDER BY title"
     ).fetchall()
