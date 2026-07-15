@@ -1,6 +1,7 @@
 # Monster mode — plan
 
-**Status:** in progress. Phase 1 (pure core) complete; phases 2–4 remaining.
+**Status:** in progress. Phases 1 (pure core) and 2 (persistence) complete;
+phases 3–4 remaining.
 
 ## Goal
 
@@ -64,8 +65,10 @@ So import is a **parse job** (plain-Python, no `bs4` at runtime), like
    *Known limitation:* HD-conditional THAC0/XP strings (`"3+3 HD: 17 4+4 HD: 15"`)
    make the derived attack-bonus imperfect — the verbatim value is always stored;
    refine in the view phase.
-2. **Persistence.** `monster_library` (JSON blobs in the user DB, like
-   `character_library`) + tests.
+2. **Persistence. ✅ done.** `monster_library.MonsterLibrary` (save/load/delete
+   monsters as JSON blobs in the user DB, mirroring `character_library`) over new
+   `db.py` `saved_monsters` CRUD. The row id is held by the caller, keeping the
+   `Monster` model persistence-free. Tested against a temp DB (`test_monster_library`).
 3. **View.** `monster_html.py` — stat block + prose, editable fields, house-rule
    values shown. Render tests.
 4. **UI wiring.** Monster mode on the sheet + the MM import picker in `app.py`

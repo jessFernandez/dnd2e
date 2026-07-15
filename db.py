@@ -278,3 +278,53 @@ def get_character(conn, char_id):
 def delete_character(conn, char_id):
     conn.execute("DELETE FROM characters WHERE id=?", (char_id,))
     conn.commit()
+
+
+# ── saved monsters (DM monster sheets) ──────────────────────────────────────
+# Also user-DB rows, mirroring saved characters. The full monster is a JSON blob
+# (Monster.to_dict); name/source_page are loose columns for listing. Named
+# saved_monsters to stay distinct from the MM source pages in the rulebook DB.
+
+def ensure_monsters_schema(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS saved_monsters ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, "
+        "source_page TEXT, data TEXT NOT NULL, "
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    conn.commit()
+
+
+def insert_monster(conn, name, source_page, data_json) -> int:
+    cur = conn.execute(
+        "INSERT INTO saved_monsters (name, source_page, data) VALUES (?,?,?)",
+        (name, source_page, data_json))
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_monster(conn, monster_id, name, source_page, data_json):
+    conn.execute(
+        "UPDATE saved_monsters SET name=?, source_page=?, data=?, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (name, source_page, data_json, monster_id))
+    conn.commit()
+
+
+def all_monsters(conn) -> list:
+    """Saved-monster rows (id, name, source_page), most-recent first."""
+    return conn.execute(
+        "SELECT id, name, source_page FROM saved_monsters "
+        "ORDER BY updated_at DESC").fetchall()
+
+
+def get_monster(conn, monster_id):
+    """The stored JSON blob for one saved monster, or None."""
+    row = conn.execute("SELECT data FROM saved_monsters WHERE id=?", (monster_id,)).fetchone()
+    return row[0] if row else None
+
+
+def delete_monster(conn, monster_id):
+    conn.execute("DELETE FROM saved_monsters WHERE id=?", (monster_id,))
+    conn.commit()
