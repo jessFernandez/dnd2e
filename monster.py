@@ -393,7 +393,7 @@ def _group_to_monsters(rows, group, source_page, prose):
     for i in cols:
         variant = _dehyphenate(variant_cols[i].strip()) if have_variants else ""
         m = Monster(
-            name=_monster_name(variant, group),
+            name=_resolve_name(source_page, variant, group),
             source_page=source_page, variant=variant,
             description=prose[0], combat=prose[1],
             habitat_society=prose[2], ecology=prose[3],
@@ -432,6 +432,97 @@ def _monster_name(variant: str, group: str) -> str:
     if variant.lower() == group.lower() or group.lower() in variant.lower():
         return variant
     return f"{variant} {group}"
+
+
+#: Curated naming for multi-variant pages the automatic rule gets wrong (its
+#: adjective-vs-full-name guess, keyed off the '--' title separator, misfires when a
+#: page mixes the two — 'Basilisk' lists the adjectives Lesser/Greater *and* the name
+#: Dracolisk). Keyed by source page. A value is one of:
+#:   _ALONE       — every variant is already a full creature name; use it verbatim.
+#:   "<Noun>"     — every variant is an adjective; prefix this base noun ('Fire' →
+#:                  'Fire Beetle'). Skipped for a variant that already contains it.
+#:   {variant: name} — explicit names for the listed variants (a mixed page); any
+#:                  variant not listed falls back to the automatic rule.
+_ALONE = object()
+NAME_OVERRIDES = {
+    # full-name variants the rule wrongly prefixes with the base noun
+    "MM/DD03801.htm": _ALONE,   # Baatezu:  Pit Fiend, Black Abishai, …
+    "MM/DD03835.htm": _ALONE,   # Dinosaur: Ankylosaurus, Deinonychus, …
+    "MM/DD03883.htm": _ALONE,   # Elephant: Elephant (African), Mammoth, Mastodon, …
+    "MM/DD03896.htm": _ALONE,   # Genie:    Djinni, Dao, Efreeti, Marid, Jann
+    "MM/DD03936.htm": _ALONE,   # Gremlin:  Gremlin, Fremlin, Galltrit, Mite, Snyad
+    "MM/DD03959.htm": _ALONE,   # Insect Swarm: Velvet Ants, Grasshoppers and Locusts
+    "MM/DD04069.htm": _ALONE,   # Tanar'ri: Balor, Marilith
+    # adjective variants the rule wrongly leaves bare (its title has a comma / "kin")
+    "MM/DD03806.htm": "Beetle",   # Beetle, Giant:  Fire → Fire Beetle
+    "MM/DD03819.htm": "Cat",      # Cat, Small:     Domestic → Domestic Cat
+    "MM/DD03873.htm": "Dwarf",    # Dwarf, Hill and Mountain: Hill → Hill Dwarf
+    "MM/DD03876.htm": "Elemental",  # Elemental, Air/Earth
+    "MM/DD03877.htm": "Elemental",  # Elemental, Fire/Water
+    "MM/DD03928.htm": "Golem",    # Golem, Greater:  Stone → Stone Golem
+    "MM/DD03929.htm": "Golem",    # Golem, Lesser:   Flesh → Flesh Golem
+    "MM/DD03930.htm": "Golem",    # Golem, Bone, Doll
+    "MM/DD03931.htm": "Golem",    # Golem, Gargoyle, Glass
+    "MM/DD03957.htm": "Mephit",   # Imp, Mephit:     Fire → Fire Mephit
+    "MM/DD03981.htm": "Seawolf",  # Lycanthrope, Seawolf: Lesser → Lesser Seawolf
+    "MM/DD04034.htm": "Pudding",  # Pudding, Deadly: Black → Black Pudding
+    "MM/DD04097.htm": "Guardian",  # Yugoloth, Guardian: Least → Least Guardian
+    # mixed pages: name the outliers, leave the rest to the automatic rule
+    "MM/DD03803.htm": {"Dracolisk": "Dracolisk"},                       # Basilisk
+    "MM/DD03813.htm": {"Killmoulis": "Killmoulis"},                     # Brownie
+    "MM/DD03823.htm": {"Megalo-": "Megalocentipede"},                   # Centipede
+    "MM/DD03824.htm": {"Gorgimera": "Gorgimera"},                       # Chimera
+    "MM/DD03826.htm": {"Pyrolisk": "Pyrolisk"},                         # Cockatrice
+    "MM/DD03892.htm": {"Shrieker": "Shrieker", "Phycomid": "Phycomid",  # Fungus
+                       "Ascomoid": "Ascomoid", "Gas spore": "Gas Spore"},
+    "MM/DD03895.htm": {"Margoyle": "Margoyle"},                         # Gargoyle
+    "MM/DD03898.htm": {"Lacedon": "Lacedon", "Ghast": "Ghast"},         # Ghoul
+    "MM/DD03922.htm": {"Moth": "Gloomwing", "Tenebrous Worm": "Tenebrous Worm"},  # Gloomwing
+    "MM/DD03923.htm": {"Flind": "Flind"},                               # Gnoll
+    "MM/DD03924.htm": {"Svirfneblin": "Svirfneblin"},                   # Gnome
+    "MM/DD03953.htm": {"Draft": "Draft Horse", "Heavy": "Heavy Horse",  # Horses
+                       "Medium": "Medium Horse", "Light": "Light Horse",
+                       "Riding": "Riding Horse", "Wild": "Wild Horse",
+                       "Pony": "Pony", "Mule": "Mule"},
+    "MM/DD03956.htm": {"Quasit": "Quasit"},                            # Imp
+    "MM/DD03967.htm": {"Urd": "Urd"},                                  # Kobold
+    "MM/DD03977.htm": {"Lizard King": "Lizard King"},                  # Lizard Man
+    "MM/DD03979.htm": {"Trapper": "Trapper", "Trapper, Forest": "Forest Trapper"},  # Lurker
+    "MM/DD04014.htm": {"Great Old Master": "Great Old Master"},        # Neogi
+    "MM/DD04018.htm": {"Merrow": "Merrow"},                            # Ogre
+    "MM/DD04023.htm": {"Orog": "Orog"},                                # Orc
+    "MM/DD04031.htm": {"Thorn- Slinger": "Thornslinger"},             # Plant, Dangerous
+    "MM/DD04037.htm": {"Osquip": "Osquip"},                            # Rat
+    "MM/DD04044.htm": {"Korred": "Korred"},                            # Satyr
+    "MM/DD04056.htm": {"Amphisbaena": "Amphisbaena", "Boalisk": "Boalisk",  # Snake
+                       "Constrictor (Normal)": "Constrictor Snake (Normal)",
+                       "Constrictor (Giant)": "Constrictor Snake (Giant)",
+                       "Heway": "Heway", "Spitting": "Spitting Snake",
+                       "Poison (Normal)": "Poison Snake (Normal)",
+                       "Poison (Giant)": "Poison Snake (Giant)",
+                       "Sea, Giant": "Giant Sea Snake"},
+    "MM/DD04061.htm": {"Pixie": "Pixie", "Nixie": "Nixie",             # Sprite
+                       "Atomie": "Atomie", "Grig": "Grig"},
+    "MM/DD04066.htm": {"Bird Maidens": "Bird Maidens"},               # Swanmay
+    "MM/DD04080.htm": {"Vodyanoi": "Vodyanoi"},                       # Umber Hulk
+    "MM/DD04085.htm": {"Narwhal": "Narwhal", "Leviathan": "Leviathan"},  # Whale
+    "MM/DD04088.htm": {"Worg": "Worg"},                              # Wolf
+    "MM/DD04090.htm": {"Rot Grub": "Rot Grub"},                      # Worm
+    "MM/DD04093.htm": {"Xaren": "Xaren"},                            # Xorn
+}
+
+
+def _resolve_name(source_page: str, variant: str, group: str) -> str:
+    """A variant's display name, consulting NAME_OVERRIDES before the automatic rule."""
+    ov = NAME_OVERRIDES.get(source_page)
+    if isinstance(ov, dict):
+        if variant in ov:
+            return ov[variant]
+    elif ov is _ALONE:
+        return variant or group
+    elif isinstance(ov, str) and variant:
+        return variant if ov.lower() in variant.lower() else f"{variant} {ov}"
+    return _monster_name(variant, group)
 
 
 def importable_pages(conn) -> list:

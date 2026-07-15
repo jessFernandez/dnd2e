@@ -98,6 +98,20 @@ def test_monster_name_prefixes_plain_groups_not_category_groups():
     assert _monster_name("", "Ankheg") == "Ankheg"                  # single monster
 
 
+def test_resolve_name_applies_curated_overrides():
+    from monster import _resolve_name
+    # _ALONE page: a full-name variant the rule would wrongly prefix
+    assert _resolve_name("MM/DD03896.htm", "Djinni", "Genie") == "Djinni"
+    # base-noun page: an adjective variant the rule would wrongly leave bare
+    assert _resolve_name("MM/DD03957.htm", "Fire", "Imp, Mephit") == "Fire Mephit"
+    assert _resolve_name("MM/DD03928.htm", "Stone", "Golem, Greater") == "Stone Golem"
+    # mixed page: only the listed outlier is overridden; the rest fall through
+    assert _resolve_name("MM/DD03803.htm", "Dracolisk", "Basilisk") == "Dracolisk"
+    assert _resolve_name("MM/DD03803.htm", "Lesser", "Basilisk") == "Lesser Basilisk"
+    # an un-curated page still uses the automatic rule
+    assert _resolve_name("MM/DD03805.htm", "Black", "Bear") == "Black Bear"
+
+
 def test_parses_a_single_monster_with_all_fields():
     html = _html([(lab, ["v_" + monster.FIELD_BY_LABEL[lab]]) for lab in LABELS])
     (m,) = parse_stat_block(html, title="Ankheg (Monstrous Manual)", source_page=ANKHEG)
