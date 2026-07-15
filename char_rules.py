@@ -80,6 +80,29 @@ def is_critical(nat_roll: int, attack_bonus: int, target_asc_ac: int) -> bool:
     return (nat_roll + attack_bonus) - target_asc_ac >= CRIT_MIN_MARGIN
 
 
+#: Initiative speed factor for a creature attacking with natural weapons, keyed by
+#: size category (DMG "Modifiers to the Initiative Roll"). Initiative is rolled low
+#: — a bigger creature carries a larger modifier and so tends to act later. The DM
+#: Screen (dmscreen_html) and the monster sheet both read this, so they can't
+#: disagree — the same single-source-of-truth rule as the THAC0/AC conversions.
+SIZE_INITIATIVE_MODIFIER = {
+    "T": 0,    # Tiny
+    "S": 3,    # Small
+    "M": 3,    # Medium
+    "L": 6,    # Large
+    "H": 9,    # Huge
+    "G": 12,   # Gargantuan
+}
+
+
+def monster_initiative_modifier(size_category: str):
+    """The natural-attack initiative modifier for a size category letter
+    (T/S/M/L/H/G), or None if unrecognized. Takes the first letter, case-folded,
+    so ``"L"``, ``"l"`` and ``"Large"`` all resolve. See SIZE_INITIATIVE_MODIFIER."""
+    key = (size_category or "").strip()[:1].upper()
+    return SIZE_INITIATIVE_MODIFIER.get(key)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Ability-score modifier tables (PHB Tables 1–6)
 #  Stored as (low, high, mods) bands matching the printed rows; look up by score.

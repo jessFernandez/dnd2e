@@ -48,6 +48,19 @@ def page_meta(conn, page_url):
     ).fetchone()
 
 
+def list_monster_pages(conn):
+    """(page_url, title) for every Monstrous Manual page that carries a real stat
+    block — i.e. importable monsters, skipping front-matter and generic category
+    pages. The 'ARMOR CLASS:' label marks the stat-block pages; the one exception
+    is the blank stat-form template, excluded by its 'copy this form' boilerplate."""
+    return conn.execute(
+        "SELECT page_url, title FROM pages "
+        "WHERE book_code = 'MM' AND content_text LIKE '%ARMOR CLASS%' "
+        "AND content_text NOT LIKE '%copy this form%' "
+        "ORDER BY title"
+    ).fetchall()
+
+
 def search_pages(conn, query: str, limit: int = 300):
     """Full-text search over page content; rows carry a highlighted snippet.
 

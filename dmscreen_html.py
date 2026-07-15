@@ -1,6 +1,7 @@
 """dmscreen_html.py — Generates the DM Quick Reference Screen HTML."""
 from html import escape as e
 
+import char_rules as cr
 from screen_common import page, render_sections
 
 CAT_COLORS = {
@@ -157,12 +158,17 @@ def _cover():
 
 
 def _initiative_actions():
+    # Size rows are sourced from char_rules so the DM Screen and the monster sheet
+    # can't disagree; S and M share a value, shown as one "Small/Medium" row.
+    m = cr.SIZE_INITIATIVE_MODIFIER
+    def _sign(v):
+        return "0" if v == 0 else f"+{v}"
     rows = [
-        ["Movement: Tiny", "0"],
-        ["Movement: Small/Medium", "+3"],
-        ["Movement: Large", "+6"],
-        ["Movement: Huge", "+9"],
-        ["Movement: Gargantuan", "+12"],
+        ["Movement: Tiny", _sign(m["T"])],
+        ["Movement: Small/Medium", _sign(m["M"])],
+        ["Movement: Large", _sign(m["L"])],
+        ["Movement: Huge", _sign(m["H"])],
+        ["Movement: Gargantuan", _sign(m["G"])],
         ["Breath weapon", "+1"],
         ["Rod", "+1"],
         ["Staff", "+2"],
