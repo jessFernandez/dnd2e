@@ -661,7 +661,7 @@ class MainWindow(QMainWindow):
         self._mon = None                    # in-progress monster sheet (window-level)
         self._mon_saved_id = None           # its saved-row id, or None (caller-held)
         self._mon_library = MonsterLibrary(self.user_db)      # save/load/delete for monsters
-        self._mon_pages = None              # cached importable MM monster list (parsed once)
+        self._mon_index = None              # cached (families, standalone) MM index (parsed once)
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -1316,6 +1316,8 @@ class MainWindow(QMainWindow):
             return self._render_monster_picker()
         if dest == "monster-sheet":
             return self._render_monster_sheet()
+        if dest.startswith("monster-family/"):
+            return self._render_family_picker(dest[len("monster-family/"):])
         if dest.startswith("monster-variant/"):
             return self._render_variant_picker(dest[len("monster-variant/"):])
         if dest == "proficiencies" or dest.startswith("proficiencies#"):
@@ -1484,12 +1486,28 @@ class MainWindow(QMainWindow):
     # place (no history, no re-render) so focus and scroll survive.
 
     def _render_monster_picker(self) -> bool:
-        if self._mon_pages is None:
-            self._mon_pages = monster.importable_pages(self.db)   # parse the MM once, cache
+        families, standalone = self._monster_index()
         self.content._view.setHtml(
-            monster_html.generate_import_picker(self._mon_pages, self._mon_library.all()))
+            monster_html.generate_import_picker(families, standalone, self._mon_library.all()))
         self._mon_status("Import from the Monstrous Manual")
         return True
+
+    def _render_family_picker(self, family: str) -> bool:
+        families, _ = self._monster_index()
+        match = next((f for f in families if f[0] == family), None)
+        if match is None:
+            return self._render_monster_picker()
+        name, general_url, members = match
+        self.content._view.setHtml(
+            monster_html.generate_family_picker(name, general_url, members))
+        self._mon_status(name)
+        return True
+
+    def _monster_index(self):
+        """The (families, standalone) MM index, parsed once and cached."""
+        if self._mon_index is None:
+            self._mon_index = monster.importable_index(self.db)
+        return self._mon_index
 
     def _render_monster_sheet(self) -> bool:
         m = self._mon if self._mon is not None else monster.Monster()
@@ -1522,6 +1540,8 @@ class MainWindow(QMainWindow):
             self._mon_set(path[len("set/"):])
         elif path == "import":
             self._navigate("monster")
+        elif path.startswith("family/"):
+            self._navigate("monster-family/" + path[len("family/"):])
         elif path == "new":
             self._mon, self._mon_saved_id = monster.Monster(), None
             self._navigate("monster-sheet")

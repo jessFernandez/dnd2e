@@ -78,6 +78,31 @@ def test_mon_action_routes_each_verb():
     assert calls["load"] == "7" and calls["delete"] == "7"
 
 
+def test_mon_action_family_navigates_to_the_family_picker():
+    calls = {}
+    win = SimpleNamespace(_navigate=lambda d: calls.__setitem__("nav", d))
+    app.MainWindow._mon_action(win, "family/Dragon")
+    assert calls["nav"] == "monster-family/Dragon"      # Back-able sub-picker
+
+
+def test_render_family_picker_renders_members():
+    calls = {}
+    families = [("Dragon", "MM/DD03842.htm", [("MM/DDr.htm", "Red")])]
+    win = SimpleNamespace(
+        _monster_index=lambda: (families, []),
+        content=SimpleNamespace(_view=SimpleNamespace(setHtml=lambda h: calls.__setitem__("html", h))),
+        _mon_status=lambda s: calls.__setitem__("status", s))
+    assert app.MainWindow._render_family_picker(win, "Dragon") is True
+    assert "Red" in calls["html"] and calls["status"] == "Dragon"
+
+
+def test_render_family_picker_falls_back_when_unknown():
+    seen = []
+    win = SimpleNamespace(_monster_index=lambda: ([], []),
+                          _render_monster_picker=lambda: seen.append(True) or True)
+    assert app.MainWindow._render_family_picker(win, "Nope") is True and seen == [True]
+
+
 def test_mon_action_new_navigates_to_a_fresh_sheet():
     calls = {}
     win = SimpleNamespace(_mon="stale", _mon_saved_id=9,
@@ -117,7 +142,7 @@ def test_import_pick_save_load_end_to_end(tmp_path):
     htmls = []
     win = SimpleNamespace(
         db=db.connect(RULES_DB),
-        _mon=None, _mon_saved_id=None, _mon_pages=None,
+        _mon=None, _mon_saved_id=None, _mon_index=None,
         _mon_library=MonsterLibrary(db.connect(tmp_path / "user.db")),
         content=SimpleNamespace(_view=SimpleNamespace(setHtml=htmls.append)),
         _mon_status=lambda s: None,

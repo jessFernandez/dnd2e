@@ -221,6 +221,17 @@ def test_parse_real_beholder_all_variants(conn):
 
 
 @needs_db
+def test_importable_index_groups_families(conn):
+    families, standalone = monster.importable_index(conn)
+    by_name = {f[0]: f for f in families}
+    assert "Dragon" in by_name and "Golem" in by_name and "Lycanthrope" in by_name
+    _name, general_url, members = by_name["Dragon"]
+    assert general_url is not None               # Dragon has a '-- General' lore page
+    assert len(members) > 10                      # many dragon types under one entry
+    assert any(n == "Ankheg" for _, n in standalone)   # a lone monster stays standalone
+
+
+@needs_db
 def test_importable_pages_excludes_category_pages(conn):
     urls = {u for u, _ in monster.importable_pages(conn)}
     assert "MM/DD03797.htm" in urls               # Ankheg — a real monster

@@ -169,10 +169,12 @@ def generate(m, saved_id=None) -> str:
     return _document(m.name or "Monster", body)
 
 
-def generate_import_picker(mm_entries, saved=()) -> str:
-    """The monster landing: saved monsters to reopen, and the Monstrous Manual list
-    to import from (client-side filtered). ``mm_entries`` is (page_url, name);
-    ``saved`` is (id, name, source_page)."""
+def generate_import_picker(families, standalone, saved=()) -> str:
+    """The monster landing: saved monsters to reopen, and the Monstrous Manual to
+    import from (client-side filtered). Families (Dragon, Golem, …) collapse to one
+    entry that opens a sub-picker; ``standalone`` monsters import directly.
+      families   = [(family, general_url|None, [(page_url, subtype), ...]), ...]
+      standalone = [(page_url, name), ...]     saved = [(id, name, source_page), ...]"""
     saved_html = ""
     if saved:
         srows = "".join(
@@ -183,10 +185,18 @@ def generate_import_picker(mm_entries, saved=()) -> str:
         saved_html = (f'<section class="picker-sec"><div class="section-h">Saved Monsters</div>'
                       f'<div class="pick-list">{srows}</div></section>')
 
-    items = "".join(
-        f'<a class="pick-item" data-name="{esc(name.lower())}" '
-        f'href="dnd:///mon/pick/{esc(url)}">{esc(name)}</a>'
-        for url, name in mm_entries)
+    # families and standalone monsters merged into one alphabetical, searchable list
+    entries = [(family.lower(),
+                f'<a class="pick-item family" data-name="{esc(family.lower())}" '
+                f'href="dnd:///mon/family/{esc(family)}">{esc(family)}'
+                f'<span class="count">{len(members)}</span></a>')
+               for family, _general, members in families]
+    entries += [(name.lower(),
+                 f'<a class="pick-item" data-name="{esc(name.lower())}" '
+                 f'href="dnd:///mon/pick/{esc(url)}">{esc(name)}</a>')
+                for url, name in standalone]
+    entries.sort(key=lambda e: e[0])
+    items = "".join(html for _key, html in entries)
 
     body = f"""<div class="sheet">
   <header><div class="title-row"><span class="page-title">Monsters</span></div>
@@ -195,7 +205,7 @@ def generate_import_picker(mm_entries, saved=()) -> str:
   {saved_html}
   <section class="picker-sec">
     <div class="section-h">Import from the Monstrous Manual</div>
-    <input class="search" id="q" placeholder="Search {len(mm_entries)} monsters…" oninput="filt()" autocomplete="off">
+    <input class="search" id="q" placeholder="Search {len(entries)} entries…" oninput="filt()" autocomplete="off">
     <div class="pick-list" id="mmlist">{items}</div>
   </section>
   <div class="actions"><a class="nav-btn" href="dnd:///mon/new">＋ New blank monster</a></div>
@@ -205,6 +215,26 @@ def generate_import_picker(mm_entries, saved=()) -> str:
     document.querySelectorAll('#mmlist .pick-item').forEach(function(el) {
       el.style.display = el.dataset.name.indexOf(q) >= 0 ? '' : 'none'; }); }"""
     return _document("Monsters", body, script)
+
+
+def generate_family_picker(family, general_url, members) -> str:
+    """A family sub-picker (Dragon → its types), with the '-- General' lore page — if
+    any — linked at the top. ``members`` is [(page_url, subtype), ...]."""
+    general = ""
+    if general_url:
+        general = (f'<a class="pick-item general" href="dnd:///{esc(general_url)}">'
+                   f'📖 General information</a>')
+    items = "".join(
+        f'<a class="pick-item" href="dnd:///mon/pick/{esc(url)}">{esc(subtype)}</a>'
+        for url, subtype in members)
+    body = f"""<div class="sheet">
+  <header><div class="title-row"><span class="page-title">{esc(family)}</span></div>
+    <div class="sub">Choose a {esc(family.lower())} to import.</div>
+  </header>
+  <section class="picker-sec"><div class="pick-list">{general}{items}</div></section>
+  <div class="actions"><a class="nav-btn" href="dnd:///mon/import">← Back to all monsters</a></div>
+</div>"""
+    return _document(family, body)
 
 
 def generate_variant_picker(group, source_page, variant_names) -> str:
@@ -308,6 +338,11 @@ _CSS = f"""
   .pick-item {{ display: block; text-decoration: none; background: #23263a; border: 1px solid #2f3346;
     border-radius: 8px; padding: 9px 13px; color: #e6e9f6; font-size: 12.5px; }}
   .pick-item:hover {{ border-color: {ACCENT}66; background: #262a40; }}
+  .pick-item.family {{ font-weight: 700; }}
+  .pick-item.family::after {{ content: "›"; float: right; color: {ACCENT}; font-weight: 700; }}
+  .pick-item .count {{ float: right; margin-right: 8px; font-size: 10.5px; font-weight: 700;
+    color: #6a708c; background: #16181f; border-radius: 10px; padding: 1px 8px; }}
+  .pick-item.general {{ color: {ACCENT}; border-color: {ACCENT}44; background: {ACCENT}12; }}
   .srow {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
     border-radius: 8px; }}
   .srow .load {{ flex: 1; background: transparent; border: none; }}

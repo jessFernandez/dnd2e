@@ -398,6 +398,62 @@ def importable_pages(conn) -> list:
     return out
 
 
+def _split_family(title: str):
+    """('Dragon', 'Chromatic: Black Dragon') for a 'Family-- Subtype' MM title, or
+    (None, name) for a standalone monster. The MM separates families with '-- '."""
+    base = (title or "").split(" (Monstrous Manual")[0].strip()
+    if "-- " in base:
+        family, _, subtype = base.partition("-- ")
+        return family.strip(), subtype.strip()
+    return None, base
+
+
+def _is_general(subtype: str) -> bool:
+    """Whether a subtype is a family's lore page (no stat block): 'General' or
+    'Generic Information'."""
+    return "general" in subtype.lower() or "generic information" in subtype.lower()
+
+
+def importable_index(conn):
+    """Group importable MM monsters by their 'Family-- Subtype' title, for the picker.
+
+    Returns (families, standalone):
+      families   = [(family, general_url|None, [(page_url, subtype), ...]), ...]
+      standalone = [(page_url, name), ...]
+    A family needs ≥2 members (or a General page) to be a group; otherwise its lone
+    member is listed standalone. The '-- General'/'Generic Information' lore pages —
+    which have no stat block, so aren't importable — are attached so the picker can
+    link to them."""
+    import db
+    titles = dict(conn.execute(
+        "SELECT page_url, title FROM pages WHERE book_code='MM'").fetchall())
+    generals = {}
+    for url, title in titles.items():
+        family, subtype = _split_family(title)
+        if family and _is_general(subtype):
+            generals[family] = url
+
+    members, standalone = {}, []
+    for url, name in importable_pages(conn):
+        family, subtype = _split_family(titles.get(url, ""))
+        if family:
+            members.setdefault(family, []).append((url, subtype))
+        else:
+            standalone.append((url, name))
+
+    families = []
+    for family, mem in members.items():
+        if len(mem) >= 2 or family in generals:
+            families.append((family, generals.get(family),
+                             sorted(mem, key=lambda m: m[1].lower())))
+        else:
+            url, subtype = mem[0]
+            standalone.append((url, _clean_title(titles.get(url, subtype))))
+    families.sort(key=lambda f: f[0].lower())
+    standalone.sort(key=lambda s: s[1].lower())
+    return families, standalone
+
+
 def parse_stat_block(content_html: str, title: str = "", source_page: str = "") -> list:
     """Parse a Monstrous Manual page into a list of Monsters — one per variant (a
     single-creature page yields one). Returns [] for pages without a real stat
