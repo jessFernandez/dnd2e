@@ -1,7 +1,7 @@
 # Navigation controller extraction — plan
 
-**Status:** in progress. Phases 1 (grammar) and 2 (pane policy) done; phases 3–4
-remaining.
+**Status:** in progress. Phases 1 (grammar), 2 (pane policy) and 3 (link routing)
+done; phase 4 (optional dispatch) remaining.
 
 ## Goal
 
@@ -69,9 +69,12 @@ def pane_action(dest: str, trigger: Trigger) -> Pane: ...
    `_on_tab_changed`) now derive their decision from it. The policy is tested
    directly in `test_navigation.py`; `test_nav_reveal.py` keeps the wiring checks.
    *Small.*
-3. **Link routing.** Introduce `Route` + `route_link`; shrink `_on_content_navigate`
-   to a `match route_link(...)` that performs side effects. Biggest single step —
-   the long if-ladder. *Medium; review carefully.*
+3. **Link routing. ✅ done.** Added `Route` (a small tagged union: `Ask`,
+   `AskSetModel`, `AskRefresh`, `AskStop`, `CmAction`, `NewTab`, `Navigate`) and
+   `route_link(url, *, on_jarvis_page)` to `navigation.py`; `_on_content_navigate`
+   is now a `match route_link(...)` that only performs side effects. The routing
+   (incl. `unquote`/`.strip()`) is tested directly in `test_navigation.py`;
+   dispatch wiring is covered in `test_nav_reveal.py`. *Medium; done tests-first.*
 4. **(Optional) Dispatch.** Have `_render_destination` consult `classify()` instead
    of re-parsing prefixes. *Polish; skip if it doesn't pull its weight.*
 

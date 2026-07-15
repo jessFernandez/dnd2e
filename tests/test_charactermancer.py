@@ -497,7 +497,8 @@ def test_cm_action_restart_resets_build():
 
 def test_on_content_navigate_routes_cm_prefix():
     routed = []
-    win = SimpleNamespace(_cm_action=lambda p: routed.append(p))
+    win = SimpleNamespace(_cm_action=lambda p: routed.append(p),
+                          _on_jarvis_page=lambda: False)
     app.MainWindow._on_content_navigate(win, "cm/roll")
     assert routed == ["roll"]                            # cm/ stripped, sent to _cm_action
 

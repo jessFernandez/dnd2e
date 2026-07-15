@@ -179,3 +179,57 @@ def test_landing_on_an_empty_tab_is_harmless():
     win, calls = _tab_win(_tab_ctx(None))              # fresh tab, nothing rendered yet
     app.MainWindow._on_tab_changed(win, 0)
     assert calls["hidden"] == 0 and calls["synced"] == []
+
+
+# ── the in-place routes (ask / builder) dispatch to the right handler ─────────
+#
+# route_link's classification is unit-tested in test_navigation.py; here we check
+# _on_content_navigate's match wires each route to the matching side effect.
+
+def _dispatch_win():
+    calls = {"ask": [], "model": [], "synced": 0, "render_ask": 0, "stop": 0, "cm": []}
+    win = SimpleNamespace(
+        _on_jarvis_page=lambda: False,
+        _ask_question=lambda q: calls["ask"].append(q),
+        _settings=SimpleNamespace(
+            setValue=lambda k, v: calls["model"].append((k, v)),
+            sync=lambda: calls.__setitem__("synced", calls["synced"] + 1),
+        ),
+        _render_ask=lambda: calls.__setitem__("render_ask", calls["render_ask"] + 1),
+        _ask_stop=lambda: calls.__setitem__("stop", calls["stop"] + 1),
+        _cm_action=lambda p: calls["cm"].append(p),
+    )
+    return win, calls
+
+
+def test_ask_link_dispatches_a_decoded_question():
+    win, calls = _dispatch_win()
+    app.MainWindow._on_content_navigate(win, "ask/how%20does%20thac0%20work")
+    assert calls["ask"] == ["how does thac0 work"]
+
+
+def test_ask_setmodel_link_saves_and_rerenders():
+    win, calls = _dispatch_win()
+    app.MainWindow._on_content_navigate(win, "ask-setmodel/llama3.1")
+    assert calls["model"] == [("askModel", "llama3.1")]
+    assert calls["synced"] == 1
+    assert calls["render_ask"] == 1
+
+
+def test_ask_refresh_and_new_both_rerender():
+    for u in ("ask-refresh", "ask-new"):
+        win, calls = _dispatch_win()
+        app.MainWindow._on_content_navigate(win, u)
+        assert calls["render_ask"] == 1, u
+
+
+def test_ask_stop_link_cancels_generation():
+    win, calls = _dispatch_win()
+    app.MainWindow._on_content_navigate(win, "ask-stop")
+    assert calls["stop"] == 1
+
+
+def test_cm_link_dispatches_the_raw_payload():
+    win, calls = _dispatch_win()
+    app.MainWindow._on_content_navigate(win, "cm/set-race/Elf")
+    assert calls["cm"] == ["set-race/Elf"]

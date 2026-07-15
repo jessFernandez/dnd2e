@@ -16,7 +16,9 @@ A "destination" is the canonical string the app renders: a page_url
 codex ("proficiencies" / "proficiencies#anchor"), or a full-width screen name
 ("splash", "dmscreen", "actions", "spells", "charactermancer", "ask").
 """
+from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import unquote
 
 # Built-in reference/tool screens that take the full content width; opening one
 # hides the book browser, while a book page or TOC keeps it. Single source of
@@ -78,6 +80,80 @@ def pane_action(dest: str, trigger: Trigger) -> Pane:
     if trigger is Trigger.LINK:
         return Pane.OPEN
     return Pane.LEAVE
+
+
+# ── link routing ──────────────────────────────────────────────────────────────
+#
+# The intent behind a content-link click. route_link() decides *what* the click
+# means; MainWindow performs the side effect. Ask/builder routes act in place
+# (no history entry); the rest resolve to a destination — opened in a new tab
+# when the current page must stay put.
+
+class Route:
+    """Base for the tagged results of route_link()."""
+
+
+@dataclass(frozen=True)
+class Ask(Route):
+    """Ask the Rules a question (already URL-decoded and trimmed)."""
+    question: str
+
+
+@dataclass(frozen=True)
+class AskSetModel(Route):
+    """Remember the chosen Ollama model, then re-render the Ask page."""
+    model: str
+
+
+@dataclass(frozen=True)
+class AskRefresh(Route):
+    """Reset the Ask conversation and re-check Ollama."""
+
+
+@dataclass(frozen=True)
+class AskStop(Route):
+    """Cancel the in-flight Ask generation."""
+
+
+@dataclass(frozen=True)
+class CmAction(Route):
+    """Apply a Charactermancer action (payload passed through verbatim)."""
+    payload: str
+
+
+@dataclass(frozen=True)
+class NewTab(Route):
+    """Open `dest` in a fresh tab, so the current page stays put."""
+    dest: str
+
+
+@dataclass(frozen=True)
+class Navigate(Route):
+    """Navigate the current tab to `dest`."""
+    dest: str
+
+
+def route_link(url: str, *, on_jarvis_page: bool) -> Route:
+    """Classify a raw dnd:// link path into the intent behind the click.
+
+    Pure counterpart to MainWindow._on_content_navigate. A citation clicked on
+    the Jarvis (Ask the Rules) page opens in a new tab so the Q&A stays put, the
+    same as an explicitly `newtab/`-tagged link.
+    """
+    if url.startswith("ask/"):
+        return Ask(unquote(url[len("ask/"):]).strip())
+    if url.startswith("ask-setmodel/"):
+        return AskSetModel(unquote(url[len("ask-setmodel/"):]).strip())
+    if url in ("ask-refresh", "ask-new"):
+        return AskRefresh()
+    if url == "ask-stop":
+        return AskStop()
+    if url.startswith("cm/"):
+        return CmAction(url[len("cm/"):])
+    if url.startswith("newtab/"):
+        return NewTab(link_to_destination(url[len("newtab/"):]))
+    dest = link_to_destination(url)
+    return NewTab(dest) if on_jarvis_page else Navigate(dest)
 
 
 class History:

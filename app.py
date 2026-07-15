@@ -19,7 +19,10 @@ from splash_html import generate as generate_splash_html
 import db
 import toc
 import toc_html
-from navigation import History, link_to_destination, pane_action, Trigger, Pane
+from navigation import (
+    History, link_to_destination, pane_action, Trigger, Pane,
+    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, NewTab, Navigate,
+)
 import askscreen_html
 import charactermancer_html
 import proficiencies_html
@@ -1242,44 +1245,29 @@ class MainWindow(QMainWindow):
     #   "<BOOK>/<page>.htm"                              a scraped rules page
 
     def _on_content_navigate(self, url: str):
-        """Handle a normal dnd:// link click from the content viewer."""
-        # Interactive "Ask the Rules" routes are handled in place (no history entry).
-        if url.startswith("ask/"):
-            self._ask_question(unquote(url[len("ask/"):]).strip())
-            return
-        if url.startswith("ask-setmodel/"):
-            self._settings.setValue("askModel", unquote(url[len("ask-setmodel/"):]).strip())
-            self._settings.sync()
-            self._render_ask()
-            return
-        if url == "ask-refresh" or url == "ask-new":
-            self._render_ask()          # resets the conversation + re-checks Ollama
-            return
-        if url == "ask-stop":
-            self._ask_stop()
-            return
-        # Character-builder actions are applied in place (no history entry).
-        if url.startswith("cm/"):
-            self._cm_action(url[len("cm/"):])
-            return
-        # Links explicitly tagged to open beside the current page (e.g. the
-        # builder's step references) — open in a new tab so the page stays put.
-        if url.startswith("newtab/"):
-            dest = link_to_destination(url[len("newtab/"):])
-            self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._reveal_nav_for(dest)
-            self._navigate(dest)
-            return
-        dest = link_to_destination(url)
-        # A cited link clicked on the Jarvis page opens in a new tab so the
-        # question/answer stays put.
-        if self._on_jarvis_page():
-            self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._reveal_nav_for(dest)
-            self._navigate(dest)
-            return
-        self._reveal_nav_for(dest)
-        self._navigate(dest)
+        """Handle a dnd:// link click: classify it with navigation.route_link,
+        then perform the side effect. Ask/builder routes act in place (no history
+        entry); NewTab/Navigate reveal the pane for a book page and render."""
+        match route_link(url, on_jarvis_page=self._on_jarvis_page()):
+            case Ask(question):
+                self._ask_question(question)
+            case AskSetModel(model):
+                self._settings.setValue("askModel", model)
+                self._settings.sync()
+                self._render_ask()
+            case AskRefresh():
+                self._render_ask()          # resets the conversation + re-checks Ollama
+            case AskStop():
+                self._ask_stop()
+            case CmAction(payload):
+                self._cm_action(payload)
+            case NewTab(dest):
+                self._new_tab(show_splash=False)   # opens and switches to the new tab
+                self._reveal_nav_for(dest)
+                self._navigate(dest)
+            case Navigate(dest):
+                self._reveal_nav_for(dest)
+                self._navigate(dest)
 
     def _reveal_nav_for(self, dest: str):
         """The pane's response to a content-link click, per navigation.pane_action:
