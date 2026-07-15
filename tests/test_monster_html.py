@@ -118,6 +118,25 @@ def test_family_picker_omits_general_when_absent():
     assert "Fire" in h and "General information" not in h
 
 
+def test_family_picker_groups_colon_subcategories():
+    members = [("MM/1.htm", "Chromatic: Black Dragon", 1),
+               ("MM/2.htm", "Chromatic: Red Dragon", 1),
+               ("MM/3.htm", "Brown", 1)]
+    h = monster_html.generate_family_picker("Dragon", None, members)
+    assert 'class="subcat-h">Chromatic<' in h
+    assert "Black Dragon" in h and "Red Dragon" in h    # shown by the text after the colon
+    assert "Brown" in h                                 # a loose member with no subcategory
+
+
+def test_variant_picker_groups_comma_subcategories_keeping_indices():
+    names = ["Eel, Electric", "Eel, Giant", "Barracuda"]
+    h = monster_html.generate_variant_picker("Fish", "MM/DDf.htm", names)
+    assert 'class="subcat-h">Eel<' in h and "Electric" in h and "Giant" in h
+    assert "Barracuda" in h                             # loose
+    assert "dnd:///mon/pickvar/MM/DDf.htm/0" in h        # subcategorized items keep their index
+    assert "dnd:///mon/pickvar/MM/DDf.htm/2" in h
+
+
 def test_variant_picker_lists_indexed_choices():
     h = monster_html.generate_variant_picker(
         "Bear", "MM/DD03805.htm", ["Black Bear", "Polar Bear"])

@@ -175,6 +175,46 @@ def _count_badge(n) -> str:
     return f'<span class="count">{n}</span>' if n and n > 1 else ""
 
 
+def _subcategorize(entries, sep):
+    """Split (name, href, count) entries into (loose, sections). An entry's
+    subcategory is the text before the first ``sep`` ('Chromatic: Black Dragon' ->
+    'Chromatic'; 'Eel, Giant' -> 'Eel'); a subcategory shared by ≥2 entries becomes a
+    section, its items shown by the text after ``sep``. Everything else stays loose
+    under its full name."""
+    buckets = {}
+    for name, href, count in entries:
+        if sep in name:
+            sub, _, rest = name.partition(sep)
+            buckets.setdefault(sub.strip(), []).append((rest.strip(), name, href, count))
+        else:
+            buckets.setdefault(None, []).append((name, name, href, count))
+    loose, sections = [], []
+    for sub, items in buckets.items():
+        if sub and len(items) >= 2:
+            sections.append((sub, sorted([(disp, href, c) for disp, _f, href, c in items],
+                                         key=lambda x: x[0].lower())))
+        else:
+            loose += [(full, href, c) for _d, full, href, c in items]
+    loose.sort(key=lambda x: x[0].lower())
+    sections.sort(key=lambda s: s[0].lower())
+    return loose, sections
+
+
+def _pick_link(display, href, count) -> str:
+    return (f'<a class="pick-item" data-name="{esc(display.lower())}" '
+            f'href="{esc(href)}">{esc(display)}{_count_badge(count)}</a>')
+
+
+def _grouped_list(loose, sections) -> str:
+    """A pick-list of loose items followed by a labelled sub-group per section."""
+    html = '<div class="pick-list">' + "".join(_pick_link(d, h, c) for d, h, c in loose) + '</div>'
+    for sub, items in sections:
+        inner = "".join(_pick_link(d, h, c) for d, h, c in items)
+        html += (f'<div class="subcat"><div class="subcat-h">{esc(sub)}</div>'
+                 f'<div class="pick-list">{inner}</div></div>')
+    return html
+
+
 def generate_import_picker(families, standalone, saved=()) -> str:
     """The monster landing: saved monsters to reopen, and the Monstrous Manual to
     import from (client-side filtered). Families (Dragon, Golem, …) collapse to one
@@ -229,31 +269,31 @@ def generate_family_picker(family, general_url, members) -> str:
     any — linked at the top. ``members`` is [(page_url, subtype), ...]."""
     general = ""
     if general_url:
-        general = (f'<a class="pick-item general" href="dnd:///{esc(general_url)}">'
-                   f'📖 General information</a>')
-    items = "".join(
-        f'<a class="pick-item" href="dnd:///mon/pick/{esc(url)}">{esc(subtype)}{_count_badge(count)}</a>'
-        for url, subtype, count in members)
+        general = (f'<div class="pick-list"><a class="pick-item general" '
+                   f'href="dnd:///{esc(general_url)}">📖 General information</a></div>')
+    loose, sections = _subcategorize(
+        [(subtype, f"dnd:///mon/pick/{url}", count) for url, subtype, count in members], ":")
     body = f"""<div class="sheet">
   <header><div class="title-row"><span class="page-title">{esc(family)}</span></div>
     <div class="sub">Choose a {esc(family.lower())} to import.</div>
   </header>
-  <section class="picker-sec"><div class="pick-list">{general}{items}</div></section>
+  <section class="picker-sec">{general}{_grouped_list(loose, sections)}</section>
   <div class="actions"><a class="nav-btn" href="dnd:///mon/import">← Back to all monsters</a></div>
 </div>"""
     return _document(family, body)
 
 
 def generate_variant_picker(group, source_page, variant_names) -> str:
-    """Pick one creature from a multi-variant MM page (Bear → Black/Brown/…)."""
-    items = "".join(
-        f'<a class="pick-item" href="dnd:///mon/pickvar/{esc(source_page)}/{i}">{esc(name)}</a>'
-        for i, name in enumerate(variant_names))
+    """Pick one creature from a multi-variant MM page (Bear → Black/Brown/…). Creatures
+    that share a comma-prefix (Fish → 'Eel, Electric'/'Eel, Giant') group under it."""
+    loose, sections = _subcategorize(
+        [(name, f"dnd:///mon/pickvar/{source_page}/{i}", 1)
+         for i, name in enumerate(variant_names)], ",")
     body = f"""<div class="sheet">
   <header><div class="title-row"><span class="page-title">{esc(group)}</span></div>
     <div class="sub">This entry covers several creatures — choose one to import.</div>
   </header>
-  <section class="picker-sec"><div class="pick-list">{items}</div></section>
+  <section class="picker-sec">{_grouped_list(loose, sections)}</section>
   <div class="actions"><a class="nav-btn" href="dnd:///mon/import">← Back to all monsters</a></div>
 </div>"""
     return _document(group, body)
@@ -348,6 +388,9 @@ _CSS = f"""
   .pick-item .count {{ float: right; font-size: 10.5px; font-weight: 700; color: #8189a8;
     background: #16181f; border: 1px solid #2f3346; border-radius: 10px; padding: 0 8px; }}
   .pick-item.general {{ color: {ACCENT}; border-color: {ACCENT}44; background: {ACCENT}12; }}
+  .subcat {{ margin-top: 16px; }}
+  .subcat-h {{ font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+    color: #8189a8; margin: 0 0 8px; border-left: 2px solid {ACCENT}66; padding-left: 8px; }}
   .srow {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
     border-radius: 8px; }}
   .srow .load {{ flex: 1; background: transparent; border: none; }}
