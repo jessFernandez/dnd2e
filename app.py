@@ -1517,13 +1517,40 @@ class MainWindow(QMainWindow):
         return True
 
     def _mon_image_url(self, m) -> str:
-        """The absolute URL of a monster's MM illustration, fetched from the source
-        site like the book-page images (BASE_URL + the page's folder + filename), or
-        '' when the page had no image."""
-        if m.image and "/" in m.source_page:
-            folder = m.source_page.rsplit("/", 1)[0] + "/"
-            return BASE_URL + folder + m.image
-        return ""
+        """A monster's MM illustration for the sheet. Once cached locally it's served
+        as a data URI (loads offline and instantly, no webview origin issues); the
+        first time it falls back to the remote URL (BASE_URL + the page's folder +
+        filename, same as the book pages) and caches a copy in the background. '' when
+        the page had no image."""
+        if not (m.image and "/" in m.source_page):
+            return ""
+        folder = m.source_page.rsplit("/", 1)[0]
+        remote = f"{BASE_URL}{folder}/{m.image}"
+        cache_path = _user_data_dir() / "images" / folder / m.image
+        if cache_path.exists():
+            try:
+                import base64, mimetypes
+                mime = mimetypes.guess_type(m.image)[0] or "image/gif"
+                return f"data:{mime};base64," + base64.b64encode(cache_path.read_bytes()).decode()
+            except Exception:
+                pass
+        self._cache_image(remote, cache_path)
+        return remote
+
+    def _cache_image(self, url: str, path):
+        """Download a monster illustration into the local cache in a background
+        thread, so it's available offline next time. Fire-and-forget; ignore errors."""
+        import threading, urllib.request
+
+        def fetch():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with urllib.request.urlopen(url, timeout=10) as resp:
+                    data = resp.read()
+                path.write_bytes(data)
+            except Exception:
+                pass
+        threading.Thread(target=fetch, daemon=True).start()
 
     def _render_variant_picker(self, page_url: str) -> bool:
         row = db.get_page(self.db, page_url)

@@ -136,10 +136,11 @@ def test_render_monster_sheet_is_blank_when_none():
 
 
 def test_mon_image_url_builds_from_source_site():
-    win = SimpleNamespace()
+    win = SimpleNamespace(_cache_image=lambda url, path: None)   # don't hit the network
     m = Monster(source_page="MM/DD03797.htm", image="ANKHEG.gif")
     url = app.MainWindow._mon_image_url(win, m)
-    assert url == app.BASE_URL + "MM/ANKHEG.gif"
+    # remote URL when uncached, or a data: URI when a previous run already cached it
+    assert url == app.BASE_URL + "MM/ANKHEG.gif" or url.startswith("data:image")
     assert app.MainWindow._mon_image_url(win, Monster()) == ""   # no image -> no url
 
 

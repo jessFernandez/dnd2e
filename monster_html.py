@@ -109,9 +109,14 @@ def generate(m, saved_id=None, image_url="") -> str:
     """The full monster sheet HTML for Monster ``m``. ``saved_id`` (if the monster is
     saved) tunes the Save button label; ``image_url`` (the app builds it from the
     source site) shows the MM illustration."""
-    variant_tag = f'<span class="tag">{esc(m.variant)}</span>' if m.variant else ""
-    source = (f'<a class="src" href="dnd:///{esc(m.source_page)}">Monstrous Manual ↗</a>'
-              if m.source_page else "")
+    # imported monsters: the name itself opens the MM page; custom ones stay editable
+    if m.source_page:
+        name_el = (f'<a class="namelink" href="dnd:///{esc(m.source_page)}" '
+                   f'title="Open in the Monstrous Manual">{esc(m.name) or "Monster"}'
+                   f'<span class="ext"> ↗</span></a>')
+    else:
+        name_el = (f'<input class="name" value="{esc(m.name)}" placeholder="Monster name" '
+                   f'spellcheck="false" autocomplete="off" onchange="monText(\'set/name\', this.value)">')
     image = (f'<img class="mon-img" src="{esc(image_url)}" alt="" '
              f'onerror="this.style.display=\'none\'">') if image_url else ""
 
@@ -145,19 +150,14 @@ def generate(m, saved_id=None, image_url="") -> str:
 
     body = f"""<div class="sheet">
   <header>
-    {image}
-    <div class="title-row">
-      <input class="name" value="{esc(m.name)}" placeholder="Monster name" spellcheck="false"
-             autocomplete="off" onchange="monText('set/name', this.value)">
-      {variant_tag}
-    </div>
-    <div class="sub">{source}</div>
+    <div class="title-row">{name_el}</div>
   </header>
 
   <div class="combat-strip">{tiles}</div>
 
   <div class="grid">
     <section class="statblock">
+      {image}
       <div class="section-h">Stat Block</div>
       {rows}
     </section>
@@ -343,14 +343,13 @@ _CSS = f"""
     color: #f0ead2; font-family: Georgia, "Times New Roman", serif; font-size: 27px;
     font-weight: 700; padding: 2px 2px 4px; flex: 1; min-width: 0; }}
   input.name:focus {{ outline: none; border-bottom-color: {ACCENT}; }}
-  .tag {{ display: inline-block; background: {ACCENT}18; color: {ACCENT}; font-size: 10.5px;
-    font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    padding: 3px 9px; border-radius: 20px; border: 1px solid {ACCENT}44; }}
-  .sub {{ color: #6a708c; font-size: 11.5px; margin-top: 8px; }}
-  .src {{ color: {ACCENT}; text-decoration: none; margin-left: 6px; }}
-  .src:hover {{ text-decoration: underline; }}
-  .mon-img {{ float: right; width: 160px; max-width: 42%; margin: 2px 0 10px 18px;
-    border-radius: 8px; border: 1px solid #2a2e3e; background: #0f1016; }}
+  a.namelink {{ font-family: Georgia, "Times New Roman", serif; font-size: 27px;
+    font-weight: 700; color: #f0ead2; text-decoration: none; }}
+  a.namelink:hover {{ color: {ACCENT}; }}
+  a.namelink .ext {{ font-size: 15px; color: #6a708c; }}
+  a.namelink:hover .ext {{ color: {ACCENT}; }}
+  .mon-img {{ display: block; width: 100%; margin: 0 0 14px; border-radius: 8px;
+    border: 1px solid #2a2e3e; background: #0f1016; }}
 
   .combat-strip {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }}
   .tile {{ display: flex; flex-direction: column; align-items: center; justify-content: center;

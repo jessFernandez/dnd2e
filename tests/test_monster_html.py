@@ -54,8 +54,14 @@ def test_damage_shown_as_dice():
 def test_stat_fields_are_editable_hooks():
     h = monster_html.generate(_ankheg())
     assert "set/armor_class" in h and "set/thac0" in h and "set/size" in h
-    assert "set/name" in h
     assert "function monText" in h               # the dnd:///mon/ interaction helper
+    assert "set/name" in monster_html.generate(Monster())   # a custom monster's name is editable
+
+
+def test_imported_name_is_a_link_to_the_mm_page():
+    h = monster_html.generate(_ankheg())         # has a source_page
+    assert 'class="namelink"' in h and 'href="dnd:///MM/DD03797.htm"' in h
+    assert "set/name" not in h                   # the imported name is a link, not an input
 
 
 def test_combat_is_a_feature_panel():
@@ -78,11 +84,6 @@ def test_html_is_escaped():
     h = monster_html.generate(m)
     assert "&lt;b&gt;" in h and "&amp;" in h
     assert "<b>&" not in h                        # the raw tag never leaks through
-
-
-def test_variant_tag_only_when_present():
-    assert '"tag"' in monster_html.generate(Monster(name="Black Bear", variant="Black"))
-    assert '"tag"' not in monster_html.generate(Monster(name="Ankheg"))
 
 
 def test_empty_monster_does_not_crash():
