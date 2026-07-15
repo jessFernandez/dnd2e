@@ -385,16 +385,18 @@ def _clean_title(title: str) -> str:
 
 
 def importable_pages(conn) -> list:
-    """(page_url, display_name) for every MM page that actually parses to a monster.
-    Filters out the generic category pages (Dragon-- General, 'The Monsters', the
-    blank-form instructions) that mention 'ARMOR CLASS' in prose but carry no stat
-    block, so the import picker only offers real monsters."""
+    """(page_url, display_name, creature_count) for every MM page that actually parses
+    to a monster. ``creature_count`` is how many creatures the page holds (Bear → 4,
+    Mammal → 29). Filters out the generic category pages (Dragon-- General, 'The
+    Monsters', …) that mention 'ARMOR CLASS'/'THAC0' but carry no stat block."""
     import db
     out = []
     for url, title in db.list_monster_pages(conn):
         row = db.get_page(conn, url)
-        if row and parse_stat_block(row["content_html"], row["title"], url):
-            out.append((url, _clean_title(title)))
+        if row:
+            monsters = parse_stat_block(row["content_html"], row["title"], url)
+            if monsters:
+                out.append((url, _clean_title(title), len(monsters)))
     return out
 
 
@@ -418,12 +420,13 @@ def importable_index(conn):
     """Group importable MM monsters by their 'Family-- Subtype' title, for the picker.
 
     Returns (families, standalone):
-      families   = [(family, general_url|None, [(page_url, subtype), ...]), ...]
-      standalone = [(page_url, name), ...]
-    A family needs ≥2 members (or a General page) to be a group; otherwise its lone
-    member is listed standalone. The '-- General'/'Generic Information' lore pages —
-    which have no stat block, so aren't importable — are attached so the picker can
-    link to them."""
+      families   = [(family, general_url|None, [(page_url, subtype, count), ...]), ...]
+      standalone = [(page_url, name, count), ...]
+    ``count`` is the page's creature count (>1 for a multi-variant page). A family
+    needs ≥2 members (or a General page) to be a group; otherwise its lone member is
+    listed standalone. The '-- General'/'Generic Information' lore pages — which have
+    no stat block, so aren't importable — are attached so the picker can link to
+    them."""
     import db
     titles = dict(conn.execute(
         "SELECT page_url, title FROM pages WHERE book_code='MM'").fetchall())
@@ -434,12 +437,12 @@ def importable_index(conn):
             generals[family] = url
 
     members, standalone = {}, []
-    for url, name in importable_pages(conn):
+    for url, name, count in importable_pages(conn):
         family, subtype = _split_family(titles.get(url, ""))
         if family:
-            members.setdefault(family, []).append((url, subtype))
+            members.setdefault(family, []).append((url, subtype, count))
         else:
-            standalone.append((url, name))
+            standalone.append((url, name, count))
 
     families = []
     for family, mem in members.items():
@@ -447,8 +450,8 @@ def importable_index(conn):
             families.append((family, generals.get(family),
                              sorted(mem, key=lambda m: m[1].lower())))
         else:
-            url, subtype = mem[0]
-            standalone.append((url, _clean_title(titles.get(url, subtype))))
+            url, subtype, count = mem[0]
+            standalone.append((url, _clean_title(titles.get(url, subtype)), count))
     families.sort(key=lambda f: f[0].lower())
     standalone.sort(key=lambda s: s[1].lower())
     return families, standalone

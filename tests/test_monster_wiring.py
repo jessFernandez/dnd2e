@@ -87,7 +87,7 @@ def test_mon_action_family_navigates_to_the_family_picker():
 
 def test_render_family_picker_renders_members():
     calls = {}
-    families = [("Dragon", "MM/DD03842.htm", [("MM/DDr.htm", "Red")])]
+    families = [("Dragon", "MM/DD03842.htm", [("MM/DDr.htm", "Red", 1)])]
     win = SimpleNamespace(
         _monster_index=lambda: (families, []),
         content=SimpleNamespace(_view=SimpleNamespace(setHtml=lambda h: calls.__setitem__("html", h))),

@@ -241,12 +241,14 @@ def test_importable_index_groups_families(conn):
     _name, general_url, members = by_name["Dragon"]
     assert general_url is not None               # Dragon has a '-- General' lore page
     assert len(members) > 10                      # many dragon types under one entry
-    assert any(n == "Ankheg" for _, n in standalone)   # a lone monster stays standalone
+    assert any(n == "Ankheg" for _, n, _ in standalone)   # a lone monster stays standalone
+    bear = next((c for u, n, c in standalone if n == "Bear"), None)
+    assert bear and bear > 1                             # a multi-variant page carries its count
 
 
 @needs_db
 def test_importable_pages_excludes_category_pages(conn):
-    urls = {u for u, _ in monster.importable_pages(conn)}
+    urls = {u for u, _, _ in monster.importable_pages(conn)}
     assert "MM/DD03797.htm" in urls               # Ankheg — a real monster
     assert "MM/DD03794.htm" not in urls           # "The Monsters" (front matter)
     assert "MM/DD04100.htm" not in urls           # blank-form instructions

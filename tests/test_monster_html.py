@@ -93,26 +93,28 @@ def test_empty_monster_does_not_crash():
 
 def test_import_picker_lists_families_and_standalone():
     families = [("Dragon", "MM/DD03842.htm",
-                 [("MM/DDred.htm", "Red"), ("MM/DDblu.htm", "Blue")])]
-    standalone = [("MM/DD03797.htm", "Ankheg")]
+                 [("MM/DDred.htm", "Red", 1), ("MM/DDblu.htm", "Blue", 1)])]
+    standalone = [("MM/DD03797.htm", "Ankheg", 1), ("MM/DD03805.htm", "Bear", 4)]
     h = monster_html.generate_import_picker(
         families, standalone, saved=[(1, "My Goblin", "MM/DD03940.htm")])
     assert 'href="dnd:///mon/family/Dragon"' in h and ">2<" in h    # family entry + member count
     assert "dnd:///mon/pick/MM/DD03797.htm" in h and "Ankheg" in h  # standalone imports directly
-    assert "My Goblin" in h and "dnd:///mon/load/1" in h            # saved section
-    assert "function filt" in h                                     # client-side search filter
+    assert ">4<" in h                                              # a multi-creature page shows its count
+    assert "My Goblin" in h and "dnd:///mon/load/1" in h           # saved section
+    assert "function filt" in h                                    # client-side search filter
 
 
 def test_family_picker_lists_members_and_general_link():
     h = monster_html.generate_family_picker(
         "Dragon", "MM/DD03842.htm",
-        [("MM/DDred.htm", "Red Dragon"), ("MM/DDblu.htm", "Blue Dragon")])
+        [("MM/DDred.htm", "Red Dragon", 1), ("MM/DDage.htm", "Age Tiers", 6)])
     assert "Red Dragon" in h and "dnd:///mon/pick/MM/DDred.htm" in h
+    assert ">6<" in h                                              # a multi-creature member shows its count
     assert "General information" in h and 'href="dnd:///MM/DD03842.htm"' in h  # lore -> reader
 
 
 def test_family_picker_omits_general_when_absent():
-    h = monster_html.generate_family_picker("Giant", None, [("MM/DDf.htm", "Fire")])
+    h = monster_html.generate_family_picker("Giant", None, [("MM/DDf.htm", "Fire", 1)])
     assert "Fire" in h and "General information" not in h
 
 
