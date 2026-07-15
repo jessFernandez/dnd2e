@@ -118,8 +118,12 @@ class Monster:
     # ── house-rule derived values (via char_rules) ────────────────────────────
 
     def attack_bonus(self) -> str:
-        """THAC0 converted to the house-rule attack bonus, e.g. '17-13' -> '3-7'."""
-        return _map_numbers(self.thac0, cr.thac0_to_bonus)
+        """The house-rule attack bonus (20 − THAC0) as a single base value. Monster
+        THAC0 is often a range or an HD-conditional list ('3+3 HD: 17 4+4 HD: 15');
+        we take the base THAC0 (the first listed) rather than clutter the sheet with
+        every case — the DM can read the raw field for the breakdown."""
+        base = _base_thac0(self.thac0)
+        return "" if base is None else str(cr.thac0_to_bonus(base))
 
     def ascending_ac(self) -> str:
         """Descending AC converted to ascending, e.g. '-2' -> '22',
@@ -186,6 +190,19 @@ def _largest_size(size_text: str) -> str:
     if not cats:
         return ""
     return max(cats, key=_SIZE_ORDER.index)
+
+
+def _base_thac0(thac0_text: str):
+    """The base THAC0 integer: the value after the first 'HD:' for HD-conditional
+    entries, else the first number in the field (the low end of a range). None if
+    there are no digits ('Nil', 'See below')."""
+    if not thac0_text:
+        return None
+    m = re.search(r"HD:\s*(-?\d+)", thac0_text)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"-?\d+", thac0_text)
+    return int(m.group()) if m else None
 
 
 # ── the parser ────────────────────────────────────────────────────────────────
@@ -276,37 +293,32 @@ class _StatBlockHTML(HTMLParser):
 
 
 def _segment_groups(rows):
-    """A single MM page can stack several stat-block groups (Cat, Great holds nine
-    cats across two groups; Spider two), each with its own variant header. The
-    fully-blank rows between stacked blocks are the true separators — they keep a
-    group's wrapped XP-value tail from bleeding into the next group's header — so
-    split on those first. A block that still holds more than one CLIMATE/TERRAIN is
-    split again there, attaching each group's leading header rows to it."""
-    blocks, cur = [], []
-    for r in rows:
-        if any(c.strip() for c in r):
-            cur.append(r)
-        elif cur:
-            blocks.append(cur); cur = []
-    if cur:
-        blocks.append(cur)
-
-    groups = []
-    for block in blocks:
-        climates = [i for i, r in enumerate(block)
-                    if _norm_label(r[0].strip()) == "CLIMATE/TERRAIN"]
-        if len(climates) <= 1:
-            groups.append(block)
+    """Split the grid into stat-block groups — a page may stack several (Cat, Great
+    = nine cats; Spider = seven), each with its own variant header. Groups are keyed
+    off each CLIMATE/TERRAIN (the conventional first label); a group's header rows
+    are the empty-first rows just before its CLIMATE, walking back only until a
+    labelled row or a fully-blank separator. Stopping at a blank keeps a group's
+    wrapped XP tail (Spider) out of the next group's header, while *not* splitting on
+    every blank keeps a cosmetic blank row inside a block (Beholder) from tearing one
+    group in two."""
+    climates = [i for i, r in enumerate(rows)
+                if _norm_label(r[0].strip()) == "CLIMATE/TERRAIN"]
+    if not climates:
+        return []
+    starts = []
+    for k, ci in enumerate(climates):
+        if k == 0:
+            starts.append(0)                      # first group owns everything above it
             continue
-        starts = [0]
-        for ci in climates[1:]:
-            s = ci
-            while s - 1 >= starts[-1] and not block[s - 1][0].strip():
-                s -= 1                                        # pull in this group's header rows
-            starts.append(s)
-        starts.append(len(block))
-        groups.extend(block[a:b] for a, b in zip(starts, starts[1:]))
-    return groups
+        s, low = ci, starts[-1]
+        while s - 1 > low:
+            prev = rows[s - 1]
+            if prev[0].strip() or not any(c.strip() for c in prev):
+                break                              # a labelled row, or a blank separator
+            s -= 1                                 # a header row (variant names)
+        starts.append(s)
+    starts.append(len(rows))
+    return [rows[a:b] for a, b in zip(starts, starts[1:])]
 
 
 def _group_to_monsters(rows, group, source_page, prose):
@@ -370,6 +382,20 @@ def _clean_title(title: str) -> str:
     suffix and render the scrape's '--' separator as a comma ('Cat-- Great')."""
     base = (title or "").split(" (Monstrous Manual")[0].strip()
     return re.sub(r"\s*--\s*", ", ", base)
+
+
+def importable_pages(conn) -> list:
+    """(page_url, display_name) for every MM page that actually parses to a monster.
+    Filters out the generic category pages (Dragon-- General, 'The Monsters', the
+    blank-form instructions) that mention 'ARMOR CLASS' in prose but carry no stat
+    block, so the import picker only offers real monsters."""
+    import db
+    out = []
+    for url, title in db.list_monster_pages(conn):
+        row = db.get_page(conn, url)
+        if row and parse_stat_block(row["content_html"], row["title"], url):
+            out.append((url, _clean_title(title)))
+    return out
 
 
 def parse_stat_block(content_html: str, title: str = "", source_page: str = "") -> list:

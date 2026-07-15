@@ -43,10 +43,12 @@ def _full(**field_vals):
 
 # ── house-rule conversions (pure, no parsing) ─────────────────────────────────
 
-def test_attack_bonus_converts_single_and_range_thac0():
+def test_attack_bonus_is_the_base_value():
     assert Monster(thac0="19").attack_bonus() == "1"
-    assert Monster(thac0="17-13").attack_bonus() == "3-7"   # hyphen is a range, not a sign
+    assert Monster(thac0="17-13").attack_bonus() == "3"     # base (first) THAC0, not a range
+    assert Monster(thac0="1+1 and 2+2 HD: 19 3+3 HD: 17").attack_bonus() == "1"  # first HD: value
     assert Monster(thac0="").attack_bonus() == ""
+    assert Monster(thac0="Nil").attack_bonus() == ""
 
 
 def test_ascending_ac_handles_negatives_and_notes():
@@ -162,7 +164,7 @@ def _parse_page(conn, page_url):
 def test_parse_real_ankheg(conn):
     (m,) = _parse_page(conn, ANKHEG)
     assert m.name == "Ankheg"
-    assert m.thac0 == "17-13" and m.attack_bonus() == "3-7"
+    assert m.thac0 == "17-13" and m.attack_bonus() == "3"       # base attack bonus
     assert "Overall 2" in m.armor_class and m.ascending_ac().startswith("Overall 18")
     assert m.size_category() == "H" and m.initiative_modifier() == 9
     assert m.combat and "acid" in m.combat.lower()
@@ -205,6 +207,26 @@ CATEGORY_PAGES = {
     "MM/DD03990.htm",  # Mammal
     "MM/DD03794.htm",  # The Monsters
 }
+
+
+@needs_db
+def test_parse_real_beholder_all_variants(conn):
+    """A cosmetic blank row mid-stat-block once split this 6-variant group in two."""
+    ms = _parse_page(conn, "MM/DD03808.htm")     # Beholder and Beholder-kin I
+    assert len(ms) == 6
+    assert any("Death Kiss" in m.name for m in ms)
+    assert any("Spectator" in m.name for m in ms)
+    for m in ms:
+        assert m.armor_class and not m.armor_class.endswith(":")
+
+
+@needs_db
+def test_importable_pages_excludes_category_pages(conn):
+    urls = {u for u, _ in monster.importable_pages(conn)}
+    assert "MM/DD03797.htm" in urls               # Ankheg — a real monster
+    assert "MM/DD03794.htm" not in urls           # "The Monsters" (front matter)
+    assert "MM/DD04100.htm" not in urls           # blank-form instructions
+    assert len(urls) > 250
 
 
 @needs_db

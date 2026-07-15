@@ -661,6 +661,7 @@ class MainWindow(QMainWindow):
         self._mon = None                    # in-progress monster sheet (window-level)
         self._mon_saved_id = None           # its saved-row id, or None (caller-held)
         self._mon_library = MonsterLibrary(self.user_db)      # save/load/delete for monsters
+        self._mon_pages = None              # cached importable MM monster list (parsed once)
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -1312,7 +1313,11 @@ class MainWindow(QMainWindow):
         if dest == "charactermancer":
             return self._render_charactermancer()
         if dest == "monster":
-            return self._render_monster()
+            return self._render_monster_picker()
+        if dest == "monster-sheet":
+            return self._render_monster_sheet()
+        if dest.startswith("monster-variant/"):
+            return self._render_variant_picker(dest[len("monster-variant/"):])
         if dest == "proficiencies" or dest.startswith("proficiencies#"):
             frag = dest.split("#", 1)[1] if "#" in dest else ""
             return self._render_proficiencies(frag)
@@ -1471,23 +1476,37 @@ class MainWindow(QMainWindow):
             self._cm.saved_id = None
 
     # ── Monster sheet (DM monster mode) ──────────────────────────────────────
-
-    def _render_monster(self) -> bool:
-        """The monster screen: the sheet when one is loaded, else the import/saved
-        picker. The current monster is window-level state (self._mon) so leaving and
-        returning keeps it."""
-        if self._mon is None:
-            return self._render_monster_picker()
-        self.content._view.setHtml(monster_html.generate(self._mon, self._mon_saved_id))
-        self._mon_status(self._mon.name or "Monster")
-        return True
+    #
+    # Three destinations give the mini-app real Back/Forward: "monster" (the
+    # import + saved picker), "monster-sheet" (the current sheet, self._mon), and
+    # "monster-variant/<page>" (the variant chooser). Picks and loads _navigate to
+    # the sheet, so Back returns to the picker; field edits mutate self._mon in
+    # place (no history, no re-render) so focus and scroll survive.
 
     def _render_monster_picker(self) -> bool:
-        entries = [(url, monster._clean_title(title))
-                   for url, title in db.list_monster_pages(self.db)]
+        if self._mon_pages is None:
+            self._mon_pages = monster.importable_pages(self.db)   # parse the MM once, cache
         self.content._view.setHtml(
-            monster_html.generate_import_picker(entries, self._mon_library.all()))
+            monster_html.generate_import_picker(self._mon_pages, self._mon_library.all()))
         self._mon_status("Import from the Monstrous Manual")
+        return True
+
+    def _render_monster_sheet(self) -> bool:
+        m = self._mon if self._mon is not None else monster.Monster()
+        self.content._view.setHtml(monster_html.generate(m, self._mon_saved_id))
+        self._mon_status(m.name or "Monster")
+        return True
+
+    def _render_variant_picker(self, page_url: str) -> bool:
+        row = db.get_page(self.db, page_url)
+        monsters = (monster.parse_stat_block(row["content_html"], row["title"], page_url)
+                    if row else [])
+        if not monsters:
+            return self._render_monster_picker()
+        group = monster._clean_title(row["title"])
+        self.content._view.setHtml(monster_html.generate_variant_picker(
+            group, page_url, [m.name for m in monsters]))
+        self._mon_status(f"{group} — choose a variant")
         return True
 
     def _mon_status(self, subtitle: str):
@@ -1497,18 +1516,18 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"  Monsters  ·  {subtitle}")
 
     def _mon_action(self, path: str):
-        """Apply a mon/ link action. Field edits update self._mon in place without a
-        re-render (so focus/scroll survive); everything else re-renders the view."""
+        """Apply a mon/ link action. Field edits mutate self._mon in place (no
+        re-render); navigations push history so Back works."""
         if path.startswith("set/"):
             self._mon_set(path[len("set/"):])
         elif path == "import":
-            self._render_monster_picker()
+            self._navigate("monster")
         elif path == "new":
             self._mon, self._mon_saved_id = monster.Monster(), None
-            self._render_monster()
+            self._navigate("monster-sheet")
         elif path == "save":
             self._mon_save()
-            self._render_monster()
+            self._render_monster_sheet()          # in place: refresh Save label + tiles
         elif path.startswith("pick/"):
             self._mon_pick(path[len("pick/"):])
         elif path.startswith("pickvar/"):
@@ -1526,7 +1545,7 @@ class MainWindow(QMainWindow):
             setattr(self._mon, field, monster.house_rule_to_raw(field, unquote(raw)))
 
     def _mon_pick(self, page_url: str):
-        """Import an MM page: load it if it's a single creature, else offer its variants."""
+        """Import an MM page: a single creature opens the sheet, else the variant chooser."""
         row = db.get_page(self.db, page_url)
         if not row:
             return
@@ -1535,12 +1554,9 @@ class MainWindow(QMainWindow):
             return
         if len(monsters) == 1:
             self._mon, self._mon_saved_id = monsters[0], None
-            self._render_monster()
+            self._navigate("monster-sheet")
         else:
-            group = monster._clean_title(row["title"])
-            self.content._view.setHtml(monster_html.generate_variant_picker(
-                group, page_url, [m.name for m in monsters]))
-            self._mon_status(f"{group} — choose a variant")
+            self._navigate("monster-variant/" + page_url)
 
     def _mon_pick_variant(self, rest: str):
         page_url, _, idx = rest.rpartition("/")
@@ -1553,7 +1569,7 @@ class MainWindow(QMainWindow):
         except (ValueError, IndexError):
             return
         self._mon_saved_id = None
-        self._render_monster()
+        self._navigate("monster-sheet")
 
     def _mon_save(self):
         if self._mon is not None:
@@ -1563,13 +1579,13 @@ class MainWindow(QMainWindow):
         m = self._mon_library.load(mid)
         if m is not None:
             self._mon, self._mon_saved_id = m, int(mid)
-            self._render_monster()
+            self._navigate("monster-sheet")
 
     def _mon_delete(self, mid: str):
         deleted = self._mon_library.delete(mid)
         if deleted is not None and self._mon_saved_id == deleted:
             self._mon_saved_id = None
-        self._render_monster_picker()
+        self._render_monster_picker()             # stay on the picker home
 
     def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])

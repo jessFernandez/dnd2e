@@ -31,8 +31,9 @@ def test_renders_name_and_source_link():
 
 def test_shows_house_rule_values():
     h = monster_html.generate(_ankheg())
-    # attack bonus (20-THAC0), ascending AC (20-desc), and size-based initiative
-    assert "3-7" in h                            # THAC0 17-13 -> bonus
+    # attack bonus is the base value (THAC0 17-13 -> base 17 -> +3), ascending AC, init
+    assert ">3<" in h                            # base attack bonus tile, not a range
+    assert "3-7" not in h                        # the old cluttered range is gone
     assert "Overall 18, underside 16" in h       # AC converted in place
     assert "+9" in h                             # size L-H -> Huge initiative
 

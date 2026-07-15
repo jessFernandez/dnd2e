@@ -28,6 +28,13 @@ def test_takes_full_width_screens_vs_book_pages():
         assert not takes_full_width(dest), dest
 
 
+def test_takes_full_width_covers_monster_subviews():
+    assert takes_full_width("monster")                       # the picker
+    assert takes_full_width("monster-sheet")                 # the sheet
+    assert takes_full_width("monster-variant/MM/DD03805.htm")  # the variant chooser
+    assert not takes_full_width("MM/DD03797.htm")            # a book page still isn't
+
+
 # ── browse-pane policy ────────────────────────────────────────────────────────
 
 def test_pane_action_full_width_always_closes():

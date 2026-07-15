@@ -48,7 +48,8 @@ def takes_full_width(dest: str) -> bool:
     Proficiencies is the Codex reference screen; it carries a `#fragment`, so it
     is matched by prefix rather than membership.
     """
-    return dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
+    return (dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
+            or dest.startswith("monster-"))     # monster-sheet, monster-variant/…
 
 
 class Trigger(Enum):
