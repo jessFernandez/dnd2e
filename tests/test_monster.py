@@ -56,6 +56,7 @@ def test_clean_prose_reflows_wraps_and_collapses_blank_runs():
     from monster import _clean_prose
     assert _clean_prose("The beast\nis fierce.") == "The beast is fierce."   # <br> wraps -> one line
     assert _clean_prose("Para one.\n\n\n\n\nPara two.") == "Para one.\n\nPara two."  # table gap -> one break
+    assert _clean_prose("It eats meat.\nIndex") == "It eats meat."           # footer 'Index' dropped
 
 
 def test_ascending_ac_handles_negatives_and_notes():

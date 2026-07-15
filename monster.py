@@ -222,9 +222,11 @@ def _clean_prose(text: str) -> str:
     """Reflow scraped prose for a text box. The MM hard-wraps every line with <br>,
     and tables embedded in the prose leave long runs of blank lines — so collapse
     each paragraph's wrapped lines into flowing text, and blank-line runs into a
-    single paragraph break."""
+    single paragraph break. Also drop the 'Index' link the MM footer appends to
+    every page's last section."""
     paragraphs = re.split(r"\n[ \t]*\n+", text)
-    return "\n\n".join(p for p in (" ".join(para.split()) for para in paragraphs) if p)
+    result = "\n\n".join(p for p in (" ".join(para.split()) for para in paragraphs) if p)
+    return re.sub(r"\s*\bIndex\s*$", "", result)
 
 
 def _split_prose(text: str):

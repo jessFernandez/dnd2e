@@ -151,7 +151,7 @@ def generate(m, saved_id=None, image_url="") -> str:
              autocomplete="off" onchange="monText('set/name', this.value)">
       {variant_tag}
     </div>
-    <div class="sub">Ascending AC · attack bonus · size-based initiative — house rules applied. {source}</div>
+    <div class="sub">{source}</div>
   </header>
 
   <div class="combat-strip">{tiles}</div>
@@ -174,10 +174,16 @@ def generate(m, saved_id=None, image_url="") -> str:
 
 
 #: Auto-size every prose box to its content, so the full text shows without scrolling.
+#: Runs immediately and again on `load` — the first pass can mis-measure before the
+#: textarea has its final width/fonts, which left long boxes (e.g. a Brown Dragon's
+#: Habitat/Society) too short.
 _AUTOGROW_JS = """
+  function _fit(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+  function _fitAll() { document.querySelectorAll('textarea.pr').forEach(_fit); }
+  _fitAll();
+  window.addEventListener('load', _fitAll);
   document.querySelectorAll('textarea.pr').forEach(function(t) {
-    function fit() { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
-    fit(); t.addEventListener('input', fit);
+    t.addEventListener('input', function() { _fit(t); });
   });"""
 
 
