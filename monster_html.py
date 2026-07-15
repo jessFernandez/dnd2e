@@ -12,6 +12,7 @@ and actions navigate to ``dnd:///mon/…`` links, which app.py intercepts (phase
 mirroring the ``cm(…)`` / ``cmText(…)`` helpers in charactermancer_html. This module
 only builds the HTML; the round-trip wiring is the Qt layer's job.
 """
+import re
 from html import escape as esc
 
 import char_rules as cr
@@ -43,17 +44,37 @@ _STAT_ROWS = [
     ("XP Value", "xp_value"),
 ]
 
-#: field -> the house-rule value shown beside it (label, function(Monster) -> str)
-_DERIVED = {
-    "armor_class": ("ascending", lambda m: m.ascending_ac()),
-    "thac0": ("attack bonus", lambda m: m.attack_bonus()),
-    "size": ("init", lambda m: _init_label(m)),
-}
+_RANGE = re.compile(r"(\d+)\s*-\s*(\d+)")
+
+
+def _to_dice(text: str) -> str:
+    """Render AD&D damage ranges as dice: '3-18 (crush)+1-4 (acid)' ->
+    '3d6 (crush)+d4 (acid)'. A range a-b becomes ``a`` dice of d(b/a) when that
+    divides evenly (min a, max b); a single die drops the count (d6, not 1d6).
+    Anything that doesn't divide cleanly is left as the original range."""
+    def repl(m):
+        a, b = int(m.group(1)), int(m.group(2))
+        if a >= 1 and b > a and b % a == 0 and (b // a) >= 2:
+            die = b // a
+            return f"{a}d{die}" if a > 1 else f"d{die}"
+        return m.group(0)
+    return _RANGE.sub(repl, text or "")
 
 
 def _init_label(m) -> str:
     n = m.initiative_modifier()
     return "—" if n is None else (f"+{n}" if n > 0 else str(n))
+
+
+#: Fields the campaign shows in house-rule form only (not the raw MM value):
+#: (display label, value function). AC -> ascending, THAC0 -> attack bonus,
+#: damage -> dice. The stat field still edits via set/<field>; the phase-4 handler
+#: applies the inverse for armor_class/thac0 (both are 20−x involutions).
+_HOUSE_RULE_FIELDS = {
+    "armor_class": ("Armor Class", lambda m: m.ascending_ac()),
+    "thac0": ("Attack Bonus", lambda m: m.attack_bonus()),
+    "damage_attack": ("Damage/Attack", lambda m: _to_dice(m.damage_attack)),
+}
 
 
 def _stat_field(label, field, value, derived=""):
@@ -68,8 +89,8 @@ def _stat_field(label, field, value, derived=""):
 
 
 def _tile(label, value):
-    return (f'<div class="tile"><div class="tile-v">{esc(value or "—")}</div>'
-            f'<div class="tile-l">{esc(label)}</div></div>')
+    return (f'<div class="tile"><div class="tile-l">{esc(label)}</div>'
+            f'<div class="tile-v">{esc(value or "—")}</div></div>')
 
 
 def _prose_panel(title, field, text, feature=False):
@@ -93,13 +114,12 @@ def generate(m, saved_id=None) -> str:
 
     rows = ""
     for label, field in _STAT_ROWS:
-        value = getattr(m, field, "")
-        derived = ""
-        if field in _DERIVED and value:
-            dlabel, dfn = _DERIVED[field]
-            dval = dfn(m)
-            if dval:
-                derived = f"{dlabel} {dval}"
+        if field in _HOUSE_RULE_FIELDS:                 # AC/THAC0/damage: house-rule form only
+            label, value_fn = _HOUSE_RULE_FIELDS[field]
+            value = value_fn(m)
+        else:
+            value = getattr(m, field, "")
+        derived = f"init {_init_label(m)}" if field == "size" and value else ""
         rows += _stat_field(label, field, value, derived)
 
     tiles = "".join([
@@ -108,7 +128,7 @@ def generate(m, saved_id=None) -> str:
         _tile("Initiative", _init_label(m)),
         _tile("Hit Dice", m.hit_dice),
         _tile("Attacks", m.no_of_attacks),
-        _tile("Damage", m.damage_attack),
+        _tile("Damage", _to_dice(m.damage_attack)),
     ])
 
     prose = (
@@ -178,12 +198,13 @@ _CSS = f"""
   .src:hover {{ text-decoration: underline; }}
 
   .combat-strip {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }}
-  .tile {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 10px;
-    padding: 12px 8px; text-align: center; }}
-  .tile-v {{ font-size: 18px; font-weight: 800; color: #e6e9f6;
-    font-variant-numeric: tabular-nums; line-height: 1.1; }}
+  .tile {{ display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #1e202c; border: 1px solid #2a2e3e; border-radius: 10px;
+    padding: 11px 8px; text-align: center; min-height: 78px; }}
   .tile-l {{ font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
-    color: #6a708c; margin-top: 5px; }}
+    color: #6a708c; margin-bottom: 6px; }}
+  .tile-v {{ font-size: 16px; font-weight: 800; color: #e6e9f6;
+    font-variant-numeric: tabular-nums; line-height: 1.2; word-break: break-word; }}
 
   .grid {{ display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 20px; align-items: start; }}
   .section-h, .panel-h {{ font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;

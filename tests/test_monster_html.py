@@ -1,6 +1,7 @@
 """Tests for monster_html.py — the DM monster sheet view (pure HTML render)."""
 import monster_html
 from monster import Monster
+from monster_html import _to_dice
 
 
 def _ankheg() -> Monster:
@@ -8,10 +9,18 @@ def _ankheg() -> Monster:
         name="Ankheg", source_page="MM/DD03797.htm",
         climate_terrain="Temperate/Plains", armor_class="Overall 2, underside 4",
         thac0="17-13", hit_dice="3-8", no_of_attacks="1",
-        damage_attack="3-18 (crush)", special_attacks="Squirt acid", size="L-H",
+        damage_attack="3-18 (crush)+1-4 (acid)", special_attacks="Squirt acid", size="L-H",
         description="A burrowing monster.", combat="It squirts acid to 30 feet.",
         habitat_society="Solitary broods.", ecology="Eats fresh meat.",
     )
+
+
+def test_to_dice_converts_ranges():
+    assert _to_dice("3-18 (crush)+1-4 (acid)") == "3d6 (crush)+d4 (acid)"
+    assert _to_dice("1-6/1-6") == "d6/d6"          # single die drops the count
+    assert _to_dice("2-8 (bite)/2-12 per leg") == "2d4 (bite)/2d6 per leg"
+    assert _to_dice("2-5") == "2-5"                # doesn't divide -> left alone
+    assert _to_dice("Nil") == "Nil"
 
 
 def test_renders_name_and_source_link():
@@ -26,6 +35,19 @@ def test_shows_house_rule_values():
     assert "3-7" in h                            # THAC0 17-13 -> bonus
     assert "Overall 18, underside 16" in h       # AC converted in place
     assert "+9" in h                             # size L-H -> Huge initiative
+
+
+def test_only_house_rule_ac_and_thaco_shown():
+    h = monster_html.generate(_ankheg())
+    assert "17-13" not in h                       # raw THAC0 not shown
+    assert "Overall 2," not in h                  # raw descending AC not shown
+    assert "Attack Bonus" in h                    # THAC0 row relabeled
+
+
+def test_damage_shown_as_dice():
+    h = monster_html.generate(_ankheg())
+    assert "3d6" in h and "d4" in h
+    assert "3-18" not in h                         # the range form is gone
 
 
 def test_stat_fields_are_editable_hooks():
