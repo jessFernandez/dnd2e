@@ -1,7 +1,9 @@
-"""Tests for navigation.py — the per-tab back/forward state machine and the
-pure destination grammar (link_to_destination, takes_full_width)."""
+"""Tests for navigation.py — the per-tab back/forward state machine, the pure
+destination grammar (link_to_destination, takes_full_width), and the browse-pane
+policy (pane_action)."""
 from navigation import (
     History, FULLWIDTH_SCREENS, link_to_destination, takes_full_width,
+    pane_action, Trigger, Pane,
 )
 
 
@@ -23,6 +25,21 @@ def test_takes_full_width_screens_vs_book_pages():
     assert takes_full_width("proficiencies#thieving")     # matched by prefix
     for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm", ""):
         assert not takes_full_width(dest), dest
+
+
+# ── browse-pane policy ────────────────────────────────────────────────────────
+
+def test_pane_action_full_width_always_closes():
+    for dest in ("splash", "dmscreen", "spells", "proficiencies", "proficiencies#x"):
+        for trigger in Trigger:
+            assert pane_action(dest, trigger) is Pane.CLOSE, (dest, trigger)
+
+
+def test_pane_action_book_opens_only_on_a_link():
+    for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm"):
+        assert pane_action(dest, Trigger.LINK) is Pane.OPEN, dest
+        assert pane_action(dest, Trigger.NAVIGATE) is Pane.LEAVE, dest
+        assert pane_action(dest, Trigger.TAB_CHANGE) is Pane.LEAVE, dest
 
 
 def test_empty_history():

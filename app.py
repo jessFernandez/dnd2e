@@ -19,7 +19,7 @@ from splash_html import generate as generate_splash_html
 import db
 import toc
 import toc_html
-from navigation import History, link_to_destination, takes_full_width
+from navigation import History, link_to_destination, pane_action, Trigger, Pane
 import askscreen_html
 import charactermancer_html
 import proficiencies_html
@@ -1282,14 +1282,13 @@ class MainWindow(QMainWindow):
         self._navigate(dest)
 
     def _reveal_nav_for(self, dest: str):
-        """Reaching a book page by clicking a link elsewhere (a splash chip, a
-        cross-reference, a reference-screen or Jarvis citation) opens the browse
-        pane too, so the reader can see where the page sits in the tree — which
-        _render_page then selects and scrolls to. Full-width screens are left
-        alone; _navigate hides the pane for those. This only fires on link
-        clicks, not history/next-prev/tree navigation, so a pane the reader
-        deliberately closed stays closed while they page through."""
-        if not takes_full_width(dest):
+        """The pane's response to a content-link click, per navigation.pane_action:
+        reaching a book page this way opens the browse pane (before _navigate
+        renders, so _render_page's tree-sync can scroll to it), so the reader sees
+        where the page sits in the tree. Full-width screens are left for _navigate
+        to close. Fires only on link clicks — not history/next-prev/tree/tab
+        navigation — so a pane the reader deliberately closed stays closed."""
+        if pane_action(dest, Trigger.LINK) is Pane.OPEN:
             self._show_sidebar()
 
     def _on_jarvis_page(self) -> bool:
@@ -1299,8 +1298,8 @@ class MainWindow(QMainWindow):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
-        if takes_full_width(dest):
-            self._hide_sidebar()
+        if pane_action(dest, Trigger.NAVIGATE) is Pane.CLOSE:
+            self._hide_sidebar()   # a full-width screen reclaims the width
         if add_to_history:
             self._nav.push(dest)
         self._update_nav_buttons()
@@ -1733,12 +1732,12 @@ class MainWindow(QMainWindow):
         self._update_nav_buttons()
         self._update_bookmark_btn()
         ctx = self._tabs[idx]
-        # Reconcile the browse pane with the newly-active tab, the same way
-        # _navigate does: a full-width screen reclaims the width, while a book
-        # page leaves the pane as the reader left it (switching or closing a tab
-        # is not a link click, so it never forces the pane open).
+        # Reconcile the browse pane with the newly-active tab via pane_action: a
+        # full-width screen reclaims the width, while a book page leaves the pane
+        # as the reader left it (a tab switch/close is not a link click, so it
+        # never forces the pane open).
         dest = ctx.nav.current() or ""
-        if takes_full_width(dest):
+        if pane_action(dest, Trigger.TAB_CHANGE) is Pane.CLOSE:
             self._hide_sidebar()
         if ctx.current_page_url:
             self._sync_tree_selection(ctx.current_page_url)

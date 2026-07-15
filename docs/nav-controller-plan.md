@@ -1,6 +1,7 @@
 # Navigation controller extraction — plan
 
-**Status:** in progress. Phase 1 (grammar) done; phases 2–4 remaining.
+**Status:** in progress. Phases 1 (grammar) and 2 (pane policy) done; phases 3–4
+remaining.
 
 ## Goal
 
@@ -63,9 +64,10 @@ def pane_action(dest: str, trigger: Trigger) -> Pane: ...
    `FULLWIDTH_SCREENS` constant into `navigation.py`, inlined the call sites, and
    deleted the `app.py` shims. Grammar tested directly in `test_navigation.py`.
    *Small, near-zero risk.*
-2. **Pane policy.** Introduce `Trigger`/`Pane` + `pane_action`; rewrite the three
-   pane sites to use it. Port the `test_nav_reveal.py` decision assertions onto
-   `pane_action` directly (they simplify — no SimpleNamespace for the decision).
+2. **Pane policy. ✅ done.** Added `Trigger`/`Pane` + `pane_action` to
+   `navigation.py`; the three pane sites (`_reveal_nav_for`, `_navigate`,
+   `_on_tab_changed`) now derive their decision from it. The policy is tested
+   directly in `test_navigation.py`; `test_nav_reveal.py` keeps the wiring checks.
    *Small.*
 3. **Link routing.** Introduce `Route` + `route_link`; shrink `_on_content_navigate`
    to a `match route_link(...)` that performs side effects. Biggest single step —

@@ -16,6 +16,7 @@ A "destination" is the canonical string the app renders: a page_url
 codex ("proficiencies" / "proficiencies#anchor"), or a full-width screen name
 ("splash", "dmscreen", "actions", "spells", "charactermancer", "ask").
 """
+from enum import Enum
 
 # Built-in reference/tool screens that take the full content width; opening one
 # hides the book browser, while a book page or TOC keeps it. Single source of
@@ -46,6 +47,37 @@ def takes_full_width(dest: str) -> bool:
     is matched by prefix rather than membership.
     """
     return dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
+
+
+class Trigger(Enum):
+    """How the reader arrived at a destination — the browse pane reacts to this."""
+    LINK = "link"            # a content-link click (a chip, cross-ref, citation)
+    NAVIGATE = "navigate"    # history, next/prev, tree, buttons, session restore
+    TAB_CHANGE = "tab"       # switching to — or closing onto — another tab
+
+
+class Pane(Enum):
+    """What should happen to the browse pane."""
+    OPEN = "open"            # bring it out so the reader can see where they are
+    CLOSE = "close"          # a full-width screen reclaims the width
+    LEAVE = "leave"          # don't touch it — respect the reader's choice
+
+
+def pane_action(dest: str, trigger: Trigger) -> Pane:
+    """The browse pane's response to reaching `dest` via `trigger` — the single
+    source of truth the reveal, the hide, and the tab-change reconciliation all
+    read from.
+
+    A full-width screen always reclaims the width. A book page (or TOC) opens the
+    pane only when reached by a link, so the reader sees where the page sits in
+    the tree; reaching one any other way (history, next/prev, a tab switch) leaves
+    the pane as they left it — a pane deliberately closed stays closed.
+    """
+    if takes_full_width(dest):
+        return Pane.CLOSE
+    if trigger is Trigger.LINK:
+        return Pane.OPEN
+    return Pane.LEAVE
 
 
 class History:
