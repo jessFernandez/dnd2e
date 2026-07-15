@@ -3601,7 +3601,12 @@ on("clicked:importall", function() {
         });
         addRows(data.weapon_profs, "wps", function(w) {
             // Each entry is {name, slots, rung}; the rung is appended to the name
-            // since the sheet's WP section has no column for it.
+            // since the sheet's WP section has no column for it. Older exports sent a
+            // bare name string -- accept that too, so a sheet/export version skew
+            // degrades to a plain name instead of rendering "[object Object]".
+            if (typeof w === "string") {
+                return { wpsname: w, wpsslots: 1 };
+            }
             var label = (w.name || "") + (w.rung && w.rung !== "proficient"
                 ? " (" + w.rung.replace("_", " ") + ")" : "");
             return { wpsname: label, wpsslots: num(w.slots, 1) };
