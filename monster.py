@@ -183,6 +183,14 @@ def house_rule_to_raw(field: str, value: str) -> str:
     return value
 
 
+def _dehyphenate(name: str) -> str:
+    """Rejoin a soft line-break hyphen in a scraped name: the MM wraps long variant
+    names with a hyphen + <br>, which arrives as 'letter- space letter' ('Ankylo-
+    saurus', 'Amphis- baena'). A *real* hyphenated name ('Beholder-kin') has no space
+    after the hyphen, so only the spaced form is a wrap to close up."""
+    return re.sub(r"([A-Za-z])-\s+([a-z])", r"\1\2", name)
+
+
 def _largest_size(size_text: str) -> str:
     """The largest size-category letter in the field, e.g. 'L-H (10' long)' -> 'H'.
     Only the part before any parenthetical is considered."""
@@ -346,21 +354,32 @@ def _group_to_monsters(rows, group, source_page, prose):
     have_variants = False
     stat_fields: list = []          # [canonical_label, [value per column]]
     seen_label = False
+    body_width = 0                  # value columns the labelled stat rows actually use
+    in_block = True                 # still inside the stat block (vs a trailing sub-table)
     for row in rows:
         row = row + [""] * (ncol - len(row))
         first, vals = row[0].strip(), row[1:]
         canon = _norm_label(first)
         if canon:
             stat_fields.append([canon, list(vals)])
-            seen_label = True
+            seen_label = in_block = True
+            last = max((i for i, v in enumerate(vals) if v.strip()), default=-1)
+            body_width = max(body_width, last + 1)
         elif not first:                       # header (before labels) or continuation
-            target = variant_cols if not seen_label else (stat_fields[-1][1] if stat_fields else None)
+            if not seen_label:
+                target = variant_cols          # variant-name header, above the labels
+            elif in_block and not any(v.strip() for v in vals[max(body_width, 1):]):
+                target = stat_fields[-1][1] if stat_fields else None  # a wrapped value
+            else:
+                target, in_block = None, False  # a trailing sub-table (dragon age chart)
             if target is not None:
                 for i, v in enumerate(vals):
                     if v:
                         target[i] = (target[i] + " " + v).strip()
                         if target is variant_cols:
                             have_variants = True
+        elif seen_label:
+            in_block = False                   # a non-label data row ends the stat block
 
     if not any(c == "ARMOR CLASS" for c, _ in stat_fields):
         return []                              # not a real stat block
@@ -372,7 +391,7 @@ def _group_to_monsters(rows, group, source_page, prose):
 
     monsters = []
     for i in cols:
-        variant = variant_cols[i].strip() if have_variants else ""
+        variant = _dehyphenate(variant_cols[i].strip()) if have_variants else ""
         m = Monster(
             name=_monster_name(variant, group),
             source_page=source_page, variant=variant,
@@ -396,7 +415,7 @@ def _grid_to_monsters(rows, group, source_page, prose_text):
 def _clean_title(title: str) -> str:
     """The monster/group name from a page title: drop the ' (Monstrous Manual)'
     suffix and render the scrape's '--' separator as a comma ('Cat-- Great')."""
-    base = (title or "").split(" (Monstrous Manual")[0].strip()
+    base = re.split(r"\s*\(Monstrous Manual", title or "")[0].strip()
     return re.sub(r"\s*--\s*", ", ", base)
 
 
@@ -525,18 +544,34 @@ def _parse_compact_table(rows, source_page):
     fields_present = set(field_by_col.values())
     if not {"armor_class", "hit_dice"} <= fields_present:  # confidence: it's a stat table
         return []
+    ac_col = next(c for c, f in field_by_col.items() if f == "armor_class")
+    hd_col = next(c for c, f in field_by_col.items() if f == "hit_dice")
+
+    def cell(row, col):
+        return row[col].strip() if col < len(row) else ""
 
     monsters = []
+    current = None
+    just_started = False           # did the previous row begin (or continue naming) a creature?
     for row in rows[1:]:
-        if not row or not row[0].strip():                  # skip blank / continuation rows
+        name, has_ac, has_hd = (row[0].strip() if row else ""), cell(row, ac_col), cell(row, hd_col)
+        if not name:                                       # an HD-conditional tail row
+            just_started = False
             continue
-        m = Monster(name=row[0].strip(), source_page=source_page)
+        if not has_ac and not has_hd:                      # a bare name with no stats of its own
+            if just_started and current:                   # a name that wrapped ("Catfish,"+"Giant")
+                current.name = (current.name + " " + name).strip()
+            continue                                        # else a sub-category header (termite castes)
+        if not (has_ac and has_hd
+                and re.search(r"\d", has_hd) and re.search(r"[A-Za-z]", name)):
+            just_started = False
+            continue                                        # cross-refs, spell / psionics sub-tables
+        current = Monster(name=name, source_page=source_page)
         for col, field in field_by_col.items():
             if col < len(row):
-                setattr(m, field, row[col].strip())
-        if not m.armor_class:                              # cross-references ("See Raven"),
-            continue                                       # sub-headers, etc. carry no AC
-        monsters.append(m)
+                setattr(current, field, row[col].strip())
+        monsters.append(current)
+        just_started = True
     return monsters
 
 
