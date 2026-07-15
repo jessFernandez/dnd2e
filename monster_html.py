@@ -140,11 +140,7 @@ def generate(m, saved_id=None) -> str:
 
     save_label = "Save changes" if saved_id else "Save monster"
 
-    return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>{esc(m.name or "Monster")}</title>
-<style>{_CSS}</style></head>
-<body>
-<div class="sheet">
+    body = f"""<div class="sheet">
   <header>
     <div class="title-row">
       <input class="name" value="{esc(m.name)}" placeholder="Monster name" spellcheck="false"
@@ -169,10 +165,72 @@ def generate(m, saved_id=None) -> str:
     <a class="nav-btn" href="dnd:///mon/import">⇩ Import from Monstrous Manual</a>
     <a class="nav-btn" href="dnd:///mon/new">＋ New monster</a>
   </div>
-</div>
+</div>"""
+    return _document(m.name or "Monster", body)
+
+
+def generate_import_picker(mm_entries, saved=()) -> str:
+    """The monster landing: saved monsters to reopen, and the Monstrous Manual list
+    to import from (client-side filtered). ``mm_entries`` is (page_url, name);
+    ``saved`` is (id, name, source_page)."""
+    saved_html = ""
+    if saved:
+        srows = "".join(
+            f'<div class="srow">'
+            f'<a class="pick-item load" href="dnd:///mon/load/{sid}">{esc(name or "Unnamed Monster")}</a>'
+            f'<a class="del" href="dnd:///mon/delete/{sid}" title="Delete">✕</a></div>'
+            for sid, name, _src in saved)
+        saved_html = (f'<section class="picker-sec"><div class="section-h">Saved Monsters</div>'
+                      f'<div class="pick-list">{srows}</div></section>')
+
+    items = "".join(
+        f'<a class="pick-item" data-name="{esc(name.lower())}" '
+        f'href="dnd:///mon/pick/{esc(url)}">{esc(name)}</a>'
+        for url, name in mm_entries)
+
+    body = f"""<div class="sheet">
+  <header><div class="title-row"><span class="page-title">Monsters</span></div>
+    <div class="sub">Import a stat block from the Monstrous Manual — house rules applied automatically.</div>
+  </header>
+  {saved_html}
+  <section class="picker-sec">
+    <div class="section-h">Import from the Monstrous Manual</div>
+    <input class="search" id="q" placeholder="Search {len(mm_entries)} monsters…" oninput="filt()" autocomplete="off">
+    <div class="pick-list" id="mmlist">{items}</div>
+  </section>
+  <div class="actions"><a class="nav-btn" href="dnd:///mon/new">＋ New blank monster</a></div>
+</div>"""
+    script = """
+  function filt() { var q = document.getElementById('q').value.toLowerCase();
+    document.querySelectorAll('#mmlist .pick-item').forEach(function(el) {
+      el.style.display = el.dataset.name.indexOf(q) >= 0 ? '' : 'none'; }); }"""
+    return _document("Monsters", body, script)
+
+
+def generate_variant_picker(group, source_page, variant_names) -> str:
+    """Pick one creature from a multi-variant MM page (Bear → Black/Brown/…)."""
+    items = "".join(
+        f'<a class="pick-item" href="dnd:///mon/pickvar/{esc(source_page)}/{i}">{esc(name)}</a>'
+        for i, name in enumerate(variant_names))
+    body = f"""<div class="sheet">
+  <header><div class="title-row"><span class="page-title">{esc(group)}</span></div>
+    <div class="sub">This entry covers several creatures — choose one to import.</div>
+  </header>
+  <section class="picker-sec"><div class="pick-list">{items}</div></section>
+  <div class="actions"><a class="nav-btn" href="dnd:///mon/import">← Back to all monsters</a></div>
+</div>"""
+    return _document(group, body)
+
+
+def _document(title, body, extra_script="") -> str:
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>{esc(title)}</title>
+<style>{_CSS}</style></head>
+<body>
+{body}
 <script>
   function mon(path) {{ if (path.endsWith('/')) return; window.location.href = 'dnd:///mon/' + path; }}
-  function monText(verb, v) {{ window.location.href = 'dnd:///mon/' + verb + '/' + encodeURIComponent(v); }}
+  function monText(verb, v) {{ window.location.href = 'dnd:///mon/' + verb + '/' + encodeURIComponent(v); }}{extra_script}
 </script>
 </body></html>"""
 
@@ -238,6 +296,24 @@ _CSS = f"""
   .nav-btn {{ text-decoration: none; background: #262a40; border: 1px solid #3a3f58;
     color: #e6e9f6; font-weight: 700; border-radius: 8px; padding: 9px 16px; font-size: 12.5px; }}
   .nav-btn:hover {{ border-color: {ACCENT}66; }}
+
+  /* import / saved-monster picker */
+  .page-title {{ font-family: Georgia, "Times New Roman", serif; font-size: 27px;
+    font-weight: 700; color: #f0ead2; }}
+  .picker-sec {{ margin-bottom: 22px; }}
+  .search {{ width: 100%; background: #16181f; border: 1px solid #2f3346; border-radius: 8px;
+    color: #e6e9f6; padding: 9px 12px; font-size: 13px; margin-bottom: 12px; }}
+  .search:focus {{ outline: none; border-color: {ACCENT}88; }}
+  .pick-list {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }}
+  .pick-item {{ display: block; text-decoration: none; background: #23263a; border: 1px solid #2f3346;
+    border-radius: 8px; padding: 9px 13px; color: #e6e9f6; font-size: 12.5px; }}
+  .pick-item:hover {{ border-color: {ACCENT}66; background: #262a40; }}
+  .srow {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
+    border-radius: 8px; }}
+  .srow .load {{ flex: 1; background: transparent; border: none; }}
+  .srow:hover {{ border-color: {ACCENT}66; }}
+  .del {{ text-decoration: none; color: #8189a8; padding: 8px 12px; }}
+  .del:hover {{ color: #e7b0b4; }}
 
   @media (max-width: 720px) {{
     .grid {{ grid-template-columns: 1fr; }}

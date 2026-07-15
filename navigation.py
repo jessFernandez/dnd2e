@@ -24,7 +24,7 @@ from urllib.parse import unquote
 # hides the book browser, while a book page or TOC keeps it. Single source of
 # truth for that split — see takes_full_width().
 FULLWIDTH_SCREENS = frozenset({"splash", "dmscreen", "actions",
-                               "spells", "charactermancer", "ask"})
+                               "spells", "charactermancer", "ask", "monster"})
 
 
 def link_to_destination(path: str) -> str:
@@ -122,6 +122,12 @@ class CmAction(Route):
 
 
 @dataclass(frozen=True)
+class MonAction(Route):
+    """Apply a monster-sheet action (payload passed through verbatim)."""
+    payload: str
+
+
+@dataclass(frozen=True)
 class NewTab(Route):
     """Open `dest` in a fresh tab, so the current page stays put."""
     dest: str
@@ -150,6 +156,8 @@ def route_link(url: str, *, on_jarvis_page: bool) -> Route:
         return AskStop()
     if url.startswith("cm/"):
         return CmAction(url[len("cm/"):])
+    if url.startswith("mon/"):
+        return MonAction(url[len("mon/"):])
     if url.startswith("newtab/"):
         return NewTab(link_to_destination(url[len("newtab/"):]))
     dest = link_to_destination(url)

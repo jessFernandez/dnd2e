@@ -1,7 +1,7 @@
 # Monster mode — plan
 
-**Status:** in progress. Phases 1 (pure core), 2 (persistence) and 3 (view)
-complete; phase 4 (UI wiring) remaining.
+**Status:** complete. Phases 1 (pure core), 2 (persistence), 3 (view) and 4 (UI
+wiring) all done. v2 enhancements (below) remain as future work.
 
 ## Goal
 
@@ -76,8 +76,15 @@ So import is a **parse job** (plain-Python, no `bs4` at runtime), like
    first-class feature panel**. Edits/actions use the `dnd:///mon/…` convention
    (mirroring `cm`/`cmText`), wired in phase 4. Render tests in `test_monster_html`;
    flex-gap guard kept green (grid gap + child margins, per the QtWebEngine bug).
-4. **UI wiring.** Monster mode on the sheet + the MM import picker in `app.py`
-   (thin), wiring tests. Register `monster*` modules in `dnd2e.spec` hiddenimports.
+4. **UI wiring. ✅ done.** A `monster` full-width screen + a 🐉 rail button; the
+   `dnd:///mon/…` route (`navigation.MonAction`) dispatched to `_mon_action`
+   (set/import/new/save/pick/pickvar/load/delete); the import picker (client-side
+   filtered) with a variant sub-picker for multi-creature pages, and a saved-monster
+   list. Field edits store in place (AC/THAC0 invert back via `house_rule_to_raw`)
+   without a re-render, so focus/scroll survive; derived tiles refresh on the next
+   full render. Covered by SimpleNamespace wiring tests plus a real-DB end-to-end
+   (pick → variant → sheet → save → load). `monster*` modules registered in
+   `dnd2e.spec`.
 
 ## Special attacks & abilities — v1 handling
 

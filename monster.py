@@ -160,6 +160,24 @@ def _map_numbers(text: str, fn, signed: bool = False) -> str:
     return re.sub(pattern, lambda m: str(fn(int(m.group()))), text)
 
 
+#: Monster fields the sheet lets the DM edit (everything textual; not the id-like
+#: source_page/variant or the numeric initiative override).
+EDITABLE_FIELDS = frozenset(
+    {f.name for f in fields(Monster)} - {"source_page", "variant", "initiative_override"})
+
+
+def house_rule_to_raw(field: str, value: str) -> str:
+    """Convert an edited house-rule value back to the stored MM form. The sheet
+    shows ascending AC and attack bonus, so those two invert on the way in (both
+    are 20−x involutions, matching ascending_ac()/attack_bonus()); every other
+    field is stored verbatim (damage keeps whatever dice/text the DM typed)."""
+    if field == "armor_class":
+        return _map_numbers(value, cr.desc_to_asc, signed=True)
+    if field == "thac0":
+        return _map_numbers(value, cr.thac0_to_bonus)
+    return value
+
+
 def _largest_size(size_text: str) -> str:
     """The largest size-category letter in the field, e.g. 'L-H (10' long)' -> 'H'.
     Only the part before any parenthetical is considered."""

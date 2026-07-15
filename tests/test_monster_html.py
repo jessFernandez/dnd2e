@@ -88,3 +88,21 @@ def test_empty_monster_does_not_crash():
     h = monster_html.generate(Monster())
     assert "<!DOCTYPE html>" in h and "Stat Block" in h
     assert "—" in h                              # empty derived tiles show a dash
+
+
+def test_import_picker_lists_saved_and_mm_entries():
+    h = monster_html.generate_import_picker(
+        [("MM/DD03797.htm", "Ankheg"), ("MM/DD03805.htm", "Bear")],
+        saved=[(1, "My Goblin", "MM/DD03940.htm")])
+    assert "dnd:///mon/pick/MM/DD03797.htm" in h and "Bear" in h
+    assert "My Goblin" in h                       # saved section
+    assert "dnd:///mon/load/1" in h and "dnd:///mon/delete/1" in h
+    assert "function filt" in h                   # client-side search filter
+
+
+def test_variant_picker_lists_indexed_choices():
+    h = monster_html.generate_variant_picker(
+        "Bear", "MM/DD03805.htm", ["Black Bear", "Polar Bear"])
+    assert "Black Bear" in h and "Polar Bear" in h
+    assert "dnd:///mon/pickvar/MM/DD03805.htm/0" in h
+    assert "dnd:///mon/pickvar/MM/DD03805.htm/1" in h
