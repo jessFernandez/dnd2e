@@ -14,6 +14,7 @@ a = Analysis(
     binaries=qtwe_bins,
     datas=[
         ('dnd2e.db',              '.'),
+        ('assets/dnd2e.png',      'assets'),
         ('dmscreen_html.py',      '.'),
         ('actionsscreen_html.py', '.'),
         ('spellsscreen_html.py',  '.'),
@@ -75,6 +76,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/dnd2e.ico',
 )
 
 coll = COLLECT(

@@ -19,7 +19,10 @@ from splash_html import generate as generate_splash_html
 import db
 import toc
 import toc_html
-from navigation import History
+from navigation import (
+    History, link_to_destination, pane_action, Trigger, Pane,
+    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, NewTab, Navigate,
+)
 import askscreen_html
 import charactermancer_html
 import proficiencies_html
@@ -38,7 +41,7 @@ from PyQt5.QtWidgets import (
     QLabel, QSizePolicy, QShortcut,
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter
+from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter, QIcon
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -51,6 +54,11 @@ def _bundle_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS)
     return Path(__file__).parent
+
+
+def _app_icon() -> QIcon:
+    """The window/taskbar icon, bundled under assets/ (see dnd2e.spec)."""
+    return QIcon(str(_bundle_dir() / "assets" / "dnd2e.png"))
 
 
 def _user_data_dir() -> Path:
@@ -1236,64 +1244,50 @@ class MainWindow(QMainWindow):
     #   "toc:<BOOK>"                                     a book's contents page
     #   "<BOOK>/<page>.htm"                              a scraped rules page
 
-    @staticmethod
-    def _link_to_destination(url: str) -> str:
-        """Map a dnd:// link path to a canonical destination."""
-        if url.startswith("toc/"):
-            return "toc:" + url[4:]
-        if url.startswith("screen/"):
-            return url[len("screen/"):]   # screen/dmscreen -> dmscreen
-        return url                        # a page_url
-
     def _on_content_navigate(self, url: str):
-        """Handle a normal dnd:// link click from the content viewer."""
-        # Interactive "Ask the Rules" routes are handled in place (no history entry).
-        if url.startswith("ask/"):
-            self._ask_question(unquote(url[len("ask/"):]).strip())
-            return
-        if url.startswith("ask-setmodel/"):
-            self._settings.setValue("askModel", unquote(url[len("ask-setmodel/"):]).strip())
-            self._settings.sync()
-            self._render_ask()
-            return
-        if url == "ask-refresh" or url == "ask-new":
-            self._render_ask()          # resets the conversation + re-checks Ollama
-            return
-        if url == "ask-stop":
-            self._ask_stop()
-            return
-        # Character-builder actions are applied in place (no history entry).
-        if url.startswith("cm/"):
-            self._cm_action(url[len("cm/"):])
-            return
-        # Links explicitly tagged to open beside the current page (e.g. the
-        # builder's step references) — open in a new tab so the page stays put.
-        if url.startswith("newtab/"):
-            self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._navigate(self._link_to_destination(url[len("newtab/"):]))
-            return
-        # A cited link clicked on the Jarvis page opens in a new tab so the
-        # question/answer stays put.
-        if self._on_jarvis_page():
-            self._new_tab(show_splash=False)     # opens and switches to the new tab
-            self._navigate(self._link_to_destination(url))
-            return
-        self._navigate(self._link_to_destination(url))
+        """Handle a dnd:// link click: classify it with navigation.route_link,
+        then perform the side effect. Ask/builder routes act in place (no history
+        entry); NewTab/Navigate reveal the pane for a book page and render."""
+        match route_link(url, on_jarvis_page=self._on_jarvis_page()):
+            case Ask(question):
+                self._ask_question(question)
+            case AskSetModel(model):
+                self._settings.setValue("askModel", model)
+                self._settings.sync()
+                self._render_ask()
+            case AskRefresh():
+                self._render_ask()          # resets the conversation + re-checks Ollama
+            case AskStop():
+                self._ask_stop()
+            case CmAction(payload):
+                self._cm_action(payload)
+            case NewTab(dest):
+                self._new_tab(show_splash=False)   # opens and switches to the new tab
+                self._reveal_nav_for(dest)
+                self._navigate(dest)
+            case Navigate(dest):
+                self._reveal_nav_for(dest)
+                self._navigate(dest)
+
+    def _reveal_nav_for(self, dest: str):
+        """The pane's response to a content-link click, per navigation.pane_action:
+        reaching a book page this way opens the browse pane (before _navigate
+        renders, so _render_page's tree-sync can scroll to it), so the reader sees
+        where the page sits in the tree. Full-width screens are left for _navigate
+        to close. Fires only on link clicks — not history/next-prev/tree/tab
+        navigation — so a pane the reader deliberately closed stays closed."""
+        if pane_action(dest, Trigger.LINK) is Pane.OPEN:
+            self._show_sidebar()
 
     def _on_jarvis_page(self) -> bool:
         return self._nav.current() == "ask"
-
-    # Built-in reference/tool screens that take the full content width; opening
-    # one hides the book browser. Book pages (toc:/page urls) leave it as-is.
-    _FULLWIDTH_SCREENS = {"splash", "dmscreen", "actions",
-                          "spells", "charactermancer", "ask"}
 
     def _navigate(self, dest: str, add_to_history: bool = True):
         """Render a destination and optionally record it in the tab's history."""
         if not self._render_destination(dest):
             return   # render failed (e.g. page not found) — leave history intact
-        if dest in self._FULLWIDTH_SCREENS or dest.startswith("proficiencies"):
-            self._hide_sidebar()
+        if pane_action(dest, Trigger.NAVIGATE) is Pane.CLOSE:
+            self._hide_sidebar()   # a full-width screen reclaims the width
         if add_to_history:
             self._nav.push(dest)
         self._update_nav_buttons()
@@ -1704,7 +1698,7 @@ class MainWindow(QMainWindow):
             url = url[len("newtab/"):]
         prev = self._content_tabs.currentIndex()
         self._new_tab(show_splash=False)
-        self._navigate(self._link_to_destination(url))
+        self._navigate(link_to_destination(url))
         # Keep focus on the originating tab (background-open behaviour)
         self._content_tabs.setCurrentIndex(prev)
 
@@ -1719,12 +1713,20 @@ class MainWindow(QMainWindow):
         self._update_bookmark_btn()
 
     def _on_tab_changed(self, idx: int):
-        """Sync UI state when the user switches tabs."""
+        """Sync UI state when the active tab changes — on a switch, and when
+        closing a tab hands focus to another."""
         if not (0 <= idx < len(self._tabs)):
             return
         self._update_nav_buttons()
         self._update_bookmark_btn()
         ctx = self._tabs[idx]
+        # Reconcile the browse pane with the newly-active tab via pane_action: a
+        # full-width screen reclaims the width, while a book page leaves the pane
+        # as the reader left it (a tab switch/close is not a link click, so it
+        # never forces the pane open).
+        dest = ctx.nav.current() or ""
+        if pane_action(dest, Trigger.TAB_CHANGE) is Pane.CLOSE:
+            self._hide_sidebar()
         if ctx.current_page_url:
             self._sync_tree_selection(ctx.current_page_url)
 
@@ -1901,6 +1903,16 @@ class MainWindow(QMainWindow):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    # Windows: give the process an explicit AppUserModelID so the taskbar groups
+    # it under our own icon instead of the generic Python one.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "DnD2eRules.App")
+        except Exception:
+            pass
+
     if not DB_PATH.exists():
         app = QApplication(sys.argv)
         QMessageBox.critical(
@@ -1911,6 +1923,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("D&D 2e Rules")
+    app.setWindowIcon(_app_icon())
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
 
