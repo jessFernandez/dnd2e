@@ -1,7 +1,7 @@
 # Monster mode — plan
 
-**Status:** in progress. Phases 1 (pure core) and 2 (persistence) complete;
-phases 3–4 remaining.
+**Status:** in progress. Phases 1 (pure core), 2 (persistence) and 3 (view)
+complete; phase 4 (UI wiring) remaining.
 
 ## Goal
 
@@ -69,8 +69,13 @@ So import is a **parse job** (plain-Python, no `bs4` at runtime), like
    monsters as JSON blobs in the user DB, mirroring `character_library`) over new
    `db.py` `saved_monsters` CRUD. The row id is held by the caller, keeping the
    `Monster` model persistence-free. Tested against a temp DB (`test_monster_library`).
-3. **View.** `monster_html.py` — stat block + prose, editable fields, house-rule
-   values shown. Render tests.
+3. **View. ✅ done.** `monster_html.generate(m, saved_id)` renders the sheet in the
+   app's dark-navy/gold system: a house-rule combat strip (attack bonus, ascending
+   AC, initiative, HD, attacks, damage), the editable 21-field stat block with
+   derived house-rule badges beside AC/THAC0/Size, and the prose with **Combat as a
+   first-class feature panel**. Edits/actions use the `dnd:///mon/…` convention
+   (mirroring `cm`/`cmText`), wired in phase 4. Render tests in `test_monster_html`;
+   flex-gap guard kept green (grid gap + child margins, per the QtWebEngine bug).
 4. **UI wiring.** Monster mode on the sheet + the MM import picker in `app.py`
    (thin), wiring tests. Register `monster*` modules in `dnd2e.spec` hiddenimports.
 
