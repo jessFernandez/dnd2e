@@ -71,9 +71,42 @@ So import is a **parse job** (plain-Python, no `bs4` at runtime), like
 4. **UI wiring.** Monster mode on the sheet + the MM import picker in `app.py`
    (thin), wiring tests. Register `monster*` modules in `dnd2e.spec` hiddenimports.
 
-## Non-goals (for now)
+## Special attacks & abilities — v1 handling
 
-- Numeric HD/HP rolling and a live encounter tracker (a later feature that would
-  consume this model).
-- Roll20 export for monsters.
-- Re-parsing the 35 non-stat-block pages (the picker just omits them).
+Captured in two layers, **no structured/rollable data**:
+
+- the terse `special_attacks` / `special_defenses` stat fields (verbatim), and
+- the `Combat:` prose, which holds the actual mechanics (range, damage, save,
+  frequency).
+
+This matters because **~30% of `special_attacks` values are just "See below"** —
+the stat field is a pointer, and the Combat prose is the real content. So the
+sheet (phase 3) must render **Combat as first-class functional text beside the
+stat block**, not as flavor. That gives a fully runnable monster without a brittle
+parse of the prose.
+
+## v2 — later enhancements
+
+Deliberately deferred; revisit once v1 is in use:
+
+- **Structured special abilities.** Parse each special attack/defense into
+  machine-usable fields (name · save · damage · range · frequency) so an encounter
+  tracker can auto-roll saves and apply effects. Hard NLP over inconsistent prose;
+  only pays off with automation, not for reading.
+- **Spell cross-linking.** Many monsters list spell-like abilities as bare spell
+  names (Baatezu: "animate dead, charm person, …"). Detect those and link them to
+  the existing spell compendium (`dnd://` links).
+- **Recognize the extra prose sub-sections.** Dragon age-tiers ("Juvenile:",
+  "Adult:", …) and "Psionics Summary:" currently fold into the nearest captured
+  section; promote them to first-class fields so those abilities aren't buried.
+- **Refine HD-conditional conversions.** THAC0/XP strings like "3+3 HD: 17 4+4 HD:
+  15" garble the derived attack bonus (see phase 1 limitation) — convert only the
+  true THAC0 numbers, not the HD notation.
+- **Numeric HD/HP + a live encounter tracker** that consumes this model (initiative
+  order, HP/AC/status tracking, inline attack/save rolls).
+- **Roll20 export for monsters.**
+
+## Out of scope
+
+- Re-parsing the ~7 generic category pages (Dragon-- General, etc.) — the picker
+  just omits them.
