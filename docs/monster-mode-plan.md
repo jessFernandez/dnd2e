@@ -138,6 +138,39 @@ each `<table>` and attach the useful ones to the Monster as structured data:
 A table classifier in `monster_parser` (keyed off each table's header row), optional
 structured fields on `Monster`, rendered as their own sheet sections.
 
+#### Phase A — implementation notes (start here)
+
+Tacit knowledge from the pre-v2 audit, so this doesn't get re-derived:
+
+- **The parser has no table boundaries today.** `_StatBlockHTML` concatenates *every*
+  `<table>` on the page into one flat `self.rows` list — there is no marker for where
+  one table ends and the next begins. So **step 1 of Phase A is structural**: make
+  `_StatBlockHTML` keep tables separate (e.g. `self.tables: list[list[row]]`, or push
+  a boundary sentinel), then classify each table. Everything downstream
+  (`_segment_groups`, `_group_to_monsters`, `_parse_compact_table`) currently assumes
+  the merged list — keep the stat-block path working off the *first* table(s) while
+  the classifier routes the trailing ones.
+- **Two regression tests will change on purpose.**
+  `test_trailing_wide_subtable_does_not_bleed_into_last_stat` and
+  `test_trailing_two_column_subtable_after_a_data_row_is_ignored` currently assert the
+  age/ability sub-tables are *ignored*. Phase A **retains** them — so update those to
+  assert the table is now *captured* (as `age_tiers`/etc.) **and still doesn't
+  contaminate XP** (`xp_value == "Variable"`). Don't just delete them; the
+  no-contamination half is the important invariant.
+- **Table shapes seen in the DB** (for the classifier's header match):
+  - *Age-progression* has a **two-row header** — row 1: `Body | Tail | | Breath |
+    Spells | | Treas. | XP`; row 2: `Age | Lgt. (') | Lgt. (') | AC | Weapon |
+    Wizard/Priest | MR | Type | Value`. Data rows have a non-empty first cell (`1`,
+    `2`, … or `1 Hatchling`, `2 Very Young`, …).
+  - *Psionics summary*: header `Level | Dis/Sci/Dev | Attack/Defense | Score | PSPs`,
+    one data row (the creature's psionic profile).
+  - *Per-attack damage* (Baatezu): header `Attack | Damage | Attack | Damage`.
+- **`parse_stat_block` runs 3× per pick** (see the parse-cache code-health item) — if
+  Phase A makes parsing heavier, do that cache first.
+- **Recon**: 73 importable pages have >1 table; enumerate them with a small
+  `HTMLParser` that counts `<table>` (see the audit script pattern), then dump each
+  extra table's first row to bucket the categories before coding the classifier.
+
 ### Phase B — Selectable HD / age scaling (flagship)
 
 Many monsters scale by Hit Dice or age; make that **interactive** instead of a static
