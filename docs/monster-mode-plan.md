@@ -184,7 +184,26 @@ Extend `roll20_export` to emit a monster stat block (with the selected tier's
 numbers), so an imported, enriched monster drops straight into Roll20, which handles
 initiative, HP and status at the table.
 
-### Code-health cleanups (deferred from the pre-v2 audit)
+## v3 — a dedicated Roll20 monster sheet
+
+v2's export reuses the full PC character sheet, which carries a lot a monster never
+needs (proficiencies, spell slots, encumbrance, wealth). v3 gives monsters their own
+lean layout:
+
+- **A "monster" toggle on the Roll20 sheet.** Add a setting to the campaign's
+  community 2e sheet (`roll20_sheet/`) that switches it into a **monster layout** —
+  showing only what a DM runs a monster from: name, AC (ascending), attack bonus,
+  HD/HP, attacks & damage, saves, special attacks/defenses, movement, morale, XP, and
+  the size-derived initiative — and hiding the PC-only sections.
+- **`monster_to_roll20(m)` in `roll20_export`.** The monster counterpart to
+  `character_to_roll20`: emit the clean intermediate JSON the import worker
+  (`import_addon.html`) maps onto the monster layout, with the setting flag set so an
+  import lands as a monster, not a half-empty PC. Pure and unit-tested, reusing the
+  same house-rule conversions (attack bonus, ascending AC) so it can't disagree with
+  the sheet. Carries the Phase B tier data (the selected HD/age) and the Phase A/C/D
+  enrichment (structured abilities, spell links) where the sheet has a home for it.
+
+## Code-health cleanups (deferred from the pre-v2 audit)
 
 Low-risk tid-ups noted while auditing the feature; none block v2, do them when the
 surrounding code is next touched:
