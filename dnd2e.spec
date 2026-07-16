@@ -46,6 +46,7 @@ a = Analysis(
         'session',
         'navigation',
         'monster',
+        'monster_parser',
         'monster_html',
         'monster_library',
         'proficiencies_html',

@@ -30,6 +30,7 @@ import char_rules as cr
 from charactermancer import Charactermancer
 from character_library import CharacterLibrary
 import monster
+import monster_parser
 import monster_html
 from monster_library import MonsterLibrary
 from rules_agent import AskWorker, ollama_status
@@ -1506,7 +1507,7 @@ class MainWindow(QMainWindow):
     def _monster_index(self):
         """The (families, standalone) MM index, parsed once and cached."""
         if self._mon_index is None:
-            self._mon_index = monster.importable_index(self.db)
+            self._mon_index = monster_parser.importable_index(self.db)
         return self._mon_index
 
     def _render_monster_sheet(self) -> bool:
@@ -1554,11 +1555,11 @@ class MainWindow(QMainWindow):
 
     def _render_variant_picker(self, page_url: str) -> bool:
         row = db.get_page(self.db, page_url)
-        monsters = (monster.parse_stat_block(row["content_html"], row["title"], page_url)
+        monsters = (monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
                     if row else [])
         if not monsters:
             return self._render_monster_picker()
-        group = monster._clean_title(row["title"])
+        group = monster_parser._clean_title(row["title"])
         self.content._view.setHtml(monster_html.generate_variant_picker(
             group, page_url, [m.name for m in monsters]))
         self._mon_status(f"{group} — choose a variant")
@@ -1606,7 +1607,7 @@ class MainWindow(QMainWindow):
         row = db.get_page(self.db, page_url)
         if not row:
             return
-        monsters = monster.parse_stat_block(row["content_html"], row["title"], page_url)
+        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
         if not monsters:
             return
         if len(monsters) == 1:
@@ -1620,7 +1621,7 @@ class MainWindow(QMainWindow):
         row = db.get_page(self.db, page_url)
         if not row:
             return
-        monsters = monster.parse_stat_block(row["content_html"], row["title"], page_url)
+        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
         try:
             self._mon = monsters[int(idx)]
         except (ValueError, IndexError):

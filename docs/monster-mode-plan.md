@@ -45,10 +45,16 @@ So import is a **parse job** (plain-Python, no `bs4` at runtime), like
 
 | Concern | Module | Qt-free? |
 |---|---|---|
-| Stat-block model + MM parser | `monster.py` | ✅ |
+| Stat-block model + house-rule derivations | `monster.py` | ✅ |
+| MM page parser + naming (`parse_stat_block`, `importable_index`) | `monster_parser.py` | ✅ |
 | Persistence (save/load to user DB) | `monster_library.py` | ✅ |
 | Sheet view (render + edit) | `monster_html.py` | ✅ |
 | Monster mode + MM import picker | `app.py` (thin) | Qt |
+
+The model (`monster.py`) and the parser (`monster_parser.py`) were split apart in
+the pre-v2 audit — the parser is the larger, fiddlier layer and absorbs the churn
+of new source formats, so keeping the model small and stable mirrors the
+`char_rules`/`character` split. `monster_parser` imports `Monster`, not the reverse.
 
 ## Phases (each ships green, logic-first)
 
@@ -120,6 +126,25 @@ Deliberately deferred; revisit once v1 is in use:
 - **Numeric HD/HP + a live encounter tracker** that consumes this model (initiative
   order, HP/AC/status tracking, inline attack/save rolls).
 - **Roll20 export for monsters.**
+
+### Code-health cleanups (deferred from the pre-v2 audit)
+
+Low-risk tid-ups noted while auditing the feature; none block v2, do them when the
+surrounding code is next touched:
+
+- **Extract image caching to a pure `monster_images.py`.** `app.py`'s
+  `_mon_image_url` / `_cache_image` are ~35 lines of *pure* logic (remote-URL and
+  cache-path building, data-URI encoding) with only the thread spawn needing Qt/IO.
+  Pull the pure part into a tested module, per the "extract Qt-light clusters"
+  direction in CLAUDE.md.
+- **Cache the last-parsed page.** Picking a multi-variant page parses it three times
+  (`_mon_pick` → `_render_variant_picker` → `_mon_pick_variant`). Harmless (pages are
+  small) but a one-entry parse cache keyed by page_url would remove the waste.
+- **Publish `clean_title`.** `app.py` reaches into `monster_parser._clean_title`
+  (private); expose it as a public helper if the boundary is worth firming up.
+- **Wire `Monster.initiative_override`.** The field is plumbed through the model and
+  persistence but nothing sets it yet — add a sheet control when the encounter
+  tracker needs a per-monster initiative override.
 
 ## Out of scope
 

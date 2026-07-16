@@ -1,4 +1,4 @@
-"""Tests for monster.py — the MM stat-block parser and its house-rule conversions.
+"""Tests for the monster model (monster.py) and its MM parser (monster_parser.py).
 
 Pure tests build synthetic HTML stat blocks and always run; the DB-backed tests
 parse the real Monstrous Manual pages and skip when dnd2e.db is absent (the
@@ -11,7 +11,9 @@ import pytest
 import db
 import char_rules as cr
 import monster
-from monster import Monster, parse_stat_block
+import monster_parser
+from monster import Monster
+from monster_parser import parse_stat_block
 
 RULES_DB = os.path.join(os.path.dirname(db.__file__), "dnd2e.db")
 needs_db = pytest.mark.skipif(not os.path.exists(RULES_DB), reason="rulebook DB not present")
@@ -20,7 +22,7 @@ ANKHEG = "MM/DD03797.htm"       # single monster
 BEAR = "MM/DD03805.htm"         # 4 variants, values on one line each
 CAT_GREAT = "MM/DD03818.htm"    # 5 variants with wrapped names and values
 
-LABELS = list(monster.FIELD_BY_LABEL)   # canonical order
+LABELS = list(monster_parser.FIELD_BY_LABEL)   # canonical order
 
 
 def _html(rows, variants=(), prose=""):
@@ -37,7 +39,7 @@ def _html(rows, variants=(), prose=""):
 
 def _full(**field_vals):
     """One-variant page with every label filled (default 'x', overridable by field)."""
-    rows = [(lab, [field_vals.get(monster.FIELD_BY_LABEL[lab], "x")]) for lab in LABELS]
+    rows = [(lab, [field_vals.get(monster_parser.FIELD_BY_LABEL[lab], "x")]) for lab in LABELS]
     return _html(rows)
 
 
@@ -53,7 +55,7 @@ def test_attack_bonus_is_the_base_value():
 
 
 def test_clean_prose_reflows_wraps_and_collapses_blank_runs():
-    from monster import _clean_prose
+    from monster_parser import _clean_prose
     assert _clean_prose("The beast\nis fierce.") == "The beast is fierce."   # <br> wraps -> one line
     assert _clean_prose("Para one.\n\n\n\n\nPara two.") == "Para one.\n\nPara two."  # table gap -> one break
     assert _clean_prose("It eats meat.\nIndex") == "It eats meat."           # footer 'Index' dropped
@@ -88,7 +90,7 @@ def test_char_rules_initiative_table_covers_every_size():
 # ── parsing (pure, synthetic HTML) ────────────────────────────────────────────
 
 def test_monster_name_prefixes_plain_groups_not_category_groups():
-    from monster import _monster_name
+    from monster_parser import _monster_name
     assert _monster_name("Black", "Bear") == "Black Bear"           # plain group -> prefix base
     assert _monster_name("Phase", "Spider") == "Phase Spider"
     assert _monster_name("Death Kiss", "Beholder and Beholder-kin I") == "Death Kiss"  # category -> as-is
@@ -99,7 +101,7 @@ def test_monster_name_prefixes_plain_groups_not_category_groups():
 
 
 def test_resolve_name_applies_curated_overrides():
-    from monster import _resolve_name
+    from monster_parser import _resolve_name
     # _ALONE page: a full-name variant the rule would wrongly prefix
     assert _resolve_name("MM/DD03896.htm", "Djinni", "Genie") == "Djinni"
     # base-noun page: an adjective variant the rule would wrongly leave bare
@@ -113,7 +115,7 @@ def test_resolve_name_applies_curated_overrides():
 
 
 def test_parses_a_single_monster_with_all_fields():
-    html = _html([(lab, ["v_" + monster.FIELD_BY_LABEL[lab]]) for lab in LABELS])
+    html = _html([(lab, ["v_" + monster_parser.FIELD_BY_LABEL[lab]]) for lab in LABELS])
     (m,) = parse_stat_block(html, title="Ankheg (Monstrous Manual)", source_page=ANKHEG)
     assert m.name == "Ankheg" and m.variant == "" and m.source_page == ANKHEG
     assert m.climate_terrain == "v_climate_terrain"
@@ -144,6 +146,64 @@ def test_stitches_wrapped_values_from_continuation_rows():
                           title="Cat, Great (Monstrous Manual)")
     assert ms[0].climate_terrain == "Warm plains and grasslands"
     assert ms[1].climate_terrain == "Tropical jungle"
+
+
+def test_dehyphenate_closes_soft_line_break_wraps():
+    from monster_parser import _dehyphenate
+    assert _dehyphenate("Ankylo- saurus") == "Ankylosaurus"    # hyphen + <br> wrap -> one word
+    assert _dehyphenate("Amphis- baena") == "Amphisbaena"
+    assert _dehyphenate("Beholder-kin") == "Beholder-kin"      # a real hyphen (no space) is kept
+
+
+def test_trailing_wide_subtable_does_not_bleed_into_last_stat():
+    # a dragon-shaped page: the stat block, then an age-progression sub-table whose
+    # header row has an empty first cell and *more* columns than the block. It must
+    # not append onto the last stat value (XP VALUE), which was the "Variable Body" bug.
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["2"]),
+            ("SIZE", ["G"]), ("XP VALUE", ["Variable"])]
+    html = _html(rows).replace(
+        "</TABLE>",
+        "<TR><TD></TD><TD>Body</TD><TD>Tail</TD><TD>Breath</TD></TR>"
+        "<TR><TD>Age</TD><TD>1-12</TD><TD>3-12</TD><TD>2d10</TD></TR></TABLE>")
+    (m,) = parse_stat_block(html, title="Dragon (Monstrous Manual)")
+    assert m.xp_value == "Variable"          # not "Variable Body"
+
+
+def test_trailing_two_column_subtable_after_a_data_row_is_ignored():
+    # a Deep-Dragon shape: an "Age / Ability" sub-table (only 2 columns) whose wrapped
+    # lines have empty first cells. The 'Wyrm' data row ends the stat block, so those
+    # continuations must not append onto XP VALUE.
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["2"]), ("XP VALUE", ["Variable"])]
+    html = _html(rows).replace(
+        "</TABLE>",
+        "<TR><TD>Age</TD><TD>Ability</TD></TR>"
+        "<TR><TD>Wyrm</TD><TD>repulsion 3</TD></TR>"
+        "<TR><TD></TD><TD>times/day</TD></TR></TABLE>")
+    (m,) = parse_stat_block(html, title="Dragon (Monstrous Manual)")
+    assert m.xp_value == "Variable"
+
+
+def test_compact_table_filters_spell_and_psionics_junk_rows():
+    from monster_parser import _parse_compact_table
+    rows = [["Bird", "AC", "HD", "THAC0"],
+            ["Blood Hawk", "7", "1+1", "19"],           # a real creature
+            ["Roll", "Spell", "Roll", "Spell"],         # a spell-table header (no digit in HD col)
+            ["1", "Audible glamer", "5", "Hypnotic"]]   # a spell row (name has no letter)
+    ms = _parse_compact_table(rows, "MM/DDbird.htm")
+    assert [m.name for m in ms] == ["Blood Hawk"]
+
+
+def test_compact_table_stitches_wrapped_name_but_not_a_caste_header():
+    from monster_parser import _parse_compact_table
+    rows = [["Fish", "AC", "HD", "THAC0"],
+            ["Catfish,", "7", "7 to 10", "13"],   # a creature whose name wrapped...
+            ["Giant", "", "", ""],                # ...its second line, right after the stat row
+            ["Praying", "5", "2 to 12", "19"],    # another creature
+            ["", "", "", "8 HD: 13"],             # an HD-conditional tail row
+            ["Termite", "", "", ""],              # a caste header — NOT a wrapped name
+            ["King", "5", "6+6", "15"]]           # the caste's own stat row
+    ms = _parse_compact_table(rows, "MM/DDfish.htm")
+    assert [m.name for m in ms] == ["Catfish, Giant", "Praying", "King"]
 
 
 def test_normalizes_ocr_and_spacing_label_variants():
@@ -270,7 +330,7 @@ def test_parse_real_mammal_compact_table(conn):
 
 @needs_db
 def test_importable_index_groups_families(conn):
-    families, standalone = monster.importable_index(conn)
+    families, standalone = monster_parser.importable_index(conn)
     by_name = {f[0]: f for f in families}
     assert "Dragon" in by_name and "Golem" in by_name and "Lycanthrope" in by_name
     _name, general_url, members = by_name["Dragon"]
@@ -283,7 +343,7 @@ def test_importable_index_groups_families(conn):
 
 @needs_db
 def test_importable_pages_excludes_category_pages(conn):
-    urls = {u for u, _, _ in monster.importable_pages(conn)}
+    urls = {u for u, _, _ in monster_parser.importable_pages(conn)}
     assert "MM/DD03797.htm" in urls               # Ankheg — a real monster
     assert "MM/DD03794.htm" not in urls           # "The Monsters" (front matter)
     assert "MM/DD04100.htm" not in urls           # blank-form instructions

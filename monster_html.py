@@ -237,8 +237,8 @@ def generate_import_picker(families, standalone, saved=()) -> str:
     """The monster landing: saved monsters to reopen, and the Monstrous Manual to
     import from (client-side filtered). Families (Dragon, Golem, …) collapse to one
     entry that opens a sub-picker; ``standalone`` monsters import directly.
-      families   = [(family, general_url|None, [(page_url, subtype), ...]), ...]
-      standalone = [(page_url, name), ...]     saved = [(id, name, source_page), ...]"""
+      families   = [(family, general_url|None, [(page_url, subtype, count), ...]), ...]
+      standalone = [(page_url, name, count), ...]  saved = [(id, name, source_page), ...]"""
     saved_html = ""
     if saved:
         srows = "".join(
@@ -284,7 +284,7 @@ def generate_import_picker(families, standalone, saved=()) -> str:
 
 def generate_family_picker(family, general_url, members) -> str:
     """A family sub-picker (Dragon → its types), with the '-- General' lore page — if
-    any — linked at the top. ``members`` is [(page_url, subtype), ...]."""
+    any — linked at the top. ``members`` is [(page_url, subtype, count), ...]."""
     general = ""
     if general_url:
         general = (f'<div class="pick-list"><a class="pick-item general" '
@@ -324,7 +324,6 @@ def _document(title, body, extra_script="") -> str:
 <body>
 {body}
 <script>
-  function mon(path) {{ if (path.endsWith('/')) return; window.location.href = 'dnd:///mon/' + path; }}
   function monText(verb, v) {{ window.location.href = 'dnd:///mon/' + verb + '/' + encodeURIComponent(v); }}{extra_script}
 </script>
 </body></html>"""

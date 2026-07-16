@@ -50,7 +50,7 @@ def page_meta(conn, page_url):
 
 def list_monster_pages(conn):
     """(page_url, title) for every Monstrous Manual page that might carry a stat
-    block — the candidates the parser then confirms (see monster.importable_pages).
+    block — the candidates the parser then confirms (see monster_parser.importable_pages).
     Standard pages carry the 'ARMOR CLASS' label; the compact summary tables (Mammal,
     Bird, …) instead carry a 'THAC0' column, so match either. The blank stat-form
     template is excluded by its 'copy this form' boilerplate."""
