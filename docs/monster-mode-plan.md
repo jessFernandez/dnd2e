@@ -1,7 +1,9 @@
 # Monster mode — plan
 
-**Status:** complete. Phases 1 (pure core), 2 (persistence), 3 (view) and 4 (UI
-wiring) all done. v2 enhancements (below) remain as future work.
+**Status:** v1 complete and merged (PR #11). Phases 1 (pure core), 2 (persistence),
+3 (view) and 4 (UI wiring) all done, then a creature-by-creature data audit + a
+pre-v2 code-health pass (model/parser split). v2 is **data enrichment** (below);
+the live encounter tracker is v3.
 
 ## Goal
 
@@ -106,26 +108,66 @@ sheet (phase 3) must render **Combat as first-class functional text beside the
 stat block**, not as flavor. That gives a fully runnable monster without a brittle
 parse of the prose.
 
-## v2 — later enhancements
+## v2 — data enrichment
 
-Deliberately deferred; revisit once v1 is in use:
+v1 gives a **complete, accurate, editable** monster (audited creature-by-creature:
+634 creatures, curated naming, house-rule numbers). v2 makes each sheet **richer and
+more runnable** by mining the data v1 stores verbatim — *before* building the live
+encounter tracker (now v3) on top of it. Sequenced highest-ROI / lowest-risk first;
+each phase ships green, logic in a pure module, parser churn stays in
+`monster_parser.py`, and any new structured data hangs off the `Monster` model.
 
-- **Structured special abilities.** Parse each special attack/defense into
-  machine-usable fields (name · save · damage · range · frequency) so an encounter
-  tracker can auto-roll saves and apply effects. Hard NLP over inconsistent prose;
-  only pays off with automation, not for reading.
-- **Spell cross-linking.** Many monsters list spell-like abilities as bare spell
-  names (Baatezu: "animate dead, charm person, …"). Detect those and link them to
-  the existing spell compendium (`dnd://` links).
-- **Recognize the extra prose sub-sections.** Dragon age-tiers ("Juvenile:",
-  "Adult:", …) and "Psionics Summary:" currently fold into the nearest captured
-  section; promote them to first-class fields so those abilities aren't buried.
-- **Refine HD-conditional conversions.** THAC0/XP strings like "3+3 HD: 17 4+4 HD:
-  15" garble the derived attack bonus (see phase 1 limitation) — convert only the
-  true THAC0 numbers, not the HD notation.
-- **Numeric HD/HP + a live encounter tracker** that consumes this model (initiative
-  order, HP/AC/status tracking, inline attack/save rolls).
-- **Roll20 export for monsters.**
+### Phase A — Spell cross-linking (do first)
+
+Highest ROI, lowest risk: it reuses the **`spells` table (875 rows, name·save·
+damage·range·level·caster)** and the `dnd://` nav we already have. Many monsters name
+spell-like abilities as bare spell names — in `special_attacks`/`special_defenses`,
+in the Combat prose, and (dragons) in the age-table **Wizard/Priest** columns we now
+retain (Phase B). Build a spell-name index once, longest-match it against those
+fields, and render the hits as `dnd://spells#<anchor>` links (add per-spell anchors
+to `spellsscreen_html`). Detection is a pure `monster_spells.py`, tested against the
+known 875 names; the view just renders the tagged spans. No brittle NLP — a spell is
+either in the compendium or it isn't.
+
+### Phase B — Promote the dropped sub-sections
+
+The parser already *builds* the dragon **age-progression table** (Age → Body/Tail
+length, AC, breath, Wizard/Priest spells, MR, treasure, XP) and the **Psionics
+Summary**, then discards them (`_group_to_monsters` treats them as trailing
+sub-tables — see the "Variable Body" fix). Retain them instead: model an optional
+`age_tiers` / `psionics` structure on `Monster`, parse in `monster_parser`, and
+render as their own sheet sections. For dragons this is most of what makes them
+dragons; it also feeds Phase A (the spell columns) and v3 (per-tier HD/AC).
+
+### Phase C — Structured special abilities (staged)
+
+The hard, inconsistent-prose part — stage it so value lands early:
+
+- **C1 — detect & tag (reliable).** Recognize saving throws ("save vs. poison",
+  "-2 penalty"), damage dice, and a fixed vocabulary of ability *types* (breath
+  weapon, gaze, poison, level drain, regeneration, paralysis) in the Combat prose,
+  and surface them as chips on the Combat panel. Pattern-matching, not full NLP.
+- **C2 — structure (stretch).** Where the pattern is clean, promote to fields
+  (name · save · damage · range · frequency) an auto-roller can consume. This is the
+  brittle NLP the original plan flagged; only pursue it for the v3 tracker, and only
+  where reliable — the verbatim Combat prose remains the source of truth.
+
+### Supporting refinement
+
+- **Refine HD-conditional derivations.** THAC0 strings like "3+3 HD: 17 4+4 HD: 15"
+  still yield only the base attack bonus (v1 stores the verbatim field). With Phase B
+  retaining per-tier data, derive the right attack bonus per HD/age instead of the
+  low-end approximation.
+
+## v3 — the live encounter tracker
+
+The flagship, deliberately downstream of enrichment so it consumes structured data
+rather than re-deriving it: add monsters + PCs to an encounter, roll initiative
+(size speed-factor + weapon speed), roll **numeric HP from HD**, track HP/AC/status,
+and make inline **house-rule attack/save rolls** (attack bonus vs ascending AC,
+reusing `calculator.py`). Needs numeric HD→HP rolling and benefits from every v2
+phase (spell links to cast, structured abilities to auto-apply, per-tier stats).
+**Roll20 monster export** rides along here (extend `roll20_export`).
 
 ### Code-health cleanups (deferred from the pre-v2 audit)
 
@@ -146,7 +188,17 @@ surrounding code is next touched:
   persistence but nothing sets it yet — add a sheet control when the encounter
   tracker needs a per-monster initiative override.
 
+## Known limitations / loose ends (from the audit)
+
+Small, recorded so they're not forgotten; none block v2:
+
+- **Two pages don't parse:** `Human` and `Mammal-- Small` (messier source formats
+  than the compact tables we handle). Currently omitted from the picker.
+- **Termite castes** import as bare `King`/`Queen`/`Soldier`/`Worker` — the
+  "Termite, Giant Harvester" caste header is dropped rather than prefixed onto them
+  (dropping was the safe fix vs. mis-merging). Cosmetic.
+
 ## Out of scope
 
-- Re-parsing the ~7 generic category pages (Dragon-- General, etc.) — the picker
-  just omits them.
+- Re-parsing the generic category pages (Dragon-- General, "The Monsters", the blank
+  form, etc.) — they carry no stat block; the picker just omits them.
