@@ -2,8 +2,9 @@
 
 **Status:** v1 complete and merged (PR #11). Phases 1 (pure core), 2 (persistence),
 3 (view) and 4 (UI wiring) all done, then a creature-by-creature data audit + a
-pre-v2 code-health pass (model/parser split). v2 is **data enrichment** (below);
-the live encounter tracker is v3.
+pre-v2 code-health pass (model/parser split). v2 is **deeper monster data** (below):
+parse the discarded tables, mine the prose, and make HD/age scaling interactive.
+No in-app encounter tracker — Roll20 runs the encounter.
 
 ## Goal
 
@@ -108,66 +109,80 @@ sheet (phase 3) must render **Combat as first-class functional text beside the
 stat block**, not as flavor. That gives a fully runnable monster without a brittle
 parse of the prose.
 
-## v2 — data enrichment
+## v2 — deeper monster data
 
-v1 gives a **complete, accurate, editable** monster (audited creature-by-creature:
-634 creatures, curated naming, house-rule numbers). v2 makes each sheet **richer and
-more runnable** by mining the data v1 stores verbatim — *before* building the live
-encounter tracker (now v3) on top of it. Sequenced highest-ROI / lowest-risk first;
-each phase ships green, logic in a pure module, parser churn stays in
-`monster_parser.py`, and any new structured data hangs off the `Monster` model.
+v1 gives a **complete, accurate, editable** stat block (audited creature-by-creature:
+634 creatures, curated naming, house-rule numbers). v2 pulls in everything the MM
+page carries that v1 leaves behind — the **embedded tables the parser discards**, the
+**mechanics and extra creatures buried in prose** — and makes **HD/age-scaling
+monsters interactive**. There is no live encounter tracker: **Roll20 runs the
+encounter**; v2's job is to make each imported monster as complete as its MM page and
+export-ready. Phases are sequenced by dependency (A feeds B); each ships green, logic
+in a pure module, parser churn in `monster_parser.py`, new structured data on the
+`Monster` model.
 
-### Phase A — Spell cross-linking (do first)
+### Phase A — Parse & categorize every embedded table
 
-Highest ROI, lowest risk: it reuses the **`spells` table (875 rows, name·save·
-damage·range·level·caster)** and the `dnd://` nav we already have. Many monsters name
-spell-like abilities as bare spell names — in `special_attacks`/`special_defenses`,
-in the Combat prose, and (dragons) in the age-table **Wizard/Priest** columns we now
-retain (Phase B). Build a spell-name index once, longest-match it against those
-fields, and render the hits as `dnd://spells#<anchor>` links (add per-spell anchors
-to `spellsscreen_html`). Detection is a pure `monster_spells.py`, tested against the
-known 875 names; the view just renders the tagged spans. No brittle NLP — a spell is
-either in the compendium or it isn't.
+**73 importable pages carry tables beyond the stat block** that the parser currently
+drops (it stops at the first trailing sub-table — the "Variable Body" fix). Classify
+each `<table>` and attach the useful ones to the Monster as structured data:
 
-### Phase B — Promote the dropped sub-sections
+- **Age-progression** (every dragon: Age → HD/size, AC, breath weapon,
+  Wizard/Priest spells, MR, treasure, XP) — the scaling data Phase B consumes.
+- **Psionics summary** (Level · Disciplines/Sciences/Devotions · Attack/Defense
+  modes · Power Score · PSPs) — Githyanki, Githzerai, Shedu, gem dragons, …
+- **Per-attack damage breakdown** (Baatezu: Attack | Damage rows).
+- **Random / advancement tables** (encounter or class-level rolls) — capture or
+  skip per category; lowest value.
 
-The parser already *builds* the dragon **age-progression table** (Age → Body/Tail
-length, AC, breath, Wizard/Priest spells, MR, treasure, XP) and the **Psionics
-Summary**, then discards them (`_group_to_monsters` treats them as trailing
-sub-tables — see the "Variable Body" fix). Retain them instead: model an optional
-`age_tiers` / `psionics` structure on `Monster`, parse in `monster_parser`, and
-render as their own sheet sections. For dragons this is most of what makes them
-dragons; it also feeds Phase A (the spell columns) and v3 (per-tier HD/AC).
+A table classifier in `monster_parser` (keyed off each table's header row), optional
+structured fields on `Monster`, rendered as their own sheet sections.
 
-### Phase C — Structured special abilities (staged)
+### Phase B — Selectable HD / age scaling (flagship)
 
-The hard, inconsistent-prose part — stage it so value lands early:
+Many monsters scale by Hit Dice or age; make that **interactive** instead of a static
+low-end value. Model a monster's **tiers** — each HD value or named age category
+carrying its own AC, attack bonus, HD/HP, damage, breath, XP — and put a **selector**
+(HD or age dropdown) on the sheet that recomputes the house-rule combat strip and
+stat block live for the chosen tier. Sources:
 
-- **C1 — detect & tag (reliable).** Recognize saving throws ("save vs. poison",
-  "-2 penalty"), damage dice, and a fixed vocabulary of ability *types* (breath
-  weapon, gaze, poison, level drain, regeneration, paralysis) in the Combat prose,
-  and surface them as chips on the Combat panel. Pattern-matching, not full NLP.
-- **C2 — structure (stretch).** Where the pattern is clean, promote to fields
-  (name · save · damage · range · frequency) an auto-roller can consume. This is the
-  brittle NLP the original plan flagged; only pursue it for the v3 tracker, and only
-  where reliable — the verbatim Combat prose remains the source of truth.
+- dragon age tables (Phase A);
+- HD-conditional strings already in the data — compact tables ("8 HD: 13 / 9-10 HD:
+  11") and standard blocks ("3+3 HD: 17 4+4 HD: 15"), parsed into tiers.
 
-### Supporting refinement
+This subsumes the old "refine HD-conditional derivations": with tiers, the attack
+bonus is right per HD/age rather than the base-only approximation v1 shows.
 
-- **Refine HD-conditional derivations.** THAC0 strings like "3+3 HD: 17 4+4 HD: 15"
-  still yield only the base attack bonus (v1 stores the verbatim field). With Phase B
-  retaining per-tier data, derive the right attack bonus per HD/age instead of the
-  low-end approximation.
+### Phase C — Close prose examination → variants & abilities
 
-## v3 — the live encounter tracker
+A page-by-page read of the prose (like the v1 data audit) to surface what the stat
+block omits — some of this is manual triage, some parser work:
 
-The flagship, deliberately downstream of enrichment so it consumes structured data
-rather than re-deriving it: add monsters + PCs to an encounter, roll initiative
-(size speed-factor + weapon speed), roll **numeric HP from HD**, track HP/AC/status,
-and make inline **house-rule attack/save rolls** (attack bonus vs ascending AC,
-reusing `calculator.py`). Needs numeric HD→HP rolling and benefits from every v2
-phase (spell links to cast, structured abilities to auto-apply, per-tier stats).
-**Roll20 monster export** rides along here (extend `roll20_export`).
+- **Prose-only variants** — creatures described only in text, with no stat column
+  (the Baatezu page's stat block has 4, but its prose names gelugon, lemure,
+  nupperibo, spinagon). Promote them to importable variants where the prose carries
+  enough stats; link-note them where it doesn't.
+- **Special attacks/defenses buried in Combat prose** — tag saves ("save vs.
+  poison", "-2 penalty"), damage dice, and a fixed vocabulary of ability *types*
+  (breath, gaze, poison, level drain, regeneration, paralysis) as chips on the Combat
+  panel; promote to structured fields (name · save · damage · range · frequency)
+  where the pattern is clean. The verbatim prose stays the source of truth.
+
+### Phase D — Spell cross-linking
+
+Reuse the **`spells` table (875 rows, name·save·damage·range·level·caster)** and the
+`dnd://` nav. Monsters name spell-like abilities as bare spell names — in the ability
+fields, the Combat prose, and the dragon **Wizard/Priest** columns (Phase A). A pure
+`monster_spells.py` longest-matches those against the compendium and the view renders
+hits as `dnd://spells#<anchor>` links (add per-spell anchors to `spellsscreen_html`).
+Reliable — a spell is in the compendium or it isn't — and high value for casters like
+the Baatezu (animate dead, charm person, suggestion, teleport without error, …).
+
+### Deliverable — Roll20 monster export
+
+Extend `roll20_export` to emit a monster stat block (with the selected tier's
+numbers), so an imported, enriched monster drops straight into Roll20, which handles
+initiative, HP and status at the table.
 
 ### Code-health cleanups (deferred from the pre-v2 audit)
 
@@ -185,8 +200,8 @@ surrounding code is next touched:
 - **Publish `clean_title`.** `app.py` reaches into `monster_parser._clean_title`
   (private); expose it as a public helper if the boundary is worth firming up.
 - **Wire `Monster.initiative_override`.** The field is plumbed through the model and
-  persistence but nothing sets it yet — add a sheet control when the encounter
-  tracker needs a per-monster initiative override.
+  persistence but nothing sets it yet — add a sheet control if a DM wants to override
+  the size-derived initiative speed factor (e.g. for the Roll20 export).
 
 ## Known limitations / loose ends (from the audit)
 
