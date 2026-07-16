@@ -4,7 +4,7 @@ policy (pane_action), and link routing (route_link)."""
 from navigation import (
     History, FULLWIDTH_SCREENS, link_to_destination, takes_full_width,
     pane_action, Trigger, Pane,
-    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, NewTab, Navigate,
+    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
 )
 
 
@@ -26,6 +26,13 @@ def test_takes_full_width_screens_vs_book_pages():
     assert takes_full_width("proficiencies#thieving")     # matched by prefix
     for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm", ""):
         assert not takes_full_width(dest), dest
+
+
+def test_takes_full_width_covers_monster_subviews():
+    assert takes_full_width("monster")                       # the picker
+    assert takes_full_width("monster-sheet")                 # the sheet
+    assert takes_full_width("monster-variant/MM/DD03805.htm")  # the variant chooser
+    assert not takes_full_width("MM/DD03797.htm")            # a book page still isn't
 
 
 # ── browse-pane policy ────────────────────────────────────────────────────────
@@ -71,6 +78,12 @@ def test_route_cm_action_is_passed_through_verbatim():
     # builder payloads are not URL-decoded — they reach _cm_action raw
     assert _route("cm/set-race/Elf") == CmAction("set-race/Elf")
     assert _route("cm/pick%20me") == CmAction("pick%20me")
+
+
+def test_route_mon_action_is_passed_through_verbatim():
+    assert _route("mon/save") == MonAction("save")
+    assert _route("mon/pick/MM/DD03797.htm") == MonAction("pick/MM/DD03797.htm")
+    assert _route("mon/set/climate_terrain/Any%20land") == MonAction("set/climate_terrain/Any%20land")
 
 
 def test_route_newtab_resolves_the_inner_destination():

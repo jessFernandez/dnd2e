@@ -21,7 +21,7 @@ import toc
 import toc_html
 from navigation import (
     History, link_to_destination, pane_action, Trigger, Pane,
-    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, NewTab, Navigate,
+    route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
 )
 import askscreen_html
 import charactermancer_html
@@ -29,6 +29,10 @@ import proficiencies_html
 import char_rules as cr
 from charactermancer import Charactermancer
 from character_library import CharacterLibrary
+import monster
+import monster_parser
+import monster_html
+from monster_library import MonsterLibrary
 from rules_agent import AskWorker, ollama_status
 from ask_controller import Conversation, resolve_model, page_state
 import session
@@ -655,6 +659,10 @@ class MainWindow(QMainWindow):
         self._all_spells = None             # lazily-loaded spell list for the builder
         self._cm = None                     # in-progress Charactermancer build (window-level)
         self._char_library = CharacterLibrary(self.user_db)   # save/load/delete for builds
+        self._mon = None                    # in-progress monster sheet (window-level)
+        self._mon_saved_id = None           # its saved-row id, or None (caller-held)
+        self._mon_library = MonsterLibrary(self.user_db)      # save/load/delete for monsters
+        self._mon_index = None              # cached (families, standalone) MM index (parsed once)
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -943,6 +951,7 @@ class MainWindow(QMainWindow):
         layout.addSpacing(14)
         # Build a character
         layout.addWidget(rail_btn("🧙", "Character Builder", self._show_charactermancer))
+        layout.addWidget(rail_btn("🐉", "Monsters", self._show_monster))
         layout.addSpacing(14)
         # Assistant
         layout.addWidget(rail_btn("💬", "Jarvis", self._show_ask))
@@ -1261,6 +1270,8 @@ class MainWindow(QMainWindow):
                 self._ask_stop()
             case CmAction(payload):
                 self._cm_action(payload)
+            case MonAction(payload):
+                self._mon_action(payload)
             case NewTab(dest):
                 self._new_tab(show_splash=False)   # opens and switches to the new tab
                 self._reveal_nav_for(dest)
@@ -1302,6 +1313,14 @@ class MainWindow(QMainWindow):
             return self._render_spells()
         if dest == "charactermancer":
             return self._render_charactermancer()
+        if dest == "monster":
+            return self._render_monster_picker()
+        if dest == "monster-sheet":
+            return self._render_monster_sheet()
+        if dest.startswith("monster-family/"):
+            return self._render_family_picker(dest[len("monster-family/"):])
+        if dest.startswith("monster-variant/"):
+            return self._render_variant_picker(dest[len("monster-variant/"):])
         if dest == "proficiencies" or dest.startswith("proficiencies#"):
             frag = dest.split("#", 1)[1] if "#" in dest else ""
             return self._render_proficiencies(frag)
@@ -1459,6 +1478,173 @@ class MainWindow(QMainWindow):
         if deleted is not None and self._cm and self._cm.saved_id == deleted:
             self._cm.saved_id = None
 
+    # ── Monster sheet (DM monster mode) ──────────────────────────────────────
+    #
+    # Three destinations give the mini-app real Back/Forward: "monster" (the
+    # import + saved picker), "monster-sheet" (the current sheet, self._mon), and
+    # "monster-variant/<page>" (the variant chooser). Picks and loads _navigate to
+    # the sheet, so Back returns to the picker; field edits mutate self._mon in
+    # place (no history, no re-render) so focus and scroll survive.
+
+    def _render_monster_picker(self) -> bool:
+        families, standalone = self._monster_index()
+        self.content._view.setHtml(
+            monster_html.generate_import_picker(families, standalone, self._mon_library.all()))
+        self._mon_status("Import from the Monstrous Manual")
+        return True
+
+    def _render_family_picker(self, family: str) -> bool:
+        families, _ = self._monster_index()
+        match = next((f for f in families if f[0] == family), None)
+        if match is None:
+            return self._render_monster_picker()
+        name, general_url, members = match
+        self.content._view.setHtml(
+            monster_html.generate_family_picker(name, general_url, members))
+        self._mon_status(name)
+        return True
+
+    def _monster_index(self):
+        """The (families, standalone) MM index, parsed once and cached."""
+        if self._mon_index is None:
+            self._mon_index = monster_parser.importable_index(self.db)
+        return self._mon_index
+
+    def _render_monster_sheet(self) -> bool:
+        m = self._mon if self._mon is not None else monster.Monster()
+        self.content._view.setHtml(
+            monster_html.generate(m, self._mon_saved_id, self._mon_image_url(m)))
+        self._mon_status(m.name or "Monster")
+        return True
+
+    def _mon_image_url(self, m) -> str:
+        """A monster's MM illustration for the sheet. Once cached locally it's served
+        as a data URI (loads offline and instantly, no webview origin issues); the
+        first time it falls back to the remote URL (BASE_URL + the page's folder +
+        filename, same as the book pages) and caches a copy in the background. '' when
+        the page had no image."""
+        if not (m.image and "/" in m.source_page):
+            return ""
+        folder = m.source_page.rsplit("/", 1)[0]
+        remote = f"{BASE_URL}{folder}/{m.image}"
+        cache_path = _user_data_dir() / "images" / folder / m.image
+        if cache_path.exists():
+            try:
+                import base64, mimetypes
+                mime = mimetypes.guess_type(m.image)[0] or "image/gif"
+                return f"data:{mime};base64," + base64.b64encode(cache_path.read_bytes()).decode()
+            except Exception:
+                pass
+        self._cache_image(remote, cache_path)
+        return remote
+
+    def _cache_image(self, url: str, path):
+        """Download a monster illustration into the local cache in a background
+        thread, so it's available offline next time. Fire-and-forget; ignore errors."""
+        import threading, urllib.request
+
+        def fetch():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with urllib.request.urlopen(url, timeout=10) as resp:
+                    data = resp.read()
+                path.write_bytes(data)
+            except Exception:
+                pass
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _render_variant_picker(self, page_url: str) -> bool:
+        row = db.get_page(self.db, page_url)
+        monsters = (monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
+                    if row else [])
+        if not monsters:
+            return self._render_monster_picker()
+        group = monster_parser._clean_title(row["title"])
+        self.content._view.setHtml(monster_html.generate_variant_picker(
+            group, page_url, [m.name for m in monsters]))
+        self._mon_status(f"{group} — choose a variant")
+        return True
+
+    def _mon_status(self, subtitle: str):
+        self.current_page_url = None
+        self.bookmark_btn.setEnabled(False)
+        self._set_tab_title("Monsters")
+        self.status.showMessage(f"  Monsters  ·  {subtitle}")
+
+    def _mon_action(self, path: str):
+        """Apply a mon/ link action. Field edits mutate self._mon in place (no
+        re-render); navigations push history so Back works."""
+        if path.startswith("set/"):
+            self._mon_set(path[len("set/"):])
+        elif path == "import":
+            self._navigate("monster")
+        elif path.startswith("family/"):
+            self._navigate("monster-family/" + path[len("family/"):])
+        elif path == "new":
+            self._mon, self._mon_saved_id = monster.Monster(), None
+            self._navigate("monster-sheet")
+        elif path == "save":
+            self._mon_save()
+            self._render_monster_sheet()          # in place: refresh Save label + tiles
+        elif path.startswith("pick/"):
+            self._mon_pick(path[len("pick/"):])
+        elif path.startswith("pickvar/"):
+            self._mon_pick_variant(path[len("pickvar/"):])
+        elif path.startswith("load/"):
+            self._mon_load(path[len("load/"):])
+        elif path.startswith("delete/"):
+            self._mon_delete(path[len("delete/"):])
+
+    def _mon_set(self, rest: str):
+        """Store an edited field on the current monster (AC/THAC0 convert back from
+        their house-rule display form)."""
+        field, _, raw = rest.partition("/")
+        if self._mon is not None and field in monster.EDITABLE_FIELDS:
+            setattr(self._mon, field, monster.house_rule_to_raw(field, unquote(raw)))
+
+    def _mon_pick(self, page_url: str):
+        """Import an MM page: a single creature opens the sheet, else the variant chooser."""
+        row = db.get_page(self.db, page_url)
+        if not row:
+            return
+        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
+        if not monsters:
+            return
+        if len(monsters) == 1:
+            self._mon, self._mon_saved_id = monsters[0], None
+            self._navigate("monster-sheet")
+        else:
+            self._navigate("monster-variant/" + page_url)
+
+    def _mon_pick_variant(self, rest: str):
+        page_url, _, idx = rest.rpartition("/")
+        row = db.get_page(self.db, page_url)
+        if not row:
+            return
+        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
+        try:
+            self._mon = monsters[int(idx)]
+        except (ValueError, IndexError):
+            return
+        self._mon_saved_id = None
+        self._navigate("monster-sheet")
+
+    def _mon_save(self):
+        if self._mon is not None:
+            self._mon_saved_id = self._mon_library.save(self._mon, self._mon_saved_id)
+
+    def _mon_load(self, mid: str):
+        m = self._mon_library.load(mid)
+        if m is not None:
+            self._mon, self._mon_saved_id = m, int(mid)
+            self._navigate("monster-sheet")
+
+    def _mon_delete(self, mid: str):
+        deleted = self._mon_library.delete(mid)
+        if deleted is not None and self._mon_saved_id == deleted:
+            self._mon_saved_id = None
+        self._render_monster_picker()             # stay on the picker home
+
     def _render_toc(self, book_code: str) -> bool:
         chapters = self._book_chapters.get(book_code, [])
         html     = self._generate_toc_html(book_code, chapters)
@@ -1475,6 +1661,7 @@ class MainWindow(QMainWindow):
     def _show_actions(self):  self._navigate("actions")
     def _show_spells(self):   self._navigate("spells")
     def _show_charactermancer(self): self._navigate("charactermancer")
+    def _show_monster(self):  self._navigate("monster")
     def _show_ask(self):      self._navigate("ask")
     def _show_toc(self, book_code: str): self._navigate("toc:" + book_code)
 
