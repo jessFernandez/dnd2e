@@ -16,7 +16,7 @@ layer, kept separate so this model stays small and stable — the char_rules/cha
 split). Persistence lives in monster_library.py; the sheet view in monster_html.py.
 """
 import re
-from dataclasses import dataclass, asdict, fields
+from dataclasses import dataclass, asdict, field, fields
 
 import char_rules as cr
 
@@ -60,8 +60,29 @@ class Monster:
     habitat_society: str = ""
     ecology: str = ""
 
+    #: Breath-weapon damage for the selected dragon age tier (Phase B) — empty on the
+    #: base stat block; set by monster_tiers from the age table's Breath column.
+    breath_weapon: str = ""
+
     #: Editable initiative speed factor; None means "derive from size".
     initiative_override: "int | None" = None
+
+    #: Selected HD/age scaling tier (index into monster_tiers.tiers(self)); None means
+    #: "show the base stat block as written". Set by the sheet's tier selector
+    #: (Phase B), persisted with the monster.
+    selected_tier: "int | None" = None
+
+    #: Creatures the MM page describes in prose only — no stat column of their own
+    #: (the Archlich on the Lich page, the Kapoacinth on the Gargoyle page). Each is a
+    #: plain {name, text} dict (Phase C), attached to every creature on the page.
+    related_creatures: list = field(default_factory=list)
+
+    #: Enrichment tables the MM page carries past the stat block (dragon age
+    #: progression, psionics summaries, per-attack damage), classified by
+    #: monster_parser (Phase A). Each is a plain {kind, header_rows, rows} dict so it
+    #: roundtrips through to_dict/from_dict; Phase B's tier selector reads the
+    #: ``age`` ones.
+    extra_tables: list = field(default_factory=list)
 
     # ── house-rule derived values (via char_rules) ────────────────────────────
 
@@ -102,6 +123,28 @@ class Monster:
 
 # ── conversions ───────────────────────────────────────────────────────────────
 
+_RANGE = re.compile(r"(\d+)\s*-\s*(\d+)")
+
+
+def damage_to_dice(text: str, terse: bool = False) -> str:
+    """MM damage ranges rewritten as dice: '3-18 (crush)+1-4 (acid)' ->
+    '3d6 (crush)+1d4 (acid)'. A range a-b becomes ``a`` dice of d(b/a) when that
+    divides evenly (min a, max b); anything that doesn't — '2-5' — is left alone, as is
+    text that is already dice.
+
+    ``terse`` writes a single die the way the sheet displays it ('d4'), against the
+    canonical form Roll20 needs to roll it ('1d4'). One rule, two renderings: the sheet
+    and the Roll20 export must not disagree about what a monster's damage is (the
+    char_rules re-export discipline, applied to the MM's own notation)."""
+    def repl(m):
+        a, b = int(m.group(1)), int(m.group(2))
+        if a >= 1 and b > a and b % a == 0 and (b // a) >= 2:
+            die = b // a
+            return f"d{die}" if (terse and a == 1) else f"{a}d{die}"
+        return m.group(0)
+    return _RANGE.sub(repl, text or "")
+
+
 def _map_numbers(text: str, fn, signed: bool = False) -> str:
     """Apply ``fn`` to every integer in ``text``, leaving the rest intact. Unsigned
     by default so a THAC0 range like '17-13' reads the hyphen as a separator; pass
@@ -115,7 +158,29 @@ def _map_numbers(text: str, fn, signed: bool = False) -> str:
 #: Monster fields the sheet lets the DM edit (everything textual; not the id-like
 #: source_page/variant or the numeric initiative override).
 EDITABLE_FIELDS = frozenset(
-    {f.name for f in fields(Monster)} - {"source_page", "variant", "image", "initiative_override"})
+    {f.name for f in fields(Monster)}
+    - {"source_page", "variant", "image", "initiative_override", "extra_tables",
+       "selected_tier", "breath_weapon", "related_creatures"})
+
+
+#: A THAC0 the sheet can safely show (and take back) as an attack bonus: a single
+#: number. Anything richer — a range ('17-13'), or an HD/hp-conditional list
+#: ('45-49 hp: 11 50-59 hp: 9 …') — collapses to its base value on the way out and
+#: would overwrite the whole field on the way back in.
+_BARE_NUMBER = re.compile(r"^\s*-?\d+\s*$")
+
+
+def house_rule_round_trips(field: str, value: str) -> bool:
+    """Whether ``field``'s house-rule display can be edited without losing what the
+    MM wrote. AC always can — ascending_ac() maps *every* number in place, so it is
+    its own inverse. THAC0 only can when it's a bare number: attack_bonus() reports
+    the base value alone, so writing that back would replace a range or a conditional
+    list ('3+3 HD: 17 4+4 HD: 15') with a single number — silently destroying both the
+    source text and the tiers monster_tiers derives from it. Such a field is shown raw
+    and read-only instead, with the derived bonus beside it."""
+    if field == "thac0":
+        return bool(_BARE_NUMBER.match(value or ""))
+    return True
 
 
 def house_rule_to_raw(field: str, value: str) -> str:

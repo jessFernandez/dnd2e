@@ -5,6 +5,8 @@ from navigation import (
     History, FULLWIDTH_SCREENS, link_to_destination, takes_full_width,
     pane_action, Trigger, Pane,
     route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
+    route_mon, MonSet, MonTier, MonInit, MonPick, MonPickVariant, MonLoad, MonDelete,
+    MonFamily, MonPicker, MonNew, MonSave, MonExport,
 )
 
 
@@ -17,6 +19,8 @@ def test_link_to_destination_maps_routing_prefixes():
     assert link_to_destination("PHB/DD01671.htm") == "PHB/DD01671.htm"
     assert link_to_destination("proficiencies") == "proficiencies"
     assert link_to_destination("proficiencies#thieving") == "proficiencies#thieving"
+    # a monster's spell-like link resolves to the compendium scrolled to that spell
+    assert link_to_destination("spell/charm-person") == "spells#spell-charm-person"
 
 
 def test_takes_full_width_screens_vs_book_pages():
@@ -24,6 +28,7 @@ def test_takes_full_width_screens_vs_book_pages():
         assert takes_full_width(dest), dest
     assert takes_full_width("proficiencies")
     assert takes_full_width("proficiencies#thieving")     # matched by prefix
+    assert takes_full_width("spells#spell-charm-person")  # compendium at an anchor
     for dest in ("PHB/DD01671.htm", "toc:PHB", "CT/DD00123.htm", ""):
         assert not takes_full_width(dest), dest
 
@@ -84,6 +89,46 @@ def test_route_mon_action_is_passed_through_verbatim():
     assert _route("mon/save") == MonAction("save")
     assert _route("mon/pick/MM/DD03797.htm") == MonAction("pick/MM/DD03797.htm")
     assert _route("mon/set/climate_terrain/Any%20land") == MonAction("set/climate_terrain/Any%20land")
+
+
+# ── the monster-sheet action grammar (route_mon) ──────────────────────────────
+
+def test_route_mon_classifies_each_verb():
+    assert route_mon("import") == MonPicker()
+    assert route_mon("new") == MonNew()
+    assert route_mon("save") == MonSave()
+    assert route_mon("roll20") == MonExport()
+    assert route_mon("family/Dragon") == MonFamily("Dragon")
+    assert route_mon("pick/MM/DD03797.htm") == MonPick("MM/DD03797.htm")
+    assert route_mon("load/7") == MonLoad(7)
+    assert route_mon("delete/7") == MonDelete(7)
+
+
+def test_route_mon_set_decodes_the_value_and_splits_once():
+    """monText() percent-encodes the value, so a field's own slashes survive the
+    round trip and only the *first* separator splits field from value."""
+    assert route_mon("set/climate_terrain/Any%20land") == MonSet("climate_terrain", "Any land")
+    assert route_mon("set/damage_attack/1-4%2F1-4") == MonSet("damage_attack", "1-4/1-4")
+    assert route_mon("set/combat/") == MonSet("combat", "")     # cleared to empty
+    assert route_mon("set/") is None                            # no field named
+
+
+def test_route_mon_coerces_indices_and_ids():
+    assert route_mon("tier/2") == MonTier(2)
+    assert route_mon("tier/base") == MonTier(None)              # "Base (as written)"
+    assert route_mon("tier/garbage") == MonTier(None)           # unparseable -> base
+    assert route_mon("init/5") == MonInit(5)
+    assert route_mon("init/-2") == MonInit(-2)
+    assert route_mon("init/") == MonInit(None)                  # blank -> size-derived
+    assert route_mon("init/x") == MonInit(None)
+    assert route_mon("pickvar/MM/DD03805.htm/2") == MonPickVariant("MM/DD03805.htm", 2)
+    assert route_mon("pickvar/MM/DD03805.htm/x") is None        # unparseable index
+    assert route_mon("load/x") is None and route_mon("delete/") is None
+
+
+def test_route_mon_ignores_an_unknown_verb():
+    assert route_mon("detonate/everything") is None
+    assert route_mon("") is None
 
 
 def test_route_newtab_resolves_the_inner_destination():

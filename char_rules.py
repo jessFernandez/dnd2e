@@ -924,6 +924,21 @@ def saving_throws(class_name: str, level: int) -> dict:
     raise ValueError(f"no save band for level {level}")
 
 
+def monster_saving_throws(hit_dice: int) -> dict:
+    """{category: target number} for a monster of ``hit_dice`` HD — it saves as a
+    Warrior of level = its Hit Dice (2e DMG). The single source of truth the Roll20
+    monster export and the sheet read, so they can't disagree.
+
+    A creature of *less than* one Hit Die (a rat at 1-1 HD, a stirge at 1 hp) saves
+    as a level-0 warrior — the band _SAVES carries at index 0 — so 0 is a meaningful
+    argument here, not a floor to clamp away."""
+    hd = max(0, int(hit_dice))
+    for max_lvl, values in _SAVES["Warrior"]:
+        if hd <= max_lvl:
+            return dict(zip(SAVE_CATEGORIES, values))
+    return dict(zip(SAVE_CATEGORIES, _SAVES["Warrior"][-1][1]))
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Proficiencies (PHB Table 34 slots + an extensible nonweapon definition table)
 # ═══════════════════════════════════════════════════════════════════════════

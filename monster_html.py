@@ -12,10 +12,12 @@ and actions navigate to ``dnd:///mon/…`` links, which app.py intercepts (phase
 mirroring the ``cm(…)`` / ``cmText(…)`` helpers in charactermancer_html. This module
 only builds the HTML; the round-trip wiring is the Qt layer's job.
 """
-import re
 from html import escape as esc
 
-import char_rules as cr
+import monster
+import monster_abilities
+import monster_spells
+import monster_tiers
 
 ACCENT = "#c9a84c"
 
@@ -44,21 +46,11 @@ _STAT_ROWS = [
     ("XP Value", "xp_value"),
 ]
 
-_RANGE = re.compile(r"(\d+)\s*-\s*(\d+)")
-
-
 def _to_dice(text: str) -> str:
-    """Render AD&D damage ranges as dice: '3-18 (crush)+1-4 (acid)' ->
-    '3d6 (crush)+d4 (acid)'. A range a-b becomes ``a`` dice of d(b/a) when that
-    divides evenly (min a, max b); a single die drops the count (d6, not 1d6).
-    Anything that doesn't divide cleanly is left as the original range."""
-    def repl(m):
-        a, b = int(m.group(1)), int(m.group(2))
-        if a >= 1 and b > a and b % a == 0 and (b // a) >= 2:
-            die = b // a
-            return f"{a}d{die}" if a > 1 else f"d{die}"
-        return m.group(0)
-    return _RANGE.sub(repl, text or "")
+    """The sheet's damage notation — monster.damage_to_dice in its terse display form
+    ('d6', not '1d6'). The conversion itself lives on the model so the Roll20 export
+    can't disagree with what the sheet shows."""
+    return monster.damage_to_dice(text, terse=True)
 
 
 def _init_label(m) -> str:
@@ -70,6 +62,11 @@ def _init_label(m) -> str:
 #: (display label, value function). AC -> ascending, THAC0 -> attack bonus,
 #: damage -> dice. The stat field still edits via set/<field>; the phase-4 handler
 #: applies the inverse for armor_class/thac0 (both are 20−x involutions).
+#:
+#: Only while the conversion round-trips, though: a THAC0 the MM wrote as a range or
+#: an HD-conditional list has no single attack bonus, so writing one back would erase
+#: it (monster.house_rule_round_trips). Those rows fall back to the raw MM text,
+#: read-only, with the derived bonus as a badge beside it.
 _HOUSE_RULE_FIELDS = {
     "armor_class": ("Armor Class", lambda m: m.ascending_ac()),
     "thac0": ("Attack Bonus", lambda m: m.attack_bonus()),
@@ -77,15 +74,37 @@ _HOUSE_RULE_FIELDS = {
 }
 
 
-def _stat_field(label, field, value, derived=""):
+def _bonus_badge(bonus: str) -> str:
+    """The derived attack bonus, for the badge beside a raw THAC0 row."""
+    if not bonus:
+        return ""
+    return f"Atk {bonus}" if bonus.startswith("-") else f"Atk +{bonus}"
+
+
+def _stat_field(label, field, value, derived="", editable=True, control=""):
     hint = f'<span class="derived">{esc(derived)}</span>' if derived else ""
+    # A tiered view is read-only: edits must land on the base stat block, so the DM
+    # switches back to "Base" to change values (the tier selector, below).
+    edit = (f'spellcheck="false" autocomplete="off" '
+            f'onchange="monText(\'set/{field}\', this.value)"') if editable else "readonly"
     return (
         f'<div class="stat">'
         f'<label>{esc(label)}</label>'
-        f'<input class="sv" value="{esc(value)}" spellcheck="false" autocomplete="off" '
-        f'onchange="monText(\'set/{field}\', this.value)">'
-        f'{hint}</div>'
+        f'<input class="sv" value="{esc(value)}" {edit}>'
+        f'{hint}{control}</div>'
     )
+
+
+def _init_control(m, editable=True) -> str:
+    """An editable initiative speed factor beside the Size row — the size-derived
+    value, overridable (blank to fall back to size). Sets Monster.initiative_override
+    via the mon/init action; the combat-strip Initiative tile follows on re-render."""
+    n = m.initiative_modifier()
+    val = "" if n is None else str(n)
+    edit = ('onchange="monText(\'init\', this.value)"' if editable else "readonly")
+    return (f'<input class="init-ov" value="{esc(val)}" placeholder="init" '
+            f'title="Initiative speed factor — overrides the size-derived value" '
+            f'autocomplete="off" {edit}>')
 
 
 def _tile(label, value):
@@ -93,11 +112,23 @@ def _tile(label, value):
             f'<div class="tile-v">{esc(value or "—")}</div></div>')
 
 
-def _prose_panel(title, field, text, feature=False):
+def _chips_row(abilities, saves) -> str:
+    """A scannable index of the ability types and saving throws the Combat prose
+    mentions (monster_abilities). Ability chips are neutral; save chips accented.
+    Empty markup when nothing was surfaced."""
+    if not abilities and not saves:
+        return ""
+    pills = "".join(f'<span class="chip">{esc(c)}</span>' for c in abilities)
+    pills += "".join(f'<span class="chip save">{esc(c)}</span>' for c in saves)
+    return f'<div class="chips">{pills}</div>'
+
+
+def _prose_panel(title, field, text, feature=False, chips_html=""):
     cls = "panel feature" if feature else "panel"
     return (
         f'<div class="{cls}">'
         f'<div class="panel-h">{esc(title)}</div>'
+        f'{chips_html}'
         f'<textarea class="pr" spellcheck="false" '
         f'onchange="monText(\'set/{field}\', this.value)" '
         f'placeholder="—">{esc(text)}</textarea>'
@@ -105,10 +136,114 @@ def _prose_panel(title, field, text, feature=False):
     )
 
 
-def generate(m, saved_id=None, image_url="") -> str:
+#: Friendly heading per classified table kind (monster_parser.classify_tables).
+_TABLE_TITLES = {
+    "age": "Age Progression",
+    "psionics": "Psionics",
+    "attack_damage": "Attack Damage",
+    "other": "Reference Table",
+}
+
+
+def _extra_table_panel(t) -> str:
+    """One captured enrichment table (dragon age chart, psionics, per-attack damage,
+    …) as a read-only panel. The first ``header_rows`` rows render as <th>."""
+    rows = t.get("rows") or []
+    header_rows = t.get("header_rows", 1)
+    title = _TABLE_TITLES.get(t.get("kind"), "Reference Table")
+    trs = ""
+    for i, row in enumerate(rows):
+        tag = "th" if i < header_rows else "td"
+        trs += "<tr>" + "".join(f"<{tag}>{esc(c)}</{tag}>" for c in row) + "</tr>"
+    return (f'<div class="panel xtab" data-kind="{esc(t.get("kind", ""))}">'
+            f'<div class="panel-h">{esc(title)}</div>'
+            f'<div class="xtab-scroll"><table>{trs}</table></div></div>')
+
+
+def _related_section(related) -> str:
+    """Creatures the MM page describes in prose only — no stat column of their own
+    (Phase C): the Archlich on the Lich page, the Kapoacinth on the Gargoyle page.
+    Shown verbatim so the DM has them without the parser inventing stats."""
+    if not related:
+        return ""
+    rows = "".join(
+        f'<div class="rel-row"><div class="rel-name">{esc(r.get("name", ""))}</div>'
+        f'<div class="rel-text">{esc(r.get("text", ""))}</div></div>'
+        for r in related)
+    return (f'<section class="related">'
+            f'<div class="section-h">Also Described on This Page</div>{rows}</section>')
+
+
+def _extra_tables_section(tables) -> str:
+    """The enrichment tables the MM page carried past the stat block, each as its own
+    panel below the sheet. Empty (no markup) when the page has none."""
+    if not tables:
+        return ""
+    panels = "".join(_extra_table_panel(t) for t in tables)
+    return (f'<section class="extras">'
+            f'<div class="section-h">Additional Tables</div>{panels}</section>')
+
+
+def _abilities_block(abils) -> str:
+    """The Special Abilities block at the foot of the stat block (Phase C): a row per
+    ability whose mechanics the Combat prose pins down — the ability name, its
+    extracted facts as chips (damage/range/frequency neutral, save accented), and the
+    source sentence beneath so the parse sits next to the author's own words. Empty
+    markup when there's none."""
+    if not abils:
+        return ""
+    rows = ""
+    for a in abils:
+        chips = "".join(f'<span class="chip">{esc(x)}</span>'
+                        for x in (a.damage, a.range, a.frequency) if x)
+        if a.save:
+            chips += f'<span class="chip save">{esc(a.save)}</span>'
+        rows += (f'<div class="abil-row">'
+                 f'<div class="abil-head"><span class="abil-name">{esc(a.name)}</span>{chips}</div>'
+                 f'<div class="abil-text">{esc(a.text)}</div></div>')
+    return f'<div class="sb-extra"><div class="sb-h">Special Abilities</div>{rows}</div>'
+
+
+def _spells_block(spell_links) -> str:
+    """Spell-like abilities the monster names, as chips linking into the Spell
+    Compendium (Phase D), at the foot of the stat block. Each ``dnd:///spell/<slug>``
+    opens the compendium scrolled to that spell. Empty markup when none were matched."""
+    if not spell_links:
+        return ""
+    chips = "".join(f'<a class="chip spell" href="dnd:///spell/{esc(slug)}">{esc(name)}</a>'
+                    for name, slug in spell_links)
+    return (f'<div class="sb-extra"><div class="sb-h">Spell-like Abilities</div>'
+            f'<div class="chips">{chips}</div></div>')
+
+
+def _tier_selector(ts, active) -> str:
+    """The HD/age scaling selector (Phase B): a dropdown of "Base" + each tier, whose
+    change navigates dnd:///mon/tier/<i> (or /base). ``active`` is the selected index
+    or None. Empty markup when the monster doesn't scale."""
+    if not ts:
+        return ""
+    opts = [f'<option value="base"{"" if active is not None else " selected"}>'
+            f'Base (as written)</option>']
+    opts += [f'<option value="{i}"{" selected" if active == i else ""}>{esc(t.label)}</option>'
+             for i, t in enumerate(ts)]
+    note = ("" if active is None else
+            f'<span class="tiernote">Scaled to {esc(ts[active].label)} — switch to '
+            f'Base to edit values</span>')
+    return (f'<div class="tierbar">'
+            f'<label class="tierlab">Scaling</label>'
+            f'<select class="tiersel" onchange="monText(\'tier\', this.value)">'
+            f'{"".join(opts)}</select>{note}</div>')
+
+
+def generate(m, saved_id=None, image_url="", spell_index=None) -> str:
     """The full monster sheet HTML for Monster ``m``. ``saved_id`` (if the monster is
     saved) tunes the Save button label; ``image_url`` (the app builds it from the
-    source site) shows the MM illustration."""
+    source site) shows the MM illustration; ``spell_index`` (a monster_spells index
+    the app builds from the compendium) links named spell-like abilities.
+
+    Monsters that scale by HD or dragon age (monster_tiers) get a tier selector; the
+    combat strip and stat block render for the selected tier (the base stat block
+    when none is selected), read-only while a tier is active."""
     # imported monsters: the name itself opens the MM page; custom ones stay editable
     if m.source_page:
         name_el = (f'<a class="namelink" href="dnd:///{esc(m.source_page)}" '
@@ -120,31 +255,57 @@ def generate(m, saved_id=None, image_url="") -> str:
     image = (f'<img class="mon-img" src="{esc(image_url)}" alt="" '
              f'onerror="this.style.display=\'none\'">') if image_url else ""
 
+    # the scaling selector, and the monster scaled to its chosen tier (view). The
+    # base stat block stays editable; a tiered view is a read-only preview.
+    ts = monster_tiers.tiers(m)
+    active = monster_tiers.active_index(m)
+    view = monster_tiers.active_monster(m)
+    editable = active is None
+
     rows = ""
     for label, field in _STAT_ROWS:
-        if field in _HOUSE_RULE_FIELDS:                 # AC/THAC0/damage: house-rule form only
-            label, value_fn = _HOUSE_RULE_FIELDS[field]
-            value = value_fn(m)
-        else:
-            value = getattr(m, field, "")
-        derived = f"init {_init_label(m)}" if field == "size" and value else ""
-        rows += _stat_field(label, field, value, derived)
+        value = getattr(view, field, "")
+        derived, row_editable = "", editable
+        if field in _HOUSE_RULE_FIELDS:                 # AC/THAC0/damage: house-rule form
+            hr_label, value_fn = _HOUSE_RULE_FIELDS[field]
+            if monster.house_rule_round_trips(field, value):
+                label, value = hr_label, value_fn(view)
+            else:      # e.g. an HD-conditional THAC0: keep the MM's own text intact
+                derived, row_editable = _bonus_badge(value_fn(view)), False
+        # the Size row carries an editable initiative speed factor (overrides the
+        # size-derived value); the override lives on the base monster, so use m.
+        control = _init_control(m, editable) if field == "size" else ""
+        rows += _stat_field(label, field, value, derived=derived,
+                            editable=row_editable, control=control)
 
-    tiles = "".join([
-        _tile("Attack Bonus", m.attack_bonus()),
-        _tile("Armor Class", m.ascending_ac()),
-        _tile("Initiative", _init_label(m)),
-        _tile("Hit Dice", m.hit_dice),
-        _tile("Attacks", m.no_of_attacks),
-        _tile("Damage", _to_dice(m.damage_attack)),
-    ])
+    tile_specs = [
+        ("Attack Bonus", view.attack_bonus()),
+        ("Armor Class", view.ascending_ac()),
+        ("Initiative", _init_label(view)),
+        ("Hit Dice", view.hit_dice),
+        ("Attacks", view.no_of_attacks),
+        ("Damage", _to_dice(view.damage_attack)),
+    ]
+    if view.breath_weapon:                              # a dragon age tier's breath (Phase B)
+        tile_specs.append(("Breath", _to_dice(view.breath_weapon)))
+    tiles = "".join(_tile(label, value) for label, value in tile_specs)
 
-    prose = (
-        _prose_panel("Description", "description", m.description)
-        + _prose_panel("Combat", "combat", m.combat, feature=True)
-        + _prose_panel("Habitat / Society", "habitat_society", m.habitat_society)
-        + _prose_panel("Ecology", "ecology", m.ecology)
-    )
+    # Combat ability/save chips index the verbatim prose (Phase C); abilities don't
+    # change with the selected tier, so read them from the base monster.
+    combat_chips = _chips_row(monster_abilities.ability_types(m),
+                              monster_abilities.saving_throws(m))
+    # An imported monster shows only the prose sections its MM page actually has, so
+    # empty panels don't clutter the sheet (a one-paragraph creature is all
+    # Description). A custom monster (no source page) keeps every panel to fill in.
+    custom = not m.source_page
+    panels = [("Description", "description", m.description, False, ""),
+              ("Combat", "combat", m.combat, True, combat_chips),
+              ("Habitat / Society", "habitat_society", m.habitat_society, False, ""),
+              ("Ecology", "ecology", m.ecology, False, "")]
+    prose = "".join(
+        _prose_panel(title, field, text, feature=feat, chips_html=chips)
+        for title, field, text, feat, chips in panels
+        if custom or text.strip())
 
     save_label = "Save changes" if saved_id else "Save monster"
 
@@ -153,6 +314,7 @@ def generate(m, saved_id=None, image_url="") -> str:
     <div class="title-row">{name_el}</div>
   </header>
 
+  {_tier_selector(ts, active)}
   <div class="combat-strip">{tiles}</div>
 
   <div class="grid">
@@ -160,16 +322,22 @@ def generate(m, saved_id=None, image_url="") -> str:
       {image}
       <div class="section-h">Stat Block</div>
       {rows}
+      {_abilities_block(monster_abilities.abilities(m))}
+      {_spells_block(monster_spells.find_in(m, spell_index))}
     </section>
     <section class="prose-col">{prose}</section>
   </div>
 
+  {_related_section(m.related_creatures)}
+
+  {_extra_tables_section(m.extra_tables)}
+
   <div class="actions">
     <a class="btn" href="dnd:///mon/save">{save_label}</a>
+    <a class="nav-btn" href="dnd:///mon/roll20">⤴ Export to Roll20</a>
     <a class="nav-btn" href="dnd:///mon/import">⇩ Import from Monstrous Manual</a>
     <a class="nav-btn" href="dnd:///mon/new">＋ New monster</a>
-  </div>
-</div>"""
+  </div>"""
     return _document(m.name or "Monster", body, _AUTOGROW_JS)
 
 
@@ -350,7 +518,27 @@ _CSS = f"""
   .mon-img {{ display: block; width: 100%; margin: 0 0 14px; border-radius: 8px;
     border: 1px solid #2a2e3e; background: #0f1016; }}
 
-  .combat-strip {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }}
+  /* HD / age scaling selector (Phase B) */
+  .tierbar {{ display: flex; align-items: center; margin-bottom: 14px; }}
+  .tierbar > * + * {{ margin-left: 10px; }}   /* QtWebEngine drops flex gap */
+  .tierlab {{ font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: {ACCENT}; }}
+  .tiersel {{ background: #16181f; border: 1px solid {ACCENT}55; border-radius: 8px;
+    color: #e6e9f6; padding: 7px 10px; font-size: 12.5px; font-family: inherit; }}
+  .tiersel:focus {{ outline: none; border-color: {ACCENT}; }}
+  .tiernote {{ font-size: 11px; color: {ACCENT}; }}
+
+  /* Special Abilities + Spell-like blocks at the foot of the stat block (Phase C/D) */
+  .sb-extra {{ margin-top: 14px; padding-top: 13px; border-top: 1px solid #2a2e3e; }}
+  .sb-h {{ font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: {ACCENT}; margin-bottom: 9px; }}
+  .abil-row {{ padding: 6px 0; border-bottom: 1px solid #24283a; }}
+  .abil-row:last-child {{ border-bottom: none; }}
+  .abil-head {{ display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 3px; }}
+  .abil-name {{ font-weight: 800; color: {ACCENT}; font-size: 12px; margin-right: 8px; }}
+  .abil-text {{ font-size: 11.5px; color: #b7bcd0; line-height: 1.5; }}
+
+  .combat-strip {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 10px; margin-bottom: 20px; }}
   .tile {{ display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: #1e202c; border: 1px solid #2a2e3e; border-radius: 10px;
     padding: 11px 8px; text-align: center; min-height: 78px; }}
@@ -372,15 +560,49 @@ _CSS = f"""
   input.sv:focus {{ outline: none; border-color: {ACCENT}88; }}
   .derived {{ font-size: 10px; color: {ACCENT}; background: {ACCENT}16; border: 1px solid {ACCENT}33;
     border-radius: 5px; padding: 2px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }}
+  input.init-ov {{ width: 46px; text-align: center; font-size: 11px; color: {ACCENT};
+    background: {ACCENT}14; border: 1px solid {ACCENT}44; border-radius: 5px; padding: 3px 4px;
+    font-variant-numeric: tabular-nums; }}
+  input.init-ov:focus {{ outline: none; border-color: {ACCENT}; }}
 
   .prose-col {{ display: grid; gap: 14px; }}   /* grid gap works in Qt; flex gap doesn't */
   .panel {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 12px; padding: 14px 16px; }}
   .panel.feature {{ border-color: {ACCENT}55; background: {ACCENT}0d; }}
   .panel.feature .panel-h {{ color: {ACCENT}; }}
+
+  /* ability / saving-throw chips indexing the Combat prose (Phase C) */
+  .chips {{ display: flex; flex-wrap: wrap; margin: 0 0 10px -6px; }}   /* grid-less; child margins for Qt */
+  .chip {{ display: inline-block; margin: 0 0 6px 6px; padding: 3px 9px; border-radius: 11px;
+    font-size: 11px; font-weight: 600; background: #2a2e3e; border: 1px solid #3a3f58; color: #c8cad8; }}
+  .chip.save {{ background: {ACCENT}18; border-color: {ACCENT}44; color: {ACCENT}; }}
+  /* spell-like ability links into the compendium (Phase D) */
+  a.chip.spell {{ text-decoration: none; background: #23263a; border-color: #3a3f58; color: #cdd3ec; }}
+  a.chip.spell:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
   textarea.pr {{ width: 100%; min-height: 44px; overflow: hidden; resize: none;
     background: #16181f; border: 1px solid #2f3346; border-radius: 7px; color: #d3d7e6;
     padding: 9px 11px; font-family: inherit; font-size: 12.5px; line-height: 1.62; }}
   textarea.pr:focus {{ outline: none; border-color: {ACCENT}88; }}
+
+  /* creatures described only in prose on the same MM page (Phase C) */
+  .related {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 12px;
+    padding: 12px 16px 6px; margin-bottom: 20px; }}
+  .rel-row {{ padding: 8px 0; border-bottom: 1px solid #24283a; }}
+  .rel-row:last-child {{ border-bottom: none; }}
+  .rel-name {{ font-weight: 800; color: {ACCENT}; font-size: 12.5px; margin-bottom: 3px; }}
+  .rel-text {{ font-size: 12px; color: #b7bcd0; line-height: 1.55; }}
+
+  /* enrichment tables captured past the stat block (Phase A) */
+  .extras {{ display: grid; gap: 14px; margin-top: 22px; }}  /* grid gap works in Qt */
+  .panel.xtab {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 12px; padding: 14px 16px; }}
+  .xtab-scroll {{ overflow-x: auto; }}
+  .xtab table {{ border-collapse: collapse; width: 100%; font-size: 12px;
+    font-variant-numeric: tabular-nums; }}
+  .xtab th, .xtab td {{ text-align: left; padding: 5px 10px; border-bottom: 1px solid #2a2e3e;
+    white-space: nowrap; }}
+  .xtab th {{ color: {ACCENT}; font-weight: 700; font-size: 10.5px; letter-spacing: .04em;
+    text-transform: uppercase; }}
+  .xtab td {{ color: #d3d7e6; }}
+  .xtab tr:last-child td {{ border-bottom: none; }}
 
   .actions {{ display: flex; flex-wrap: wrap; margin-top: 22px;
     border-top: 1px solid #2a2e3e; padding-top: 18px; }}
@@ -417,6 +639,5 @@ _CSS = f"""
 
   @media (max-width: 720px) {{
     .grid {{ grid-template-columns: 1fr; }}
-    .combat-strip {{ grid-template-columns: repeat(3, 1fr); }}
   }}
 """

@@ -38,11 +38,33 @@ def test_shows_house_rule_values():
     assert "+9" in h                             # size L-H -> Huge initiative
 
 
-def test_only_house_rule_ac_and_thaco_shown():
+def test_only_house_rule_ac_shown():
     h = monster_html.generate(_ankheg())
-    assert "17-13" not in h                       # raw THAC0 not shown
     assert "Overall 2," not in h                  # raw descending AC not shown
-    assert "Attack Bonus" in h                    # THAC0 row relabeled
+    assert "Overall 18, underside 16" in h        # every number converted in place
+
+
+def test_plain_thaco_is_shown_and_edited_as_an_attack_bonus():
+    m = _ankheg()
+    m.thac0 = "17"                                # a bare number round-trips
+    h = monster_html.generate(m)
+    assert "Attack Bonus" in h and "set/thac0" in h
+    assert 'value="3"' in h and ">17<" not in h
+
+
+def test_a_thaco_that_cannot_round_trip_stays_raw_and_read_only():
+    """A ranged or HD-conditional THAC0 has no single attack bonus, so the sheet shows
+    what the MM wrote — read-only, with the derived base bonus as a badge. Editing it
+    would write one number over the whole field (and over the tiers derived from it)."""
+    h = monster_html.generate(_ankheg())          # THAC0 "17-13"
+    assert 'value="17-13" readonly' in h          # the source text, intact
+    assert "set/thac0" not in h                   # and no way to overwrite it
+    assert "Atk +3" in h                          # the derived base bonus, as a badge
+
+    m = _ankheg()
+    m.thac0 = "3+3 HD: 17 4+4 HD: 15"             # the conditional form tiers read
+    h = monster_html.generate(m)
+    assert 'value="3+3 HD: 17 4+4 HD: 15" readonly' in h and "set/thac0" not in h
 
 
 def test_damage_shown_as_dice():
@@ -51,9 +73,18 @@ def test_damage_shown_as_dice():
     assert "3-18" not in h                         # the range form is gone
 
 
+def test_initiative_override_control_is_editable():
+    h = monster_html.generate(_ankheg())               # size L-H -> Huge, init +9
+    assert 'class="init-ov"' in h and "monText('init'" in h
+    assert 'value="9"' in h                             # the size-derived factor, editable
+    m = _ankheg()
+    m.initiative_override = 1
+    assert 'class="init-ov" value="1"' in monster_html.generate(m)   # the override shows
+
+
 def test_stat_fields_are_editable_hooks():
     h = monster_html.generate(_ankheg())
-    assert "set/armor_class" in h and "set/thac0" in h and "set/size" in h
+    assert "set/armor_class" in h and "set/size" in h
     assert "function monText" in h               # the dnd:///mon/ interaction helper
     assert "set/name" in monster_html.generate(Monster())   # a custom monster's name is editable
 
@@ -62,6 +93,22 @@ def test_imported_name_is_a_link_to_the_mm_page():
     h = monster_html.generate(_ankheg())         # has a source_page
     assert 'class="namelink"' in h and 'href="dnd:///MM/DD03797.htm"' in h
     assert "set/name" not in h                   # the imported name is a link, not an input
+
+
+def test_imported_monster_hides_empty_prose_panels():
+    m = Monster(name="Bird", source_page="MM/DDbird.htm",
+                description="A small owl that hunts at night.")   # no combat/habitat/ecology
+    h = monster_html.generate(m)
+    assert "Description" in h and "hunts at night" in h
+    assert ">Habitat / Society<" not in h and ">Ecology<" not in h   # empty panels hidden
+    assert "set/habitat_society" not in h
+
+
+def test_custom_monster_keeps_all_prose_panels_to_fill_in():
+    m = Monster(name="My Homebrew")                                  # no source_page -> custom
+    h = monster_html.generate(m)
+    for field in ("set/description", "set/combat", "set/habitat_society", "set/ecology"):
+        assert field in h                                           # every panel editable
 
 
 def test_combat_is_a_feature_panel():
@@ -77,6 +124,7 @@ def test_actions_and_save_label():
     fresh = monster_html.generate(_ankheg())
     assert "Save monster" in fresh
     assert "dnd:///mon/import" in fresh and "dnd:///mon/new" in fresh
+    assert "dnd:///mon/roll20" in fresh                 # Export to Roll20 button
 
 
 def test_html_is_escaped():
@@ -90,6 +138,160 @@ def test_empty_monster_does_not_crash():
     h = monster_html.generate(Monster())
     assert "<!DOCTYPE html>" in h and "Stat Block" in h
     assert "—" in h                              # empty derived tiles show a dash
+
+
+def test_no_extra_tables_section_when_none():
+    h = monster_html.generate(_ankheg())
+    assert "Additional Tables" not in h and 'class="extras"' not in h
+
+
+def test_renders_captured_extra_tables():
+    m = _ankheg()
+    m.extra_tables = [
+        {"kind": "age", "header_rows": 2,
+         "rows": [["Age", "AC", "Breath"], ["1", "4", "2d4+1"], ["12", "-4", "24d4+12"]]},
+        {"kind": "attack_damage", "header_rows": 1,
+         "rows": [["Attack", "Damage"], ["acid", "full"]]},
+    ]
+    h = monster_html.generate(m)
+    assert "Additional Tables" in h
+    assert "Age Progression" in h and "Attack Damage" in h
+    assert "<th>Age</th>" in h                                # the two header rows are <th>
+    assert "<td>24d4+12</td>" in h                            # the data row is <td>
+    assert 'data-kind="age"' in h
+
+
+def test_extra_table_cells_are_escaped():
+    m = _ankheg()
+    m.extra_tables = [{"kind": "other", "header_rows": 1,
+                       "rows": [["Roll", "Effect"], ["1", "save vs. <death> & die"]]}]
+    h = monster_html.generate(m)
+    assert "&lt;death&gt;" in h and "&amp;" in h
+    assert "<death>" not in h
+
+
+def _mummy_age_table():
+    return {"kind": "age", "header_rows": 1, "rows": [
+        ["Age", "AC", "HD", "THAC0"],
+        ["99 or less", "2", "8+3", "11"],
+        ["500 or more", "-3", "13+3", "7"]]}
+
+
+def test_combat_chips_render_abilities_and_saves():
+    m = _ankheg()
+    m.combat = "Its gaze turns foes to stone; save vs. petrification or be paralyzed."
+    h = monster_html.generate(m)
+    assert 'class="chips"' in h
+    assert '<span class="chip">Gaze attack</span>' in h
+    assert '<span class="chip">Petrification</span>' in h
+    assert '<span class="chip save">Save vs. Petrification</span>' in h
+
+
+def test_no_chips_row_when_prose_surfaces_nothing():
+    m = _ankheg()
+    m.combat = "It swings a big club at people."
+    h = monster_html.generate(m)
+    assert 'class="chips"' not in h
+
+
+def test_special_abilities_block_renders_rows_with_facts():
+    m = _ankheg()
+    m.combat = "Anyone within 30 feet must save vs. petrification or turn to stone."
+    h = monster_html.generate(m)
+    assert '<div class="sb-h">Special Abilities</div>' in h   # a sub-block of the stat block
+    assert '<span class="abil-name">Petrification</span>' in h
+    assert '<span class="chip">30 feet</span>' in h
+    assert '<span class="chip save">Save vs. Petrification</span>' in h
+    assert "turn to stone" in h                     # the source sentence is shown
+    # it lives inside the stat block section, not as a full-width card
+    assert h.index('<div class="sb-h">Special Abilities') > h.index('class="statblock"')
+    assert h.index('<div class="sb-h">Special Abilities') < h.index('class="prose-col"')
+
+
+def test_no_abilities_block_without_extractable_mechanics():
+    m = _ankheg()
+    m.combat = "It is immune to charm. It fights without fear."
+    h = monster_html.generate(m)
+    assert '>Special Abilities</div>' not in h       # no sub-block (the CSS comment doesn't match)
+
+
+def test_spell_like_abilities_render_as_capitalized_compendium_links():
+    import monster_spells
+    idx = monster_spells.build_index(["Charm Person", "Animate Dead", "Suggestion"])
+    m = _ankheg()
+    m.combat = "It can cast charm person and animate dead at will."
+    h = monster_html.generate(m, spell_index=idx)
+    assert '<div class="sb-h">Spell-like Abilities</div>' in h    # inside the stat block
+    assert '<a class="chip spell" href="dnd:///spell/charm-person">Charm Person</a>' in h
+    assert 'href="dnd:///spell/animate-dead">Animate Dead</a>' in h   # canonical capitalization
+
+
+def test_no_spell_block_without_index_or_matches():
+    m = _ankheg()
+    m.combat = "It can cast charm person."
+    assert '>Spell-like Abilities</div>' not in monster_html.generate(m)   # no index passed
+    import monster_spells
+    idx = monster_spells.build_index(["Charm Person"])
+    m2 = _ankheg()
+    m2.combat = "It just bites."
+    assert '>Spell-like Abilities</div>' not in monster_html.generate(m2, spell_index=idx)
+
+
+def test_breath_tile_appears_only_for_a_selected_dragon_age_tier():
+    age = {"kind": "age", "header_rows": 2, "rows": [
+        ["", "", "", "", "Breath", "", "", "", ""],
+        ["Age", "Lgt", "Lgt", "AC", "Weapon", "Wizard", "MR", "Type", "Value"],
+        ["1", "3-6", "2-5", "4", "2d4", "Nil", "Nil", "Nil", "4,000"],
+        ["12", "96", "80", "-7", "24d4", "9", "45%", "Hx3", "20,000"]]}
+    m = Monster(name="Dragon", armor_class="1 (base)", extra_tables=[age])
+    assert 'class="tile-l">Breath<' not in monster_html.generate(m)   # no tier -> no breath tile
+    m.selected_tier = 1
+    h = monster_html.generate(m)
+    assert 'class="tile-l">Breath<' in h and "24d4" in h              # the oldest age's breath
+
+
+def test_related_creatures_section_renders():
+    m = _ankheg()
+    m.related_creatures = [{"name": "Archlich", "text": "A rare good-aligned lich."}]
+    h = monster_html.generate(m)
+    assert "Also Described on This Page" in h
+    assert '<div class="rel-name">Archlich</div>' in h and "good-aligned lich" in h
+
+
+def test_no_related_section_when_none():
+    assert 'class="related"' not in monster_html.generate(_ankheg())
+
+
+def test_no_tier_selector_for_a_non_scaling_monster():
+    h = monster_html.generate(_ankheg())
+    assert 'class="tierbar"' not in h and "monText('tier'" not in h
+
+
+def test_tier_selector_lists_base_and_each_tier():
+    m = Monster(name="Mummy", armor_class="2", extra_tables=[_mummy_age_table()])
+    h = monster_html.generate(m)
+    assert 'class="tiersel"' in h and "monText('tier'" in h
+    assert "Base (as written)" in h
+    assert "Age 99 (or less)" in h and "Age 500 (or more)" in h
+    assert 'value="base" selected' in h                    # base is the default selection
+
+
+def test_selected_tier_scales_combat_strip_and_locks_editing():
+    m = Monster(name="Mummy", armor_class="2", thac0="11",
+                extra_tables=[_mummy_age_table()], selected_tier=1)
+    h = monster_html.generate(m)
+    # tier 1 is "500 or more": AC -3 -> ascending 23, THAC0 7 -> attack bonus 13
+    assert ">23<" in h and ">13<" in h
+    assert 'value="1" selected' in h
+    assert "Scaled to Age 500 (or more)" in h
+    assert "set/armor_class" not in h and "set/thac0" not in h   # read-only while tiered
+    assert "readonly" in h
+
+
+def test_base_tier_keeps_the_stat_block_editable():
+    m = Monster(name="Mummy", armor_class="2", thac0="11", extra_tables=[_mummy_age_table()])
+    h = monster_html.generate(m)                           # selected_tier is None -> base
+    assert "set/armor_class" in h and "set/thac0" in h
 
 
 def test_import_picker_lists_families_and_standalone():

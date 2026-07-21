@@ -6,7 +6,17 @@ caster and level, plus a context category that follows the caster — school for
 All, wizard specialization for Wizard, priest sphere for Priest. Cards are
 masonry-packed and colour-coded by school.
 """
+import re
 from html import escape
+
+
+def spell_slug(name: str) -> str:
+    """The stable anchor slug for a spell name — 'Cone of Cold' -> 'cone-of-cold'.
+    Owned here because this screen emits the ``id="spell-<slug>"`` anchors; the
+    monster spell-linker (monster_spells) imports it so its links can't drift from
+    the ids they target."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+
 
 # School accent colours (readable on the dark background, both casters share them).
 SCHOOL_COLORS = {
@@ -47,7 +57,7 @@ def _stat(label: str, value: str) -> str:
     return f'<div class="st"><span>{escape(label)}</span><b>{escape(v) if v else "—"}</b></div>'
 
 
-def _card(s: dict) -> str:
+def _card(s: dict, anchor: str = "") -> str:
     school = s.get("school") or ""
     color = SCHOOL_COLORS.get(school, "#8b93b8")
     caster = (s.get("caster") or "").capitalize()
@@ -76,8 +86,9 @@ def _card(s: dict) -> str:
     foot = f'<div class="foot">{"".join(foot_bits)}</div>' if foot_bits else ""
 
     lvl = s.get("level") or 0
+    anchor_attr = f' id="{anchor}"' if anchor else ""
     return (
-        f'<article class="card" style="--sc:{color}" '
+        f'<article class="card"{anchor_attr} style="--sc:{color}" '
         f'data-caster="{escape(s.get("caster",""))}" data-level="{lvl}" '
         f'data-school="{escape(school)}" '
         f'data-spheres="{escape(_tok(spheres))}" data-specs="{escape(_tok(specs))}">'
@@ -106,7 +117,17 @@ def _cat_pills(names, with_dots=False) -> str:
 
 def generate(spells) -> str:
     spells = sorted(spells, key=lambda s: (s.get("caster", ""), s.get("level", 0), s.get("name", "")))
-    cards = "".join(_card(s) for s in spells)
+    # One `id="spell-<slug>"` anchor per distinct name (the first card), so a
+    # dnd:///spell/<slug> link from a monster sheet scrolls here. Duplicate names
+    # (same spell, two schools) share the slug; the first card wins the id.
+    seen = set()
+    cards = []
+    for s in spells:
+        slug = spell_slug(s.get("name", ""))
+        anchor = "" if (not slug or slug in seen) else f"spell-{slug}"
+        seen.add(slug)
+        cards.append(_card(s, anchor))
+    cards = "".join(cards)
     n_wiz = sum(1 for s in spells if s.get("caster") == "wizard")
     n_pri = sum(1 for s in spells if s.get("caster") == "priest")
     level_pills = "".join(f'<button class="pill lvl" data-k="{i}">{i}</button>' for i in range(1, 10))
@@ -194,8 +215,10 @@ a { color: inherit; }
 
 .card { height: 402px; background: #1e2133;
         border: 1px solid #2b2f47; border-left: 3px solid var(--sc); border-radius: 10px;
-        overflow: hidden; display: flex; flex-direction: column; }
+        overflow: hidden; display: flex; flex-direction: column;
+        scroll-margin-top: 92px; }   /* clear the sticky header when jumped to via #anchor */
 .card.open { height: auto; }
+.card.target { border-color: #c9a84c; box-shadow: 0 0 0 2px #c9a84c66; }
 /* NB: QtWebEngine (Chromium 87) drops flexbox `gap` here, so the badge/text
    spacing is set with an explicit margin instead. */
 .chead { display: flex; align-items: center; padding: 11px 13px 10px; }
@@ -314,9 +337,21 @@ grid.addEventListener('click', e => {
   btn.closest('.card').classList.toggle('open');   // grid grows this card's row
 });
 
+// A dnd:///spell/<slug> link from a monster sheet lands here as #spell-<slug>.
+// QtWebEngine's native anchor scroll fires before the grid finishes laying out, so
+// jump explicitly once it's settled — expand the card and highlight it too.
+function jumpToHash() {
+  if (!location.hash) return;
+  const el = document.getElementById(location.hash.slice(1));
+  if (!el) return;
+  el.classList.add('open', 'target');
+  el.scrollIntoView({ block: 'start' });
+}
+window.addEventListener('hashchange', jumpToHash);
+
 // Column width changes on resize → re-measure which descriptions overflow.
 window.addEventListener('resize', markShort);
-window.addEventListener('load', apply);
+window.addEventListener('load', () => { apply(); [30, 200, 500].forEach(ms => setTimeout(jumpToHash, ms)); });
 apply();
 [150, 500].forEach(ms => setTimeout(markShort, ms));   // catch late webview sizing
 """

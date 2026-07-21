@@ -38,6 +38,8 @@ def link_to_destination(path: str) -> str:
         return "toc:" + path[len("toc/"):]
     if path.startswith("screen/"):
         return path[len("screen/"):]
+    if path.startswith("spell/"):
+        return "spells#spell-" + path[len("spell/"):]   # a monster's spell-like link
     return path
 
 
@@ -45,10 +47,11 @@ def takes_full_width(dest: str) -> bool:
     """Whether a destination is a full-width reference/tool screen (so the browse
     pane makes way for it) rather than a book page or TOC (which keep the pane).
 
-    Proficiencies is the Codex reference screen; it carries a `#fragment`, so it
-    is matched by prefix rather than membership.
+    Proficiencies and the spell compendium are reference screens reached with a
+    `#fragment` (a codex anchor / a spell anchor), so they match by prefix too.
     """
     return (dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
+            or dest.startswith("spells#")       # spells screen scrolled to a spell
             or dest.startswith("monster-"))     # monster-sheet, monster-variant/…
 
 
@@ -163,6 +166,140 @@ def route_link(url: str, *, on_jarvis_page: bool) -> Route:
         return NewTab(link_to_destination(url[len("newtab/"):]))
     dest = link_to_destination(url)
     return NewTab(dest) if on_jarvis_page else Navigate(dest)
+
+
+# ── monster-sheet actions ─────────────────────────────────────────────────────
+#
+# The monster sheet's links are a grammar of their own ("mon/set/<field>/<value>",
+# "mon/pickvar/<page>/<i>", "mon/tier/<i>"). route_mon() owns that grammar — the
+# decoding, the index/id coercion, and what a malformed argument means — leaving
+# MainWindow._mon_action a match statement of side effects. Kept here with the rest
+# of the link routing, and Qt-free, so the parsing is unit-testable; *policy* (which
+# fields may be edited, whether a tier blocks an edit) stays with the monster model.
+
+class MonAct:
+    """Base for the tagged results of route_mon()."""
+
+
+@dataclass(frozen=True)
+class MonSet(MonAct):
+    """Store an edited stat/prose field. ``value`` is already URL-decoded."""
+    field: str
+    value: str
+
+
+@dataclass(frozen=True)
+class MonTier(MonAct):
+    """Select an HD/age scaling tier; None means the base stat block as written."""
+    index: "int | None"
+
+
+@dataclass(frozen=True)
+class MonInit(MonAct):
+    """Override the initiative speed factor; None falls back to the size-derived one."""
+    value: "int | None"
+
+
+@dataclass(frozen=True)
+class MonPick(MonAct):
+    """Import an MM page (its sole creature, or its variant chooser)."""
+    page_url: str
+
+
+@dataclass(frozen=True)
+class MonPickVariant(MonAct):
+    """Import creature ``index`` from a multi-variant MM page."""
+    page_url: str
+    index: int
+
+
+@dataclass(frozen=True)
+class MonLoad(MonAct):
+    """Open a saved monster."""
+    saved_id: int
+
+
+@dataclass(frozen=True)
+class MonDelete(MonAct):
+    """Delete a saved monster."""
+    saved_id: int
+
+
+@dataclass(frozen=True)
+class MonFamily(MonAct):
+    """Open a family sub-picker (Dragon → its types)."""
+    family: str
+
+
+@dataclass(frozen=True)
+class MonPicker(MonAct):
+    """Go to the monster landing (saved monsters + the MM import list)."""
+
+
+@dataclass(frozen=True)
+class MonNew(MonAct):
+    """Start a blank custom monster."""
+
+
+@dataclass(frozen=True)
+class MonSave(MonAct):
+    """Save the current monster to the user DB."""
+
+
+@dataclass(frozen=True)
+class MonExport(MonAct):
+    """Copy the current monster's Roll20 import JSON to the clipboard."""
+
+
+def _opt_int(text: str, blank=None):
+    """``text`` as an int, or ``blank`` when it is empty or not a number. The sheet's
+    own controls can only produce valid values; a malformed one means 'no selection'
+    rather than an error the DM would have to see."""
+    text = unquote(text or "").strip()
+    if not text:
+        return blank
+    try:
+        return int(text)
+    except ValueError:
+        return blank
+
+
+def route_mon(payload: str):
+    """Classify a monster-sheet link payload (the part after "mon/") into a tagged
+    action, or None when it isn't one — an unrecognized verb is ignored, not guessed
+    at. ``set`` splits on the *first* slash only: the value is percent-encoded by the
+    sheet's monText() helper, so a field's own slashes survive."""
+    verb, _, rest = payload.partition("/")
+    match verb:
+        case "set":
+            field, _, raw = rest.partition("/")
+            return MonSet(field, unquote(raw)) if field else None
+        case "tier":
+            return MonTier(None if rest == "base" else _opt_int(rest))
+        case "init":
+            return MonInit(_opt_int(rest))
+        case "pick":
+            return MonPick(rest) if rest else None
+        case "pickvar":
+            page_url, _, idx = rest.rpartition("/")
+            i = _opt_int(idx)
+            return MonPickVariant(page_url, i) if page_url and i is not None else None
+        case "load" | "delete":
+            sid = _opt_int(rest)
+            if sid is None:
+                return None
+            return MonLoad(sid) if verb == "load" else MonDelete(sid)
+        case "family":
+            return MonFamily(rest) if rest else None
+        case "import":
+            return MonPicker()
+        case "new":
+            return MonNew()
+        case "save":
+            return MonSave()
+        case "roll20":
+            return MonExport()
+    return None
 
 
 class History:
