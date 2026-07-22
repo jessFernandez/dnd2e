@@ -13,9 +13,10 @@ Only what's specific to the *builder* lives here. `esc` used to as well, until i
 turned out to be one of six spellings of HTML-escaping in the view layer; it now
 lives in `view_common.py` alongside the rest of the shared templating primitives.
 """
+import theme
 
 #: The builder's gold. Also read by app.py to tint the sidebar's builder entry.
-ACCENT = "#c9a84c"
+ACCENT = theme.ACCENT
 
 #: Ability name -> the three-letter form the sheet and the step headers use.
 ABBR = {"Strength": "Str", "Dexterity": "Dex", "Constitution": "Con",

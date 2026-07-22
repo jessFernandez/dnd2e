@@ -9,7 +9,7 @@ Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 ·
 | 2 — tooling + invariant tests | **done** (1234 passed, 1 skipped; ruff clean) |
 | 3 — `route_destination` | **done** (1257 passed, 1 skipped) |
 | 4 — search/bookmarks extraction | **done** (1278 passed, 1 skipped) |
-| 5 — `theme.py` | not started |
+| 5 — `theme.py` | **done, partial by design** (1299 passed, 1 skipped) |
 | 6 — JSON-blob store + `from_dict` coercion | not started |
 
 Baseline, measured: **1182 passed, 1 skipped in 6.2 s**. Line coverage by module is in
@@ -338,6 +338,47 @@ and `budget_bar`.
 
 Do this **before** v3 adds a tenth stylesheet.
 
+### Landed — and deliberately only half of it
+
+`theme.py` exists, but **kept separate from `view_common.py`**, against what this plan
+originally said. They have different consumers: `app.py` needs the palette for its Qt
+stylesheets and has no use for `esc`, and "where are the colours" wants an obvious answer.
+Two small modules beat one module with two unrelated jobs.
+
+**What actually got deduplicated — the structured data, where the real damage was:**
+
+The audit counted colour *literals* and missed the more serious duplication underneath.
+Each rulebook had its name and three colours spread across **six** definitions: three
+dicts in `app.py` (`BOOK_NAMES`, `BOOK_TREE_COLORS`, `BOOK_ACCENT_COLORS`), one in
+`browse_lists.py` (`BOOK_ITEM_COLORS`), and a fifth copy of the colours *plus a sixth of
+the names* inline in `splash_html.py`.
+
+**That duplication had already caused a live, user-visible bug.** The splash screen said
+"Skills & Powers", "Combat & Tactics", "Spells & Magic" and "Arms & Equipment Guide";
+the rulebook DB, the sidebar, the search results and the bookmarks all said "and". One
+`Book` record per book now, spelled the way `pages.book_name` spells it — which
+`test_theme.py` checks against the DB, so it can't drift again.
+
+Also collapsed: `ACCENT` (`#c9a84c`) had three separate `ACCENT = "#c9a84c"` definitions
+(`charactermancer_common`, `monster_html`, `proficiencies_html`); all three now read
+`theme.ACCENT`. And an inconsistency surfaced on the way — the per-book accent *fallback*
+was `#8b0000` at one call site and `#c9a84c` at another. Settled on the gold.
+
+**What was deliberately not done: tokenising the CSS.** The colour literals in the
+stylesheets stay (colours in 2+ files went 59 → 57 — essentially unchanged, and that
+number was always the wrong measure). Most view CSS lives in **plain, non-f triple-quoted
+strings**, where interpolating `{TEXT}` renders the brace literally instead of
+substituting. That's a silent visual break, the tests assert on structure and content
+rather than colour so they wouldn't catch it, and there's no way to verify ~200 such edits
+without looking at the running app. Converting the blocks to f-strings means escaping
+every brace in a stylesheet — a large, risky edit for a cosmetic gain.
+
+The safe path, documented in `theme.py` for whoever wants it: emit a
+`:root { --text: …; }` block from `theme` and have stylesheets say `var(--text)`.
+`var(--x)` passes through a plain string untouched, so it can be done one screen at a
+time. QtWebEngine is Chromium-based and has supported custom properties since long before
+the version this ships against. **Still open.**
+
 ---
 
 ## Finding 6 — A logic module imports a view module
@@ -355,6 +396,20 @@ preserved — strengthened, actually, since the slug no longer lives in a file w
 CSS.
 
 Low effort, low risk, do it alongside Finding 5.
+
+**Landed as `slugs.py`.** It turned out to be two duplications, not one: `proficiencies_html`
+had independently written the same normaliser for its own `#prof-<slug>` anchors, differing
+only in whether it guarded `None`. Both are gone.
+
+The `id=` **prefixes** moved too — `spell_anchor()` and `prof_anchor()` — so the anchor and
+the link that targets it are now built by the same function rather than by three places
+agreeing to concatenate `"spell-"`. `navigation.link_to_destination` uses
+`slugs.SPELL_PREFIX` for the same reason, and a test walks the whole path: slug → link →
+destination → the id the compendium emits.
+
+`tests/test_architecture.py::test_logic_modules_do_not_import_view_modules` now fails if a
+non-view module imports a `*_html` one (`app.py` exempt — that's its job). Mutation-tested
+by putting the old import back.
 
 ---
 

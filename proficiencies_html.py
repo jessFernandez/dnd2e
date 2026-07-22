@@ -6,17 +6,13 @@ that app.py writes to a temp file and loads as a file:// URL (so the A–Z index
 the sidebar's per-skill links jump to `#prof-<slug>` anchors natively). `slug()`
 is shared with app.py so the sidebar's anchors match the page's ids.
 """
-import re
 
 import char_rules as cr
+import slugs
+import theme
 from view_common import esc
 
-ACCENT = "#c9a84c"
-
-
-def slug(name: str) -> str:
-    """Anchor id for a proficiency name, e.g. 'Bowyer/Fletcher' -> 'bowyer-fletcher'."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+ACCENT = theme.ACCENT
 
 
 def _slots_label(n: int) -> str:
@@ -81,7 +77,7 @@ def _card(p) -> str:
         badges.append(f'<span class="badge pre" title="Prerequisite">'
                       f'{esc(", ".join(p.prereq))}</span>')
     return (
-        f'<article class="prof" id="prof-{slug(p.name)}">'
+        f'<article class="prof" id="{slugs.prof_anchor(p.name)}">'
         f'<h3>{esc(p.name)}</h3>'
         f'<div class="badges">{"".join(badges)}</div>'
         f'<div class="body">{_render_desc(p.description)}</div>'

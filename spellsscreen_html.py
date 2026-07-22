@@ -6,16 +6,8 @@ caster and level, plus a context category that follows the caster — school for
 All, wizard specialization for Wizard, priest sphere for Priest. Cards are
 masonry-packed and colour-coded by school.
 """
-import re
+import slugs
 from view_common import esc
-
-
-def spell_slug(name: str) -> str:
-    """The stable anchor slug for a spell name — 'Cone of Cold' -> 'cone-of-cold'.
-    Owned here because this screen emits the ``id="spell-<slug>"`` anchors; the
-    monster spell-linker (monster_spells) imports it so its links can't drift from
-    the ids they target."""
-    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
 
 
 # School accent colours (readable on the dark background, both casters share them).
@@ -123,9 +115,9 @@ def generate(spells) -> str:
     seen = set()
     cards = []
     for s in spells:
-        slug = spell_slug(s.get("name", ""))
-        anchor = "" if (not slug or slug in seen) else f"spell-{slug}"
-        seen.add(slug)
+        sl = slugs.slug(s.get("name", ""))
+        anchor = "" if (not sl or sl in seen) else slugs.spell_anchor(s.get("name", ""))
+        seen.add(sl)
         cards.append(_card(s, anchor))
     cards = "".join(cards)
     n_wiz = sum(1 for s in spells if s.get("caster") == "wizard")

@@ -128,6 +128,37 @@ def test_simple_screens_matches_the_registry_in_app():
     )
 
 
+# ── views depend on logic, never the reverse ─────────────────────────────────
+
+#: The view layer: HTML string builders plus the two shared-chrome modules.
+def _is_view(stem: str) -> bool:
+    return stem.endswith("_html") or stem in {"screen_common", "view_common"}
+
+
+def test_logic_modules_do_not_import_view_modules():
+    """A view may import the model it renders; the model must not import the view.
+
+    `monster_spells` used to import `spell_slug` from `spellsscreen_html` — right
+    instinct (one owner for the slug, so a link can't drift from the id it targets),
+    wrong direction: the monster stack couldn't be imported without dragging in the
+    spell screen. The slug now lives in `slugs.py`, which both import.
+    See docs/audit-2-plan.md finding 6.
+
+    app.py is exempt — wiring the views to the UI is its whole job.
+    """
+    offenders = {}
+    for path in APP_MODULES:
+        if path.stem == "app" or _is_view(path.stem):
+            continue
+        views = {m for m in _imports(path) if _is_view(m)}
+        if views:
+            offenders[path.stem] = sorted(views)
+    assert offenders == {}, (
+        f"logic modules importing view modules: {offenders}. "
+        "Move the shared piece into a pure module both can import (see slugs.py)."
+    )
+
+
 # ── layering direction ───────────────────────────────────────────────────────
 
 def test_no_import_cycles_between_app_modules():

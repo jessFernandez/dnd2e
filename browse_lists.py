@@ -10,32 +10,19 @@ This module holds the *decisions* — what text to show, how to trim it, which c
 the row gets. It returns plain data; app.py builds the QListWidgetItem/QTreeWidgetItem
 and applies it. Pure and Qt-free, so it's testable without a window.
 
-The colours live here rather than in app.py because they're part of what a row
-*means* (which book it belongs to) rather than part of the widget. They are still
-duplicated against the HTML views' palettes — that's finding 5, and this module is
-one of the places phase 5 will collapse into `theme.py`.
+A row's tint says which book the page came from, so the colours come from
+`theme.BOOKS` — the same record the sidebar tree and the book's TOC page read.
 """
 import re
 from dataclasses import dataclass
 
-#: Per-book row tint for the search-results and bookmarks lists, keyed by book_code.
-BOOK_ITEM_COLORS = {
-    "PHB": "#192233",
-    "DMG": "#2a1e12",
-    "MM":  "#132213",
-    "SP":  "#232012",
-    "HLC": "#1f1430",
-    "TM":  "#261212",
-    "SM":  "#122424",
-    "CT":  "#251b12",
-    "AEG": "#1c1f24",
-    "ECO": "#22200a",
-}
+import theme
 
 #: Row tint for a page whose book we don't recognise (or that has no book_code).
-DEFAULT_ITEM_COLOR = "#1a1d24"
+DEFAULT_ITEM_COLOR = theme.DEFAULT_ITEM_COLOR
 
 #: Foreground for a normal row, and for the "no results"/"search failed" placeholders.
+#: Slightly warmer than theme.TEXT — these are Qt widget rows, not web content.
 ROW_FG = "#c0c4d4"
 MUTED_FG = "#505870"
 ERROR_FG = "#c07070"
@@ -71,7 +58,7 @@ def snippet(text: str, limit: int = SNIPPET_MAX) -> str:
 
 def book_color(book_code: str) -> str:
     """The row tint for a book, falling back for unknown or missing codes."""
-    return BOOK_ITEM_COLORS.get(book_code or "", DEFAULT_ITEM_COLOR)
+    return theme.item_color(book_code)
 
 
 @dataclass(frozen=True)

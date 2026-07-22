@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import unquote
 
+import slugs
+
 # Built-in reference/tool screens that take the full content width; opening one
 # hides the book browser, while a book page or TOC keeps it.
 #
@@ -53,7 +55,9 @@ def link_to_destination(path: str) -> str:
     if path.startswith("screen/"):
         return path[len("screen/"):]
     if path.startswith("spell/"):
-        return "spells#spell-" + path[len("spell/"):]   # a monster's spell-like link
+        # a monster's spell-like link; the prefix is slugs' so the fragment
+        # matches the id= the compendium emits
+        return "spells#" + slugs.SPELL_PREFIX + path[len("spell/"):]
     return path
 
 

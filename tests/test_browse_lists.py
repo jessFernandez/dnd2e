@@ -10,6 +10,7 @@ from PyQt5.QtCore import Qt
 
 import app
 import browse_lists as bl
+import theme
 
 
 # ── display_title ────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ def test_snippet_at_the_boundary_is_untouched():
 # ── colours ──────────────────────────────────────────────────────────────────
 
 def test_book_color_known_and_unknown():
-    assert bl.book_color("PHB") == bl.BOOK_ITEM_COLORS["PHB"]
+    assert bl.book_color("PHB") == theme.BOOKS["PHB"].item
     assert bl.book_color("NOPE") == bl.DEFAULT_ITEM_COLOR
     assert bl.book_color("") == bl.DEFAULT_ITEM_COLOR
     assert bl.book_color(None) == bl.DEFAULT_ITEM_COLOR
@@ -69,7 +70,7 @@ def test_page_row_without_a_snippet_is_two_lines():
     row = bl.page_row("PHB/DD01.htm", "THAC0 (Player's Handbook)", "Player's Handbook", "PHB")
     assert row.text == "  THAC0\n  Player's Handbook"
     assert row.page_url == "PHB/DD01.htm"
-    assert row.color == bl.BOOK_ITEM_COLORS["PHB"]
+    assert row.color == theme.BOOKS["PHB"].item
 
 
 def test_page_row_with_a_snippet_is_three_lines():
@@ -93,7 +94,7 @@ def test_search_rows_maps_db_search_pages_output():
     assert [r.page_url for r in out] == ["PHB/a.htm", "MM/b.htm"]
     assert out[0].text.endswith("plate mail")
     assert out[1].text == "  Ogre\n  Monstrous Manual"     # no snippet line
-    assert out[1].color == bl.BOOK_ITEM_COLORS["MM"]
+    assert out[1].color == theme.BOOKS["MM"].item
 
 
 # ── tab labels ───────────────────────────────────────────────────────────────

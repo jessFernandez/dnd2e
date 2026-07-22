@@ -1,18 +1,12 @@
-"""splash_html.py — Welcome / landing screen for the D&D 2E app."""
-from view_common import esc
+"""splash_html.py — Welcome / landing screen for the D&D 2E app.
 
-BOOKS = [
-    ("PHB", "Player's Handbook",        "#5b9bd5"),
-    ("DMG", "Dungeon Master Guide",     "#e07b2a"),
-    ("MM",  "Monstrous Manual",         "#4db870"),
-    ("SP",  "Skills & Powers",          "#c8a828"),
-    ("HLC", "High-Level Campaigns",     "#a76bcc"),
-    ("TM",  "Tome of Magic",            "#e05555"),
-    ("SM",  "Spells & Magic",           "#3dbfa8"),
-    ("CT",  "Combat & Tactics",         "#e0924a"),
-    ("AEG", "Arms & Equipment Guide",   "#8a9bb0"),
-    ("ECO", "Economics of the Realm",   "#c9a84c"),
-]
+The book chips come from theme.BOOKS. They used to be a list here that repeated the
+codes, names and colours from app.py — and the names had drifted, so this screen
+called it "Skills & Powers" while the sidebar, the search results and the rulebook
+DB itself all said "Skills and Powers".
+"""
+import theme
+from view_common import esc
 
 FEATURES = [
     ("screen/charactermancer",  "🧙",  "Character Builder",
@@ -32,11 +26,12 @@ FEATURES = [
 
 def generate() -> str:
     book_chips = ""
-    for code, name, color in BOOKS:
+    for code in theme.BOOK_ORDER:
+        b = theme.BOOKS[code]
         book_chips += (
-            f'<a class="book-chip" href="dnd:///toc/{code}" '
-            f'style="border-color:{color};color:{color}" title="{esc(name)}">'
-            f'{esc(code)}</a>'
+            f'<a class="book-chip" href="dnd:///toc/{b.code}" '
+            f'style="border-color:{b.tree};color:{b.tree}" title="{esc(b.name)}">'
+            f'{esc(b.code)}</a>'
         )
 
     feature_cards = ""

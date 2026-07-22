@@ -119,9 +119,9 @@ Two link grammars belong to this stack, both classified in `navigation.py` (see
   `pick/<page>`, `save`, `roll20`, …). `navigation.route_mon` parses it into a tagged
   `MonAct`; `app.py._mon_action` is a `match` of side effects.
 - `dnd:///spell/<slug>` — a monster's spell-like ability linking into the Spell
-  Compendium. `spellsscreen_html` owns both `spell_slug()` and the `id=` anchors it
-  emits, and `monster_spells` imports that function, so a link can't drift from the
-  anchor it points at.
+  Compendium. `slugs.py` owns the slug *and* the `spell-` anchor prefix, so the `id=`
+  `spellsscreen_html` emits and the fragment `navigation` builds come from the same
+  function and can't drift. `monster_spells` imports `slugs`, never the view module.
 
 Editing is guarded on both sides: `monster.house_rule_round_trips` decides whether a
 field can be shown in house-rule form *and* taken back (a conditional THAC0 can't —
@@ -194,9 +194,21 @@ only the side effects (render, show/hide pane, open tab).
 
 `screen_common.py` holds the card-grid chrome (CSS + masonry/filter script) — used by
 `dmscreen_html.py` and `actionsscreen_html.py`; the other screens still carry their own
-CSS, and the palette is duplicated across all of them (a known gap, see
-[`docs/audit-2-plan.md`](docs/audit-2-plan.md) finding 5). `toc_html.py` / `toc.py` build
-tables of contents.
+CSS. `toc_html.py` / `toc.py` build tables of contents.
+
+**`theme.py` owns the colours.** `theme.BOOKS` is one `Book` record per rulebook — its
+name (spelled as `pages.book_name` spells it) plus the three colours that identify it: a
+vivid `tree` for the sidebar and splash chip, a saturated `accent` for its TOC page, a
+dark `item` tint for search/bookmark rows. That replaced four dicts and two copies of the
+names, which had already drifted. Also here: the neutral ramp (`TEXT`, `BG`, `BORDER*`),
+`ACCENT`, and the status colours. **Take a shared colour from here rather than retyping
+the hex.** The stylesheets still hold literals — deliberately; the module's docstring
+explains why and what the safe migration looks like.
+
+**`slugs.py` owns anchor ids** for the two long single-document screens: `slug()`, plus
+`spell_anchor()` / `prof_anchor()`, so the `id=` a screen emits and the link that targets
+it are built by the same function. `monster_spells` imports this, *not* `spellsscreen_html`
+— a logic module must never import a view (enforced by `tests/test_architecture.py`).
 
 **`view_common.py` is the bottom of the view layer** — the templating primitives every
 HTML module needs, currently `esc`. Use it: escaping is the one thing every view does at

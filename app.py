@@ -18,6 +18,8 @@ from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
 import browse_lists
 import db
+import slugs
+import theme
 import toc
 import toc_html
 from navigation import (
@@ -84,50 +86,11 @@ DB_PATH      = _bundle_dir() / "dnd2e.db"
 USER_DB_PATH = _user_data_dir() / "userdata.db"
 BASE_URL     = "https://regalgoblins.com/2erules/"
 
-BOOK_ORDER = ["PHB", "DMG", "MM", "SP", "HLC", "TM", "SM", "CT", "AEG", "ECO"]
-BOOK_NAMES = {
-    "PHB": "Player's Handbook",
-    "DMG": "Dungeon Master Guide",
-    "MM":  "Monstrous Manual",
-    "SP":  "Skills and Powers",
-    "HLC": "High-Level Campaigns",
-    "TM":  "Tome of Magic",
-    "SM":  "Spells and Magic",
-    "CT":  "Combat and Tactics",
-    "AEG": "Arms and Equipment Guide",
-    "ECO": "Economics of the Realm",
-}
+# Book names and their three colour roles (sidebar tree, TOC accent, list-row
+# tint) all live in theme.BOOKS; BOOK_ORDER is theme.BOOK_ORDER.
 
-# Vivid foreground colours for book nodes on the dark sidebar
-BOOK_TREE_COLORS = {
-    "PHB": "#5b9bd5",
-    "DMG": "#e07b2a",
-    "MM":  "#4db870",
-    "SP":  "#c8a828",
-    "HLC": "#a76bcc",
-    "TM":  "#e05555",
-    "SM":  "#3dbfa8",
-    "CT":  "#e0924a",
-    "AEG": "#8a9bb0",
-    "ECO": "#c9a84c",
-}
-
-# Accent colours used in the generated TOC HTML pages
-BOOK_ACCENT_COLORS = {
-    "PHB": "#2563eb",
-    "DMG": "#ea580c",
-    "MM":  "#16a34a",
-    "SP":  "#ca8a04",
-    "HLC": "#7c3aed",
-    "TM":  "#dc2626",
-    "SM":  "#0d9488",
-    "CT":  "#b45309",
-    "AEG": "#4b5563",
-    "ECO": "#b7930a",
-}
-
-# The subtle dark tints for results/bookmarks rows now live with the rest of the
-# row formatting, in browse_lists.BOOK_ITEM_COLORS.
+# Per-book colours (sidebar tree, TOC accent, list-row tint) and book names all
+# come from theme.BOOKS — see the constants replaced below.
 
 # ── Global stylesheet ─────────────────────────────────────────────────────────
 
@@ -1089,8 +1052,8 @@ class MainWindow(QMainWindow):
 
     def _generate_toc_html(self, book_code: str, chapters: list[dict]) -> str:
         return toc_html.book_toc(
-            BOOK_NAMES.get(book_code, book_code),
-            BOOK_ACCENT_COLORS.get(book_code, "#8b0000"),
+            theme.book_name(book_code, book_code),
+            theme.accent_color(book_code),
             chapters,
             self._get_all_house_rules_for_book(book_code),
         )
@@ -1104,15 +1067,15 @@ class MainWindow(QMainWindow):
         self._book_page_order.clear()
 
         total_entries = 0
-        for book_code in BOOK_ORDER:
-            book_name = BOOK_NAMES.get(book_code, book_code)
+        for book_code in theme.BOOK_ORDER:
+            book_name = theme.book_name(book_code, book_code)
             chapters  = self._get_chapters(book_code)          # flat: TOC page + house rules
             tree      = toc.build_tree(db.toc_tree(self.db, book_code))  # site's real nesting
             if not chapters and not tree:
                 continue
 
             self._book_chapters[book_code] = chapters
-            tree_color = BOOK_TREE_COLORS.get(book_code, "#c9ccd6")
+            tree_color = theme.tree_color(book_code)
 
             # Book node
             book_item = QTreeWidgetItem([f"  {book_name}"])
@@ -1172,7 +1135,7 @@ class MainWindow(QMainWindow):
                 entry_item.setFont(0, QFont("Segoe UI", 10))
                 entry_item.setForeground(0, QColor("#7a8098"))
                 entry_item.setData(0, Qt.UserRole,
-                                   ("profnav", "prof-" + proficiencies_html.slug(p.name)))
+                                   ("profnav", slugs.prof_anchor(p.name)))
                 letter_item.addChild(entry_item)
                 total_entries += 1
             prof_item.addChild(letter_item)
@@ -1710,7 +1673,7 @@ class MainWindow(QMainWindow):
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title(f"{book_code} — Contents")
-        self.status.showMessage(f"  {BOOK_NAMES.get(book_code, book_code)}  ·  Table of Contents")
+        self.status.showMessage(f"  {theme.book_name(book_code, book_code)}  ·  Table of Contents")
         return True
 
     # Thin public entry points used by the nav-bar buttons and tree.
@@ -1855,7 +1818,7 @@ class MainWindow(QMainWindow):
     def _build_house_rules_callout(self, rules: list, book_code: str) -> str:
         """Build a slim, collapsed house-rules chip for the top of a rules page."""
         return toc_html.house_rules_callout(
-            rules, BOOK_ACCENT_COLORS.get(book_code, "#c9a84c"))
+            rules, theme.accent_color(book_code))
 
     def _load_page(self, page_url: str, add_to_history: bool = True):
         """Public entry point for opening a scraped rules page (tree/results/bookmarks)."""
