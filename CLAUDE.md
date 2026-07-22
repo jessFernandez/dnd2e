@@ -146,10 +146,20 @@ zoom/find, and sessions). The direction of travel is to keep extracting Qt-light
 clusters into pure controllers with tests, the way `character_library.py` was
 pulled out of the `_cm_*` methods, `ask_controller.py` out of the `_ask_*` ones,
 `session.py` out of session save/restore (`_save_session` / `_restore_session`
-keep the Qt orchestration; `session.py` does the QSettings coercion), and
-`navigation.py` out of the link/pane/history logic (see **Navigation** below).
-Good next candidates: the book search (`SearchWorker` + `_do_search`) and
-bookmarks.
+keep the Qt orchestration; `session.py` does the QSettings coercion),
+`navigation.py` out of the link/pane/history logic (see **Navigation** below), and
+`browse_lists.py` out of the three side lists.
+
+`browse_lists.py` is worth knowing about: the browse tree, the search results and
+the bookmarks list all render the same thing — a rulebook page as a cleaned-up title
+over its book name, tinted by which book it came from. That formatting had been
+written three times inside `MainWindow`. It now lives in one pure module
+(`display_title`, `snippet`, `book_color`, `page_row`, `BOOK_ITEM_COLORS`), with
+`_add_row` / `_add_placeholder` as the only Qt left.
+
+Good next candidate: `_build_ui` (215 lines) — though see
+[`docs/audit-2-plan.md`](docs/audit-2-plan.md) on why chasing `app.py`'s coverage
+number is the wrong target; extract *decisions*, not widget construction.
 
 ### Navigation
 

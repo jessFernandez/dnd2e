@@ -8,7 +8,7 @@ Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 ·
 | 1 — one coercing `esc` everywhere | **done** (1195 passed, 1 skipped) |
 | 2 — tooling + invariant tests | **done** (1234 passed, 1 skipped; ruff clean) |
 | 3 — `route_destination` | **done** (1257 passed, 1 skipped) |
-| 4 — search/bookmarks extraction | not started |
+| 4 — search/bookmarks extraction | **done** (1278 passed, 1 skipped) |
 | 5 — `theme.py` | not started |
 | 6 — JSON-blob store + `from_dict` coercion | not started |
 
@@ -198,6 +198,20 @@ Finding 5).
 That's the extractable part: a pure `display_title(text)` plus a
 `list_row(title, book_name, book_code, snippet=None)` returning display text + colour,
 with the Qt widget construction left behind.
+
+**Landed as `browse_lists.py`** (100% covered, 20 tests). The insight that made it worth
+more than de-duplicating one regex: the browse tree, the search results and the bookmarks
+list are all rendering *the same thing* — a rulebook page as a title over its book name,
+tinted by book — so the module is named for that idea rather than for the two methods it
+came out of. `display_title`, `snippet`, `book_color`, `page_row`, `search_rows` and the
+two tab labels are pure; `_add_row` / `_add_placeholder` in `app.py` are the six lines of
+Qt left behind, covered by stand-in wiring tests.
+
+`BOOK_ITEM_COLORS` moved here from `app.py` — a row's tint is part of what the row *means*
+(which book it's from), not part of the widget. It's still duplicated against the HTML
+views' palettes; phase 5 collapses both into `theme.py`.
+
+`app.py`: 1350 → 1330 statements, 28% → 31% covered.
 
 ---
 

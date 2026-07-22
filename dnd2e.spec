@@ -61,6 +61,7 @@ a = Analysis(
         'toc',
         'toc_html',
         'view_common',
+        'browse_lists',
         'calculator',
     ],
     hookspath=[],

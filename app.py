@@ -16,6 +16,7 @@ from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
+import browse_lists
 import db
 import toc
 import toc_html
@@ -125,19 +126,8 @@ BOOK_ACCENT_COLORS = {
     "ECO": "#b7930a",
 }
 
-# Subtle dark tints used for list items in results / bookmarks panels
-BOOK_ITEM_COLORS = {
-    "PHB": "#192233",
-    "DMG": "#2a1e12",
-    "MM":  "#132213",
-    "SP":  "#232012",
-    "HLC": "#1f1430",
-    "TM":  "#261212",
-    "SM":  "#122424",
-    "CT":  "#251b12",
-    "AEG": "#1c1f24",
-    "ECO": "#22200a",
-}
+# The subtle dark tints for results/bookmarks rows now live with the rest of the
+# row formatting, in browse_lists.BOOK_ITEM_COLORS.
 
 # ── Global stylesheet ─────────────────────────────────────────────────────────
 
@@ -1143,7 +1133,7 @@ class MainWindow(QMainWindow):
                     chap_item.setForeground(0, QColor("#8a90a8"))
                     chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
                     for page_url, subtopic in ch["entries"]:
-                        label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
+                        label = browse_lists.display_title(subtopic)
                         entry_item = QTreeWidgetItem([f"   {label}"])
                         entry_item.setFont(0, QFont("Segoe UI", 10))
                         entry_item.setForeground(0, QColor("#7a8098"))
@@ -2013,39 +2003,40 @@ class MainWindow(QMainWindow):
         self._search_worker.failed.connect(self._show_search_error)
         self._search_worker.start()
 
+    def _add_row(self, widget, row: browse_lists.Row):
+        """Put one browse_lists.Row into a QListWidget."""
+        item = QListWidgetItem(row.text)
+        item.setData(Qt.UserRole, row.page_url)
+        item.setForeground(QColor(row.fg))
+        item.setBackground(QColor(row.color))
+        widget.addItem(item)
+
+    def _add_placeholder(self, widget, text: str, color: str):
+        """A non-clickable message row ("No results found.", "Search failed…")."""
+        item = QListWidgetItem(text)
+        item.setForeground(QColor(color))
+        widget.addItem(item)
+
     def _show_results(self, rows):
         self.results_list.clear()
         if not rows:
-            empty = QListWidgetItem("  No results found.")
-            empty.setForeground(QColor("#505870"))
-            self.results_list.addItem(empty)
+            self._add_placeholder(self.results_list, "  No results found.",
+                                  browse_lists.MUTED_FG)
             self.status.showMessage("  No results found.")
             return
 
-        for page_url, title, book_name, book_code, _snip in rows:
-            label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
-            text  = f"  {label}\n  {book_name or ''}"
-            snip  = re.sub(r"\s+", " ", (_snip or "").replace("**", "")).strip()
-            if snip:
-                if len(snip) > 120:
-                    snip = snip[:118].rstrip() + "…"
-                text += f"\n  {snip}"
-            item = QListWidgetItem(text)
-            item.setData(Qt.UserRole, page_url)
-            item.setForeground(QColor("#c0c4d4"))
-            item.setBackground(QColor(BOOK_ITEM_COLORS.get(book_code or "", "#1a1d24")))
-            self.results_list.addItem(item)
+        for row in browse_lists.search_rows(rows):
+            self._add_row(self.results_list, row)
 
-        self.tabs.setTabText(1, f"Results ({len(rows)})")
+        self.tabs.setTabText(1, browse_lists.results_tab_label(len(rows)))
         self.status.showMessage(f"  Found {len(rows)} results")
 
     def _show_search_error(self, message: str):
         """A search that actually failed (bad DB, FTS syntax) — surfaced distinctly
         from a genuine zero-match so the user isn't told 'no results' for an error."""
         self.results_list.clear()
-        item = QListWidgetItem("  Search failed — try a simpler query.")
-        item.setForeground(QColor("#c07070"))
-        self.results_list.addItem(item)
+        self._add_placeholder(self.results_list, "  Search failed — try a simpler query.",
+                              browse_lists.ERROR_FG)
         self.status.showMessage(f"  Search failed: {message}")
 
     def _on_result_click(self, item: QListWidgetItem):
@@ -2075,15 +2066,11 @@ class MainWindow(QMainWindow):
         for page_url in db.bookmark_urls(self.user_db):
             prow = db.page_meta(self.db, page_url)
             title, book_name, book_code = prow if prow else (page_url, "", "")
-            label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
-            item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
-            item.setData(Qt.UserRole, page_url)
-            item.setForeground(QColor("#c0c4d4"))
-            item.setBackground(QColor(BOOK_ITEM_COLORS.get(book_code or "", "#1a1d24")))
-            self.bookmarks_list.addItem(item)
+            self._add_row(self.bookmarks_list,
+                          browse_lists.page_row(page_url, title, book_name, book_code))
 
         count = self.bookmarks_list.count()
-        self.tabs.setTabText(2, f"Bookmarks ({count})" if count else "Bookmarks")
+        self.tabs.setTabText(2, browse_lists.bookmarks_tab_label(count))
 
     def _on_bookmark_click(self, item: QListWidgetItem):
         url = item.data(Qt.UserRole)
