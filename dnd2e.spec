@@ -87,7 +87,13 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # upx=False, not True: UPX is not installed on the dev machine or on the CI
+    # runners, so PyInstaller warned and skipped it silently -- the flag has
+    # never compressed anything. Saying False keeps the spec honest. Turning it
+    # on for real would mean installing UPX in the build job and accepting that
+    # UPX-packed Qt DLLs are a well-known source of antivirus false positives,
+    # to trade ~330 MB for ~250 MB.
+    upx=False,
     console=False,   # no console window
     disable_windowed_traceback=False,
     target_arch=None,
@@ -102,7 +108,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,   # see the EXE() note above
     upx_exclude=[],
     name='DnD2eRules',
 )

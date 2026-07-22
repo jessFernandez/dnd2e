@@ -68,13 +68,44 @@ jobs:
           "db  : {0:N1} MB at {1}" -f ($db.Length / 1MB), $db.FullName
           "total: {0:N1} MB" -f ((Get-ChildItem $root -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB)
 
-      # Only on tags. The bundle measures ~330 MB, and parking that against the
-      # repo's storage quota on every master push buys nothing -- nobody
-      # downloads a mid-week build. A tagged one is a build someone installs.
-      - name: Upload the bundle
+      # Everything below is tags only. The bundle measures ~330 MB, and parking
+      # that against the repo's storage quota on every master push buys nothing
+      # -- nobody downloads a mid-week build. A tagged one is a build someone
+      # installs, so it gets zipped and handed to the release job.
+      - name: Package the bundle
+        if: startsWith(github.ref, 'refs/tags/')
+        run: Compress-Archive -Path dist/DnD2eRules -DestinationPath DnD2eRules-${{ github.ref_name }}.zip
+
+      - name: Hand the zip to the release job
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v7
         with:
           name: DnD2eRules-${{ github.ref_name }}
-          path: dist/DnD2eRules
+          path: DnD2eRules-${{ github.ref_name }}.zip
           retention-days: 14
+
+  # Split out purely to contain `contents: write`. Building does not need the
+  # ability to write to the repo; only publishing does, and this job does nothing
+  # else. The workflow-level default above stays read-only for the build itself.
+  release:
+    needs: bundle
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      # v8 pairs with upload-artifact@v7 above -- the two move in lockstep (v8
+      # skips unzipping non-archive uploads, which is exactly the v7 feature it
+      # exists to support). Leaving this at v4 against a v7 upload would be a
+      # mismatched pair, and nothing on a pull request would catch it: build.yml
+      # does not run on PRs, and these two steps are tags-only.
+      - uses: actions/download-artifact@v8
+        with:
+          name: DnD2eRules-${{ github.ref_name }}
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: DnD2eRules-${{ github.ref_name }}.zip
+          generate_release_notes: true

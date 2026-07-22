@@ -14,6 +14,20 @@ permissions:
   contents: read
 
 jobs:
+  # Workflow files fail at *runtime* on GitHub, not at parse time: a mistyped
+  # context or a bad matrix reference is valid YAML that simply misbehaves. This
+  # catches that class before it reaches a runner. Pinned to a release and run
+  # from the upstream image directly rather than through a third-party wrapper
+  # action, to keep the supply-chain surface to one hop.
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
   test:
     strategy:
       fail-fast: false   # a Windows-only break should not hide the Linux result
@@ -60,6 +74,25 @@ jobs:
       - name: Lint
         if: matrix.os == 'ubuntu-latest'
         run: ruff check .
+
+      # CLAUDE.md says equipment.py and nonweapon_book.py are generated and must
+      # not be hand-edited, but nothing enforced it. The likelier mistake is not
+      # editing the generated file -- it is editing economics_csv/*.csv or
+      # nonweapon_proficiencies.csv and forgetting to regenerate, leaving the
+      # source and the shipped module quietly disagreeing.
+      #
+      # Only these two generators run here. build_spells.py and build_toc_tree.py
+      # fetch from regalgoblins.com, so they cannot run in CI and are not gated.
+      # Both of these read committed files and use only the stdlib.
+      #
+      # ubuntu only, deliberately: Python's text mode writes CRLF on Windows, so
+      # running this on both legs would test git's autocrlf, not the generators.
+      - name: Generated modules match their sources
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python scripts/build_items.py
+          python scripts/build_nwp_book.py
+          git diff --exit-code -- equipment.py nonweapon_book.py
 
       # Windows is the platform this ships on: app.py's _user_data_dir() reads
       # APPDATA first, so the primary branch of that path only ever executes here.
