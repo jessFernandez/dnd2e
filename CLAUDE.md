@@ -27,8 +27,7 @@ pyinstaller dnd2e.spec        # build the distributable bundle into dist/
 Runtime deps are in `requirements.txt`, the suite's in `requirements-dev.txt`. Almost
 every module is Qt-free, but the *suite* still needs PyQt5 installed — `test_ask_lifecycle`
 and `test_search_worker` drive real `QThread`s, so collection fails without it (headless:
-`QT_QPA_PLATFORM=offscreen`). CI runs lint + tests on push and PR
-(`.github/workflows/tests.yml`).
+`QT_QPA_PLATFORM=offscreen`). See **CI and releases** below for what runs where.
 
 Run tests **from the repo root**. The modules under test live at the repo root but
 the tests live in `tests/`; `conftest.py` is a `sys.path` shim that bridges that
@@ -38,6 +37,46 @@ import `app`/`rules_agent`/… — don't remove it.
 `requirements.txt` covers runtime + scraper deps. "Ask the Rules" talks to a
 local **Ollama** server (`http://localhost:11434`); no API key, and the feature
 degrades gracefully when Ollama isn't running.
+
+## CI and releases
+
+Two workflows, on **Python 3.14** — the interpreter this is developed on. Pinning CI
+to an older one meant the only bug it could catch alone was a regression on a Python
+nobody here runs.
+
+**`tests.yml`** (push to master + every PR) runs four things:
+
+- the suite on **ubuntu *and* windows**. Windows is not redundant: this ships as a
+  Windows bundle, and `app.py`'s `_user_data_dir()` reads `APPDATA` first, so the
+  primary branch of the path holding every bookmark and saved character executes
+  only on that leg. `fail-fast: false`, so one platform breaking can't hide the other.
+- `ruff check .` — one leg only; its verdict doesn't vary by platform.
+- **the generated-module gate** (see Conventions).
+- **actionlint**, because workflow files fail at *runtime* on GitHub, not at parse time.
+
+**`build.yml`** (push to master + `v*` tags, *not* PRs — it costs minutes where the
+suite costs seconds) actually runs `pyinstaller dnd2e.spec` and asserts the exe and
+the bundled DB exist. `test_architecture.py` checks the spec's `hiddenimports` list is
+in sync, but that is a static check on a *list* — only this catches a bundle that
+won't assemble. PyInstaller warns rather than fails on a missing data file, so the
+verify step asserts rather than trusting exit 0.
+
+**To cut a release:** push a `v*` tag. `bundle` zips the bundle (~340 MB, most of it
+Qt WebEngine and the rulebook DB) and `release` attaches it with generated notes. That
+second job exists purely to hold `contents: write` — building needs no write access to
+the repo, only publishing does. **The release path has not run end to end yet**; the
+first real tag is its first exercise.
+
+Tool versions are **pinned deliberately**: `ruff` exactly (it gains `F` checks between
+minors, so a floor lets a release turn master red on a day nobody touched the repo),
+`pytest` capped at the major. Dependabot watches the action refs.
+
+⚠️ **Dependabot only sees `master`.** When it bumps something that also appears on an
+open branch, *neither* PR covers the merged result. This has already bitten once: a
+clean `upload-artifact` bump would have left it paired with a `download-artifact` still
+on the old major, and nothing would have caught it — `build.yml` doesn't run on PRs and
+both steps are tags-only, so the first symptom would have been a broken release. Those
+two actions move in lockstep; check the pair after any bump.
 
 ## Architecture — the one rule that matters
 
@@ -303,4 +342,17 @@ book-contents page and per-chapter house-rule callouts.) Background:
   stays in `db.py` (`rules_agent` is grandfathered), that `dnd2e.spec` lists every module
   and no stale ones, that the import graph stays acyclic, and that every module imports
   standalone. If one fails, the rule it names is the thing to fix — not the test.
+- **So is "do not hand-edit the generated modules".** CI re-runs `build_items.py` and
+  `build_nwp_book.py` and fails on any diff. The mistake it actually catches is not
+  editing `equipment.py` directly — it's editing `economics_csv/*.csv` or
+  `nonweapon_proficiencies.csv` and forgetting to regenerate, leaving source and shipped
+  module disagreeing. **Edited a generator's input? Re-run it and commit the result.**
+  Only those two are gated: `build_spells.py` and `build_toc_tree.py` fetch from
+  regalgoblins.com and can't run in CI. It runs on ubuntu only — Python's text mode
+  writes CRLF on Windows, so both legs would be testing git's autocrlf, not the
+  generators.
+- **A test that hangs fails at 60s** (`timeout` in `pyproject.toml`, via `pytest-timeout`).
+  That is a deadlock guard, not a performance budget — the whole suite runs in ~7s. It
+  exists for `test_ask_lifecycle`/`test_search_worker`, which drive real `QThread`s; a
+  job-level timeout would kill the runner with no traceback, this names the test.
 - `*.log`, `build/`, `dist/`, `__pycache__/` are gitignored build/run artifacts.
