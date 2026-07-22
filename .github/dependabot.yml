@@ -1,0 +1,13 @@
+version: 2
+
+# GitHub Actions only. The Python requirements files carry deliberate version
+# floors rather than a lockfile (see requirements-dev.txt), so pip updates here
+# would just churn those floors without pinning anything down. Action refs, by
+# contrast, are exact pins that go stale silently.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci

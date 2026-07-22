@@ -9,6 +9,13 @@
 # module scope to drive the worker threads, so collection fails without it.
 # Running those headless needs QT_QPA_PLATFORM=offscreen (see .github/workflows).
 
-pytest>=8.0
+# ruff is pinned exactly, not floored. Its `F` rule family gains checks between
+# minor releases, so an unpinned floor lets a ruff release turn master red on a
+# day nobody touched the repo. Bump it deliberately, as a reviewed change.
+ruff==0.15.22
+
+# Capped at the major: pytest's breaking changes land there, and the suite has
+# no reason to opt into pytest 10 the day it ships.
+pytest>=8.0,<10
+
 coverage>=7.0
-ruff>=0.15
