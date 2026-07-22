@@ -22,6 +22,8 @@ import toc_html
 from navigation import (
     History, link_to_destination, pane_action, Trigger, Pane,
     route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
+    route_mon, MonSet, MonTier, MonInit, MonPick, MonPickVariant, MonLoad, MonDelete,
+    MonFamily, MonPicker, MonNew, MonSave, MonExport,
 )
 import askscreen_html
 import charactermancer_html
@@ -32,6 +34,8 @@ from character_library import CharacterLibrary
 import monster
 import monster_parser
 import monster_html
+import monster_spells
+import monster_tiers
 from monster_library import MonsterLibrary
 from rules_agent import AskWorker, ollama_status
 from ask_controller import Conversation, resolve_model, page_state
@@ -655,6 +659,7 @@ class MainWindow(QMainWindow):
         self._ask = Conversation()          # current Jarvis conversation + in-flight context
         self._calc = None                   # floating house-rule calculator window
         self._spells_file = None            # cached temp file for the Spells screen
+        self._spell_index = None            # cached monster_spells matcher (built lazily)
         self._prof_file = None              # cached temp file for the Proficiencies book
         self._all_spells = None             # lazily-loaded spell list for the builder
         self._cm = None                     # in-progress Charactermancer build (window-level)
@@ -663,6 +668,7 @@ class MainWindow(QMainWindow):
         self._mon_saved_id = None           # its saved-row id, or None (caller-held)
         self._mon_library = MonsterLibrary(self.user_db)      # save/load/delete for monsters
         self._mon_index = None              # cached (families, standalone) MM index (parsed once)
+        self._mon_page_cache = None         # (page_url, monsters, group) — last MM page parsed
 
         # Built-in screens: destination key -> (html generator, tab title, status text)
         self._screens = {
@@ -1309,8 +1315,9 @@ class MainWindow(QMainWindow):
             return self._render_toc(dest[4:])
         if dest == "ask":
             return self._render_ask()
-        if dest == "spells":
-            return self._render_spells()
+        if dest == "spells" or dest.startswith("spells#"):
+            frag = dest.split("#", 1)[1] if "#" in dest else ""
+            return self._render_spells(frag)
         if dest == "charactermancer":
             return self._render_charactermancer()
         if dest == "monster":
@@ -1340,9 +1347,11 @@ class MainWindow(QMainWindow):
     def _load_spells(self) -> list:
         return db.all_spells(self.db)
 
-    def _render_spells(self) -> bool:
+    def _render_spells(self, fragment: str = "") -> bool:
         # The full compendium is ~1.9 MB of HTML — over QtWebEngine's setHtml data-URL
         # limit — so render it once to a temp file and load it as a file:// URL.
+        # ``fragment`` (e.g. "spell-cone-of-cold") scrolls to a spell — a monster
+        # sheet's spell-like link routes here.
         if self._spells_file is None:
             rows = self._load_spells()
             html = (generate_spells_html(rows) if rows else
@@ -1352,7 +1361,10 @@ class MainWindow(QMainWindow):
             path = USER_DB_PATH.parent / "spells_screen.html"
             path.write_text(html, encoding="utf-8")
             self._spells_file = path
-        self.content._view.setUrl(QUrl.fromLocalFile(str(self._spells_file)))
+        url = QUrl.fromLocalFile(str(self._spells_file))
+        if fragment:
+            url.setFragment(fragment)
+        self.content._view.setUrl(url)
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title("Spells")
@@ -1513,9 +1525,18 @@ class MainWindow(QMainWindow):
     def _render_monster_sheet(self) -> bool:
         m = self._mon if self._mon is not None else monster.Monster()
         self.content._view.setHtml(
-            monster_html.generate(m, self._mon_saved_id, self._mon_image_url(m)))
+            monster_html.generate(m, self._mon_saved_id, self._mon_image_url(m),
+                                  self._spell_link_index()))
         self._mon_status(m.name or "Monster")
         return True
+
+    def _spell_link_index(self):
+        """The compendium spell-name matcher for linking a monster's spell-like
+        abilities (built once, from the same rows the Spells screen uses)."""
+        if self._spell_index is None:
+            names = [r["name"] for r in self._load_spells()]
+            self._spell_index = monster_spells.build_index(names)
+        return self._spell_index
 
     def _mon_image_url(self, m) -> str:
         """A monster's MM illustration for the sheet. Once cached locally it's served
@@ -1553,13 +1574,31 @@ class MainWindow(QMainWindow):
                 pass
         threading.Thread(target=fetch, daemon=True).start()
 
+    def _parse_mm_page(self, page_url: str):
+        """(monsters, group_name) for an MM page, caching the last page. A pick funnels
+        through three parses (_mon_pick → variant picker → _mon_pick_variant); the
+        one-entry cache makes them share a single parse instead of re-parsing thrice."""
+        if not self._mon_page_cache or self._mon_page_cache[0] != page_url:
+            row = db.get_page(self.db, page_url)
+            if row:
+                monsters = monster_parser.parse_stat_block(
+                    row["content_html"], row["title"], page_url)
+                group = monster_parser.clean_title(row["title"])
+            else:
+                monsters, group = [], ""
+            self._mon_page_cache = (page_url, monsters, group)
+        return self._mon_page_cache[1], self._mon_page_cache[2]
+
+    @staticmethod
+    def _fresh_monster(m):
+        """A detached copy of a parsed monster, so editing the loaded sheet never
+        mutates the object cached by _parse_mm_page (a later re-import stays clean)."""
+        return monster.Monster.from_dict(m.to_dict())
+
     def _render_variant_picker(self, page_url: str) -> bool:
-        row = db.get_page(self.db, page_url)
-        monsters = (monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
-                    if row else [])
+        monsters, group = self._parse_mm_page(page_url)
         if not monsters:
             return self._render_monster_picker()
-        group = monster_parser._clean_title(row["title"])
         self.content._view.setHtml(monster_html.generate_variant_picker(
             group, page_url, [m.name for m in monsters]))
         self._mon_status(f"{group} — choose a variant")
@@ -1572,74 +1611,107 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"  Monsters  ·  {subtitle}")
 
     def _mon_action(self, path: str):
-        """Apply a mon/ link action. Field edits mutate self._mon in place (no
-        re-render); navigations push history so Back works."""
-        if path.startswith("set/"):
-            self._mon_set(path[len("set/"):])
-        elif path == "import":
-            self._navigate("monster")
-        elif path.startswith("family/"):
-            self._navigate("monster-family/" + path[len("family/"):])
-        elif path == "new":
-            self._mon, self._mon_saved_id = monster.Monster(), None
-            self._navigate("monster-sheet")
-        elif path == "save":
-            self._mon_save()
-            self._render_monster_sheet()          # in place: refresh Save label + tiles
-        elif path.startswith("pick/"):
-            self._mon_pick(path[len("pick/"):])
-        elif path.startswith("pickvar/"):
-            self._mon_pick_variant(path[len("pickvar/"):])
-        elif path.startswith("load/"):
-            self._mon_load(path[len("load/"):])
-        elif path.startswith("delete/"):
-            self._mon_delete(path[len("delete/"):])
+        """Perform a mon/ link action. navigation.route_mon owns the grammar (decoding,
+        index/id coercion); this is only the side effects. Field edits mutate self._mon
+        in place — no re-render, so focus and scroll survive; navigations push history
+        so Back works."""
+        match route_mon(path):
+            case MonSet(field, value):
+                self._mon_set(field, value)
+            case MonTier(index):
+                self._mon_set_tier(index)
+                self._render_monster_sheet()      # re-render scaled to the chosen tier
+            case MonInit(value):
+                self._mon_set_init(value)
+                self._render_monster_sheet()      # re-render so the Initiative tile follows
+            case MonPick(page_url):
+                self._mon_pick(page_url)
+            case MonPickVariant(page_url, index):
+                self._mon_pick_variant(page_url, index)
+            case MonLoad(saved_id):
+                self._mon_load(saved_id)
+            case MonDelete(saved_id):
+                self._mon_delete(saved_id)
+            case MonFamily(family):
+                self._navigate("monster-family/" + family)
+            case MonPicker():
+                self._navigate("monster")
+            case MonNew():
+                self._mon, self._mon_saved_id = monster.Monster(), None
+                self._navigate("monster-sheet")
+            case MonSave():
+                self._mon_save()
+                self._render_monster_sheet()      # in place: refresh Save label + tiles
+            case MonExport():
+                self._mon_export_roll20()         # copies JSON to clipboard; keep the status
 
-    def _mon_set(self, rest: str):
+    def _mon_set(self, field: str, value: str):
         """Store an edited field on the current monster (AC/THAC0 convert back from
-        their house-rule display form)."""
-        field, _, raw = rest.partition("/")
-        if self._mon is not None and field in monster.EDITABLE_FIELDS:
-            setattr(self._mon, field, monster.house_rule_to_raw(field, unquote(raw)))
+        their house-rule display form). A field the *selected tier* is scaling is
+        refused: the sheet shows it read-only while a tier is active, because the edit
+        would write the tier's value onto the base stat block."""
+        if self._mon is None or field not in monster.EDITABLE_FIELDS:
+            return
+        if field in monster_tiers.tiered_fields(self._mon):
+            return
+        setattr(self._mon, field, monster.house_rule_to_raw(field, value))
+
+    def _mon_set_tier(self, index):
+        """Select an HD/age scaling tier by index (None = the base stat block)."""
+        if self._mon is not None:
+            self._mon.selected_tier = index
+
+    def _mon_set_init(self, value):
+        """Override the size-derived initiative speed factor (None clears it)."""
+        if self._mon is not None:
+            self._mon.initiative_override = value
 
     def _mon_pick(self, page_url: str):
         """Import an MM page: a single creature opens the sheet, else the variant chooser."""
-        row = db.get_page(self.db, page_url)
-        if not row:
-            return
-        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
+        monsters, _ = self._parse_mm_page(page_url)
         if not monsters:
             return
         if len(monsters) == 1:
-            self._mon, self._mon_saved_id = monsters[0], None
+            self._mon, self._mon_saved_id = self._fresh_monster(monsters[0]), None
             self._navigate("monster-sheet")
         else:
             self._navigate("monster-variant/" + page_url)
 
-    def _mon_pick_variant(self, rest: str):
-        page_url, _, idx = rest.rpartition("/")
-        row = db.get_page(self.db, page_url)
-        if not row:
+    def _mon_pick_variant(self, page_url: str, index: int):
+        monsters, _ = self._parse_mm_page(page_url)
+        if not 0 <= index < len(monsters):
             return
-        monsters = monster_parser.parse_stat_block(row["content_html"], row["title"], page_url)
-        try:
-            self._mon = monsters[int(idx)]
-        except (ValueError, IndexError):
-            return
-        self._mon_saved_id = None
+        self._mon, self._mon_saved_id = self._fresh_monster(monsters[index]), None
         self._navigate("monster-sheet")
+
+    def _mon_export_roll20(self):
+        """Build the Roll20 import JSON for the current monster — its selected HD/age
+        tier, house-rule numbers, and spell-like abilities enriched from the spell DB —
+        and copy it to the clipboard for pasting into the sheet's import box."""
+        from PyQt5.QtWidgets import QApplication
+        import roll20_export
+        if self._mon is None:
+            return
+        if self._all_spells is None:
+            self._all_spells = db.all_spells(self.db)
+        details = {s["name"]: s for s in self._all_spells}
+        data = roll20_export.monster_to_roll20(self._mon, details, self._spell_link_index())
+        QApplication.clipboard().setText(json.dumps(data, indent=2))
+        self.status.showMessage(
+            f"  Roll20 JSON for {self._mon.name or 'monster'} copied — "
+            f"paste into the sheet's Settings → Import box")
 
     def _mon_save(self):
         if self._mon is not None:
             self._mon_saved_id = self._mon_library.save(self._mon, self._mon_saved_id)
 
-    def _mon_load(self, mid: str):
+    def _mon_load(self, mid: int):
         m = self._mon_library.load(mid)
         if m is not None:
-            self._mon, self._mon_saved_id = m, int(mid)
+            self._mon, self._mon_saved_id = m, mid
             self._navigate("monster-sheet")
 
-    def _mon_delete(self, mid: str):
+    def _mon_delete(self, mid: int):
         deleted = self._mon_library.delete(mid)
         if deleted is not None and self._mon_saved_id == deleted:
             self._mon_saved_id = None

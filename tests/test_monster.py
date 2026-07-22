@@ -5,6 +5,7 @@ parse the real Monstrous Manual pages and skip when dnd2e.db is absent (the
 needs_db pattern from test_db.py).
 """
 import os
+import re
 
 import pytest
 
@@ -52,6 +53,20 @@ def test_attack_bonus_is_the_base_value():
     assert Monster(thac0="45-49 hp: 11 50-59 hp: 9").attack_bonus() == "9"       # hp-conditional (Beholder)
     assert Monster(thac0="").attack_bonus() == ""
     assert Monster(thac0="Nil").attack_bonus() == ""
+
+
+def test_house_rule_round_trips_guards_lossy_thaco_edits():
+    """attack_bonus() reports one number, but the field it came from may hold a range
+    or an HD-conditional list — writing the bonus back would replace the lot (and the
+    tiers monster_tiers derives from it). Only a bare THAC0 may be edited as a bonus."""
+    assert monster.house_rule_round_trips("thac0", "19")
+    assert monster.house_rule_round_trips("thac0", " -1 ")
+    assert not monster.house_rule_round_trips("thac0", "17-13")
+    assert not monster.house_rule_round_trips("thac0", "3+3 HD: 17 4+4 HD: 15")
+    assert not monster.house_rule_round_trips("thac0", "Nil")
+    # AC is its own inverse — every number converts in place, so it always round-trips
+    assert monster.house_rule_round_trips("armor_class", "Overall 2, underside 4")
+    assert monster.house_rule_round_trips("climate_terrain", "Any land")
 
 
 def test_clean_prose_reflows_wraps_and_collapses_blank_runs():
@@ -155,24 +170,30 @@ def test_dehyphenate_closes_soft_line_break_wraps():
     assert _dehyphenate("Beholder-kin") == "Beholder-kin"      # a real hyphen (no space) is kept
 
 
-def test_trailing_wide_subtable_does_not_bleed_into_last_stat():
-    # a dragon-shaped page: the stat block, then an age-progression sub-table whose
-    # header row has an empty first cell and *more* columns than the block. It must
-    # not append onto the last stat value (XP VALUE), which was the "Variable Body" bug.
+def test_trailing_age_progression_table_is_captured_not_bled_into_xp():
+    # a dragon-shaped page: the stat block, then an age-progression table (its own
+    # <TABLE>, as in the real MM) with a two-row header. Phase A *captures* it as an
+    # ``age`` extra while still keeping it out of the last stat value (XP VALUE) —
+    # the no-contamination half of the old "Variable Body" bug.
     rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["2"]),
             ("SIZE", ["G"]), ("XP VALUE", ["Variable"])]
     html = _html(rows).replace(
         "</TABLE>",
+        "</TABLE><TABLE>"
         "<TR><TD></TD><TD>Body</TD><TD>Tail</TD><TD>Breath</TD></TR>"
         "<TR><TD>Age</TD><TD>1-12</TD><TD>3-12</TD><TD>2d10</TD></TR></TABLE>")
     (m,) = parse_stat_block(html, title="Dragon (Monstrous Manual)")
-    assert m.xp_value == "Variable"          # not "Variable Body"
+    assert m.xp_value == "Variable"                 # not "Variable Body" — no contamination
+    (age,) = [t for t in m.extra_tables if t["kind"] == "age"]  # now captured, not dropped
+    assert age["header_rows"] == 2
+    assert any("Body" in c for row in age["rows"] for c in row)
 
 
-def test_trailing_two_column_subtable_after_a_data_row_is_ignored():
-    # a Deep-Dragon shape: an "Age / Ability" sub-table (only 2 columns) whose wrapped
-    # lines have empty first cells. The 'Wyrm' data row ends the stat block, so those
-    # continuations must not append onto XP VALUE.
+def test_trailing_subtable_inside_the_stat_block_table_still_ignored():
+    # the same-<TABLE> guard: a sub-table crammed into the stat block's own <TABLE>
+    # (the 'Wyrm' data row ends the block; wrapped continuations follow) can't be
+    # captured at the table level, so it must still be ignored — never bleeding onto
+    # XP VALUE.
     rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["2"]), ("XP VALUE", ["Variable"])]
     html = _html(rows).replace(
         "</TABLE>",
@@ -181,6 +202,45 @@ def test_trailing_two_column_subtable_after_a_data_row_is_ignored():
         "<TR><TD></TD><TD>times/day</TD></TR></TABLE>")
     (m,) = parse_stat_block(html, title="Dragon (Monstrous Manual)")
     assert m.xp_value == "Variable"
+    assert m.extra_tables == []                     # nothing trailing the stat block's table
+
+
+def test_classifier_recognizes_the_three_known_shapes():
+    from monster_parser import _classify_table
+    age = _classify_table([
+        ["", "Body", "Tail", "", "Breath", "Spells", "", "Treas.", "XP"],
+        ["Age", "Lgt. (')", "Lgt. (')", "AC", "Weapon", "Wizard/Priest", "MR", "Type", "Value"],
+        ["1", "3-6", "2-5", "4", "2d4+1", "Nil", "Nil", "Nil", "4,000"]])
+    assert age["kind"] == "age" and age["header_rows"] == 2
+
+    psi = _classify_table([
+        ["Level", "Dis/Sci/Dev", "Attack/Defense", "Power Score", "PSPs"],
+        ["8", "3/5/16", "TS,IF,TW", "= Int", "250"]])
+    assert psi["kind"] == "psionics" and psi["header_rows"] == 1
+
+    # a psionics header wrapped onto two rows (Couatl / Ki-rin shape)
+    psi2 = _classify_table([
+        ["Level", "Dis/Sci", "Attack/", "Power", "PSPs"],
+        ["", "Dev", "Defense", "Score", ""],
+        ["9", "4/5/18", "Any/All", "= Int", "200"]])
+    assert psi2["kind"] == "psionics" and psi2["header_rows"] == 2
+
+    dmg = _classify_table([["Attack", "Damage", "Attack", "Damage"],
+                           ["acid", "full", "cold", "half*"]])
+    assert dmg["kind"] == "attack_damage"
+
+
+def test_classifier_normalizes_and_keeps_unknown_tables_as_other():
+    from monster_parser import _classify_table
+    # a leading spacer column present in every row is folded away
+    hit = _classify_table([["", "Roll", "Location", "AC"],
+                           ["", "01-75", "Body", "0"]])
+    assert hit["kind"] == "other"
+    assert hit["rows"][0] == ["Roll", "Location", "AC"]      # spacer column dropped
+    # an age→lore table (no combat columns) is not mistaken for age progression
+    notes = _classify_table([["Age", "Ability"], ["Wyrm", "repulsion 3/day"]])
+    assert notes["kind"] == "other"
+    assert _classify_table([["", ""]]) is None              # a wholly blank table
 
 
 def test_compact_table_filters_spell_and_psionics_junk_rows():
@@ -227,6 +287,155 @@ def test_splits_prose_into_sections():
     assert m.ecology == "It eats."
 
 
+def test_splits_prose_on_ocr_habitat_society_variants():
+    from monster_parser import _split_prose
+    # "Habit/Society" (Blue Dragon), "Society/Habitat" and "Habitat Society" are OCR
+    # variants; each must still route to habitat_society, not bleed into Combat.
+    for header in ("Habit/Society:", "Society/Habitat:", "Habitat Society:"):
+        desc, combat, habitat, ecology = _split_prose(
+            f"A dragon.\nCombat:\nIt bites.\n{header}\nIt nests in caves.\nEcology:\nIt eats sheep.")
+        assert combat == "It bites."
+        assert habitat == "It nests in caves.", header      # not absorbed into Combat
+        assert ecology == "It eats sheep."
+
+
+def _variant_html(variants, base_sections, blocks):
+    """A multi-variant page: a stat table, then ``base_sections`` prose, then a bold
+    sub-header + block per entry in ``blocks`` (list of (header, text))."""
+    rows = [("CLIMATE/TERRAIN", ["x"] * len(variants)),
+            ("ARMOR CLASS", ["5"] * len(variants)), ("SIZE", ["M"] * len(variants))]
+    prose = base_sections + "".join(f"<P><B>{h}</B> {t}" for h, t in blocks)
+    return _html(rows, variants=variants, prose=prose)
+
+
+def test_variant_prose_splits_a_base_creature_from_its_kin():
+    # base creature (Ogre) owns the leading Combat/Ecology; the kin block stands alone
+    html = _variant_html(
+        ["Ogre", "Merrow"],
+        "<P>Ogres are big.<P>Combat:<BR>Ogres club foes.<P>Ecology:<BR>Ogres eat lots.",
+        [("Merrow", "Merrow are aquatic ogres that cast fireball once per day.")])
+    ms = parse_stat_block(html, title="Ogre (Monstrous Manual)")
+    ogre = next(m for m in ms if m.name == "Ogre")
+    merrow = next(m for m in ms if "Merrow" in m.name)
+    assert ogre.combat == "Ogres club foes." and ogre.ecology == "Ogres eat lots."
+    assert "Merrow are aquatic" in merrow.description   # its own one-paragraph block -> Description
+    assert "club foes" not in merrow.description        # not the base creature's text
+    assert merrow.combat == ""                          # a kin paragraph has no Combat section
+
+
+def test_variant_prose_shares_general_sections_when_no_base_creature():
+    # every column has a header -> the leading sections are general and inherited
+    html = _variant_html(
+        ["Guardian Naga", "Spirit Naga"],
+        "<P>Combat:<BR>Nagas bite.<P>Habitat/Society:<BR>Nagas live alone.",
+        [("Guardian Naga", "Guardian nagas are good."),
+         ("Spirit Naga", "Spirit nagas are evil.")])
+    ms = parse_stat_block(html, title="Naga (Monstrous Manual)")
+    for m in ms:
+        assert m.habitat_society == "Nagas live alone."     # shared section inherited by both
+        assert m.combat == "Nagas bite."                    # shared combat inherited
+    guardian = next(m for m in ms if m.name == "Guardian Naga")
+    assert "Guardian nagas are good." in guardian.description   # its own specifics -> Description
+
+
+def test_variant_prose_header_matches_most_specific_variant():
+    # "Lamia Noble" heads the Noble column, not the base "Lamia" (a prefix of it)
+    html = _variant_html(
+        ["Lamia", "Lamia Noble"],
+        "<P>Combat:<BR>Lamiae drain wisdom.<P>Ecology:<BR>They haunt ruins.",
+        [("Lamia Noble", "Lamia nobles are spellcasters.")])
+    ms = parse_stat_block(html, title="Lamia (Monstrous Manual)")
+    lamia = next(m for m in ms if m.name == "Lamia")
+    noble = next(m for m in ms if m.name == "Lamia Noble")
+    assert lamia.combat == "Lamiae drain wisdom."       # base keeps the shared sections
+    assert lamia.ecology == "They haunt ruins."
+    assert "spellcasters" in noble.description           # noble gets its own block
+
+
+def test_variant_prose_header_matches_a_reordered_or_run_together_name():
+    """The MM's stat columns are index entries ('Rat (Giant)', 'Jelly, Stun-') while
+    its prose sub-headers read naturally ('Giant Rats', 'Stunjelly'). Same creature —
+    so the header must find its column, not be filed as a prose-only creature."""
+    from monster_parser import _same_words
+    assert _same_words("Giant Rats", "Rat (Giant)")
+    assert _same_words("Stunjelly", "Jelly, Stun-")
+    assert _same_words("Greenhag", "Green Hag")
+    assert _same_words("Megalo- centipede", "Megalocentipede")
+    assert _same_words("The Gorgimera", "Gorgimera")
+    assert not _same_words("Giant Rats", "Brush Rat")        # different words
+    assert not _same_words("Undead Beholder", "Beholder")    # a subset is not the same name
+
+    html = _variant_html(
+        ["Chimera", "Gorgimera"],
+        "<P>Combat:<BR>It breathes fire.",
+        [("The Gorgimera", "The gorgimera has a snake tail.")])
+    ms = parse_stat_block(html, title="Chimera (Monstrous Manual)")
+    gorgimera = next(m for m in ms if m.variant == "Gorgimera")
+    assert "snake tail" in gorgimera.description
+    assert ms[0].related_creatures == []          # not a prose-only creature — it has a column
+
+
+def test_a_bolded_sentence_fragment_is_not_a_prose_only_creature():
+    """Creature names are title case in this book; a trailing lowercase word marks a
+    bolded caption ('Dodge missiles', 'Rrakkma bands') that must not bound the prose."""
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["5"])]
+    prose = ("<P>A thri-kreen.<P><B>Combat:</B><BR>It leaps."
+             "<P><B>Dodge missiles:</B> it can swat arrows aside."
+             "<P><B>Black Cloud of Vengeance:</B> a real creature, capitalized.")
+    (m,) = parse_stat_block(_html(rows, prose=prose), title="Thri-kreen (Monstrous Manual)")
+    assert [r["name"] for r in m.related_creatures] == ["Black Cloud of Vengeance"]
+    assert "swat arrows aside" in m.combat        # the caption stayed with its section
+
+
+def test_prose_only_creature_is_captured_not_merged_into_the_parent():
+    # the Archlich shape: a creature described in prose with no stat column of its own
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["5"]), ("SIZE", ["M"])]
+    prose = ("<P>A lich is undead.<P><B>Combat:</B><BR>It paralyzes."
+             "<P><B>Habitat/Society:</B><BR>It broods."
+             "<P><B>Archlich:</B> A rare good-aligned lich.")
+    (m,) = parse_stat_block(_html(rows, prose=prose), title="Lich (Monstrous Manual)")
+    assert m.combat == "It paralyzes." and m.habitat_society == "It broods."
+    assert "Archlich" not in m.habitat_society           # never bleeds into the parent
+    assert [r["name"] for r in m.related_creatures] == ["Archlich"]
+    assert "good-aligned lich" in m.related_creatures[0]["text"]
+
+
+def test_captions_ages_and_spell_names_are_not_prose_only_creatures():
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["5"])]
+    prose = ("<P>A dragon.<P><B>Combat:</B><BR>It bites."
+             "<P><B>Venerable:</B> old and wise."                  # a dragon age tier
+             "<P><B>Telepathy - Sciences:</B> mind link."          # a psionic discipline
+             "<P><B>Alignment:</B> lawful."                        # a table legend
+             "<P><B>Create Crypt Thing:</B> a spell.")             # a spell name
+    (m,) = parse_stat_block(_html(rows, prose=prose), title="Foo (Monstrous Manual)")
+    assert m.related_creatures == []
+
+
+def test_inline_bold_emphasis_is_not_a_prose_only_creature():
+    rows = [("CLIMATE/TERRAIN", ["Any"]), ("ARMOR CLASS", ["5"])]
+    prose = ("<P>The <B>Mummies</B> of the desert are feared."
+             "<P><B>Habitat/Society:</B><BR>They haunt tombs.")
+    (m,) = parse_stat_block(_html(rows, prose=prose), title="Mummy (Monstrous Manual)")
+    assert m.related_creatures == []                    # mid-sentence emphasis, not a header
+    assert m.habitat_society == "They haunt tombs."     # and it can't cut the prose in half
+
+
+def test_prose_only_block_does_not_swallow_trailing_shared_sections():
+    # the Slaad shape: prose-only blurbs, then Habitat/Ecology shared by every variant
+    rows = [("CLIMATE/TERRAIN", ["Any", "Any"]), ("ARMOR CLASS", ["5", "6"]),
+            ("SIZE", ["M", "M"])]
+    prose = ("<P><B>Red Slaad:</B> red ones.<P><B>Blue Slaad:</B> blue ones."
+             "<P><B>Death Slaad:</B> the greatest."
+             "<P><B>Habitat/Society:</B><BR>Slaadi roam Limbo.<P><B>Ecology:</B><BR>They breed.")
+    ms = parse_stat_block(_html(rows, variants=("Red Slaad", "Blue Slaad"), prose=prose),
+                          title="Slaad (Monstrous Manual)")
+    for m in ms:
+        assert m.habitat_society == "Slaadi roam Limbo."   # shared, not eaten by Death Slaad
+        assert m.ecology == "They breed."
+    assert [r["name"] for r in ms[0].related_creatures] == ["Death Slaad"]
+    assert "Limbo" not in ms[0].related_creatures[0]["text"]
+
+
 def test_non_monster_page_yields_nothing():
     assert parse_stat_block("<HTML><BODY><TABLE><TR><TD>Contents</TD></TR></TABLE></BODY></HTML>") == []
     assert parse_stat_block("") == []
@@ -237,6 +446,14 @@ def test_to_dict_from_dict_roundtrip():
                             title="Beast (Monstrous Manual)")
     assert Monster.from_dict(m.to_dict()) == m
     Monster.from_dict({"name": "X", "bogus": 1})   # tolerates unknown keys
+
+
+def test_extra_tables_survive_a_dict_roundtrip():
+    m = Monster(name="Dragon", extra_tables=[
+        {"kind": "age", "header_rows": 2, "rows": [["Age", "AC"], ["1", "4"]]}])
+    back = Monster.from_dict(m.to_dict())
+    assert back == m
+    assert back.extra_tables[0]["kind"] == "age"
 
 
 # ── parsing the real Monstrous Manual (DB-backed) ─────────────────────────────
@@ -365,3 +582,129 @@ def test_every_mm_monster_page_parses_cleanly(conn):
             m.attack_bonus(); m.ascending_ac(); m.initiative_modifier()   # must not raise
         parsed += 1
     assert parsed > 250                          # ~293 real monster pages
+
+
+def _identity(name: str):
+    """A name's fuzzy identity — its words, de-pluralized, order-and-spacing blind.
+    Deliberately *not* built on _header_score, so this checks the matcher's result
+    rather than restating its rules."""
+    words = []
+    for w in monster_parser._norm_header(name).split():
+        if w in ("the", "a", "an", "of", "and"):
+            continue
+        words.append(w[:-1] if len(w) >= 4 and w.endswith("s") and not w.endswith("ss") else w)
+    return "".join(sorted(words))
+
+
+@needs_db
+def test_no_prose_only_creature_duplicates_a_real_stat_variant(conn):
+    """A page's 'Also Described on This Page' blurbs must name creatures the page has
+    *no* stat column for. When the prose sub-header and the stat column spell the same
+    creature differently ('Giant Constrictor Snake' vs the column's 'Constrictor
+    (Giant)'), the matcher used to score 0 — so the variant's own prose was captured as
+    a blurb and the variant itself was left with the page's generic text."""
+    for page_url, _title in db.list_monster_pages(conn):
+        monsters = _parse_page(conn, page_url)
+        if not monsters:
+            continue
+        real = {_identity(m.name) for m in monsters} | {
+            _identity(m.variant) for m in monsters if m.variant}
+        for rel in (monsters[0].related_creatures or []):
+            assert _identity(rel["name"]) not in real, (
+                f"{page_url}: prose for the stat variant {rel['name']!r} was diverted "
+                f"into related_creatures")
+
+
+# ── Phase A: enrichment tables captured past the stat block (DB-backed) ────────
+
+@needs_db
+def test_real_black_dragon_captures_its_age_progression(conn):
+    (m,) = _parse_page(conn, "MM/DD03843.htm")   # Dragon, Chromatic: Black Dragon
+    assert m.armor_class == "1 (base)" and m.xp_value == "Variable"   # stat block unchanged
+    (age,) = [t for t in m.extra_tables if t["kind"] == "age"]
+    assert age["header_rows"] == 2
+    header = " ".join(c for row in age["rows"][:2] for c in row)
+    assert "Breath" in header and "XP" in header                # the columns Phase B consumes
+    assert any(row[0].strip() == "12" for row in age["rows"])   # the Great Wyrm age row
+
+
+@needs_db
+def test_real_aboleth_captures_its_psionics_summary(conn):
+    (m,) = _parse_page(conn, "MM/DD03796.htm")   # Aboleth
+    (psi,) = [t for t in m.extra_tables if t["kind"] == "psionics"]
+    header = " ".join(psi["rows"][0])
+    assert "Level" in header and "PSPs" in header
+
+
+@needs_db
+def test_real_baatezu_captures_per_attack_damage_on_every_variant(conn):
+    ms = _parse_page(conn, "MM/DD03801.htm")     # Baatezu — 4 variants + an Attack|Damage table
+    assert len(ms) >= 2
+    for m in ms:                                  # the page's table is attached to each variant
+        assert any(t["kind"] == "attack_damage" for t in m.extra_tables)
+
+
+@needs_db
+def test_plain_monster_has_no_extra_tables(conn):
+    (m,) = _parse_page(conn, ANKHEG)             # a single, table-free stat block
+    assert m.extra_tables == []
+
+
+# ── Phase B: HD / age scaling tiers (DB-backed) ───────────────────────────────
+
+@needs_db
+def test_real_black_dragon_age_tiers_scale_ac_and_xp(conn):
+    import monster_tiers as mt
+    (m,) = _parse_page(conn, "MM/DD03843.htm")   # Black Dragon: a 12-step age table
+    ts = mt.tiers(m)
+    assert len(ts) == 12 and ts[0].label == "Age 1"
+    m.selected_tier = 11                          # the oldest (Great Wyrm)
+    scaled = mt.active_monster(m)
+    assert scaled.armor_class == "-7" and scaled.ascending_ac() == "27"
+    assert scaled.xp_value == "20,000"
+    assert m.armor_class == "1 (base)"            # base untouched
+
+
+@needs_db
+def test_real_hd_conditional_monster_scales_attack_bonus(conn):
+    import monster_tiers as mt
+    (m,) = _parse_page(conn, "MM/DD03799.htm")   # Argos: THAC0 "5-6 HD: 15 7-8 HD: 13 9-10 HD: 11"
+    ts = mt.tiers(m)
+    assert [t.label for t in ts] == ["5-6 HD", "7-8 HD", "9-10 HD"]
+    m.selected_tier = 2                           # 9-10 HD: THAC0 11 -> attack bonus 9
+    scaled = mt.active_monster(m)
+    assert scaled.thac0 == "11" and scaled.attack_bonus() == "9"
+    assert scaled.hit_dice == "9-10"
+
+
+@needs_db
+def test_real_blue_dragon_habitat_society_is_populated(conn):
+    # regression: the Blue Dragon page spells the header "Habit/Society", which the
+    # prose splitter used to miss — leaving habitat_society empty and the section
+    # swallowed into Combat.
+    (m,) = _parse_page(conn, "MM/DD03844.htm")
+    assert "deserts" in m.habitat_society.lower()
+
+
+_HABITAT_HEADER = re.compile(
+    r"^\s*(habitat/society|habit/society|society/habitat|habitat society)\s*:", re.I)
+
+
+@needs_db
+def test_habitat_society_parsed_when_the_page_has_that_section(conn):
+    """Guard against a header spelling slipping past the prose splitter: any page whose
+    text carries a Habitat/Society header (in any of its spellings) must parse to a
+    non-empty habitat_society for at least one creature. Catches the Blue Dragon
+    'Habit/Society' class of bug. (Per-variant splitting means a *kin* creature written
+    as one flowing paragraph legitimately has no habitat section of its own, so the
+    invariant is per page, not per variant.)"""
+    missing = []
+    for page_url, title in db.list_monster_pages(conn):
+        text = conn.execute(
+            "SELECT content_text FROM pages WHERE page_url = ?", (page_url,)).fetchone()[0] or ""
+        if not any(_HABITAT_HEADER.match(line) for line in text.splitlines()):
+            continue
+        monsters = _parse_page(conn, page_url)
+        if monsters and not any(m.habitat_society.strip() for m in monsters):
+            missing.append(f"{title} ({page_url})")
+    assert not missing, f"no creature got habitat_society despite a header on: {missing}"

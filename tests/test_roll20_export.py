@@ -115,3 +115,87 @@ def test_money_split_and_damage_norm():
     assert rx._norm_damage("d8") == "1d8"
     assert rx._norm_damage("2d4") == "2d4"
     assert rx._norm_damage("") == ""
+
+
+# ── monster export (monster_to_roll20) ────────────────────────────────────────
+
+from monster import Monster
+
+
+def test_monster_export_maps_house_rule_numbers():
+    m = Monster(name="Ankheg", hit_dice="3", thac0="17", armor_class="2",
+                no_of_attacks="1", damage_attack="3-18", movement="12", size="L",
+                xp_value="175", morale="Unsteady")
+    j = rx.monster_to_roll20(m)
+    assert j["character_name"] == "Ankheg"
+    assert j["attack_base"] == 3           # 20 - 17
+    assert j["armor_base"] == 18           # ascending AC (20 - 2)
+    assert j["hp_max"] == 14 and j["hp"] == 14   # 3 HD * 4.5, rounded
+    assert j["xp"] == 175 and j["move"] == 12 and j["player_level"] == 3
+
+
+def test_monster_export_saves_as_a_warrior_of_its_hit_dice():
+    j = rx.monster_to_roll20(Monster(name="Brute", hit_dice="8", armor_class="4"))
+    assert j["save_ppd"] == cr.monster_saving_throws(8)["Paralyzation/Poison/Death"]
+    assert j["save_bw"] == cr.monster_saving_throws(8)["Breath Weapon"]
+
+
+def test_a_creature_under_one_hit_die_saves_as_a_level_0_warrior():
+    """The MM writes sub-1-HD creatures as a die minus a penalty ('1-1') or straight in
+    hit points ('1 hp') — both save on the level-0 Warrior band, which is worse than a
+    1 HD monster's, not the same."""
+    assert rx._hd_level("1-1") == 0 and rx._hd_level("1 hp") == 0
+    assert rx._hd_level("1-4 hp") == 0
+    assert rx._hd_level("3") == 3 and rx._hd_level("9 (40 hp)") == 9    # dice, not hp
+    weak = rx.monster_to_roll20(Monster(name="Stirge", hit_dice="1-1", armor_class="8"))
+    assert weak["save_ppd"] == cr.monster_saving_throws(0)["Paralyzation/Poison/Death"]
+    assert weak["save_ppd"] > cr.monster_saving_throws(1)["Paralyzation/Poison/Death"]
+
+
+def test_monster_hp_rounds_half_up_and_reads_the_hit_point_forms():
+    assert rx._hp_from_hd("1") == 5 and rx._hp_from_hd("3") == 14      # half up, not to even
+    assert rx._hp_from_hd("5+2") == 25
+    assert rx._hp_from_hd("1 hp") == 1                                 # written in hit points
+    assert rx._hp_from_hd("1-4 hp") == 4                               # the top of the range
+    assert rx._hp_from_hd("9 (40 hp)") == 40                           # both given: trust the hp
+    assert rx._hp_from_hd("") == 0
+
+
+def test_monster_export_splits_attacks_into_weapons_with_size_speed():
+    m = Monster(name="Cat", hit_dice="3", thac0="17", size="L",
+                damage_attack="1-4 (claw)/1-4 (claw)/2-8 (bite)")
+    weapons = rx.monster_to_roll20(m)["weapons"]
+    assert [w["name"] for w in weapons] == ["claw", "claw", "bite"]
+    assert [w["damage"] for w in weapons] == ["1d4", "1d4", "2d4"]   # ranges -> dice
+    assert all(w["tohit"] == 3 for w in weapons)                     # the attack bonus
+    assert all(w["speed"] == 6 for w in weapons)                     # Large -> initiative +6
+
+
+def test_monster_export_uses_the_selected_tier():
+    from monster import Monster as M
+    age = {"kind": "age", "header_rows": 2, "rows": [
+        ["", "", "", "", "", "", "", "", ""],
+        ["Age", "Lgt", "Lgt", "AC", "Weapon", "Wizard", "MR", "Type", "Value"],
+        ["1", "3-6", "2-5", "4", "2d4", "Nil", "Nil", "Nil", "4,000"],
+        ["12", "96", "80", "-7", "24d4", "9", "45%", "Hx3", "20,000"]]}
+    m = M(name="Dragon", armor_class="1 (base)", thac0="9 (base)", hit_dice="12",
+          extra_tables=[age], selected_tier=1)                       # oldest age
+    j = rx.monster_to_roll20(m)
+    assert j["armor_base"] == 27 and j["xp"] == 20000                # AC -7 -> 27, tiered XP
+
+
+def test_monster_export_links_spell_like_abilities():
+    import monster_spells
+    idx = monster_spells.build_index(["Charm Person", "Suggestion"])
+    details = {"Charm Person": {"level": 1, "school": "Enchantment", "components": "V, S"}}
+    m = Monster(name="Fiend", hit_dice="10",
+                combat="It can cast charm person and suggestion at will.")
+    spells = rx.monster_to_roll20(m, details, idx)["spells"]
+    names = {s["name"]: s for s in spells}
+    assert "Charm Person" in names and names["Charm Person"]["level"] == 1
+    assert names["Charm Person"]["verbal"] == 1 and names["Charm Person"]["somatic"] == 1
+
+
+def test_monster_export_no_attacks_or_spells_is_empty():
+    j = rx.monster_to_roll20(Monster(name="Blob", hit_dice="2", damage_attack="Nil"))
+    assert j["weapons"] == [] and j["spells"] == []

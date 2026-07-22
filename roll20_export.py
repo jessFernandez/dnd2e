@@ -18,6 +18,7 @@ spell DB; without it, spells export with just name + level.
 import re
 
 import char_rules as cr
+import monster
 
 # char_rules save categories -> the sheet's five save keys.
 _SAVE_KEYS = {
@@ -164,6 +165,158 @@ def character_to_roll20(character, spell_details: dict = None) -> dict:
         })
     out["spells"] = spells
     return out
+
+
+# ── monster export (v2: mapped onto the PC sheet) ─────────────────────────────
+
+def monster_to_roll20(m, spell_details: dict = None, spell_index=None) -> dict:
+    """Build the import JSON for a monster, mapped onto the community 2e sheet (v2
+    reuses the PC layout). Uses the **selected HD/age tier's** numbers (monster_tiers),
+    the house-rule attack bonus (20−THAC0) and ascending AC — the same char_rules
+    conversions the sheet reads, so they can't disagree — warrior-by-HD saves, the
+    attack/damage line as weapon rows (each rolling at the size-derived initiative
+    speed factor), and the spell-like abilities monster_spells matches as spells.
+
+    ``spell_details`` maps a spell name to its DB row (level/school/…); ``spell_index``
+    is a monster_spells index (both supplied by the app). Pure and Qt-free."""
+    import monster_tiers
+    m = monster_tiers.active_monster(m)                 # the selected tier's stat line
+    spell_details = spell_details or {}
+    hd = _hd_level(m.hit_dice)
+
+    out = {
+        "character_name": m.name or "",
+        "player_class": "Monster",
+        "player_level": hd,
+        "xp": _leading_int(str(m.xp_value).replace(",", "")),
+        "alignment": m.alignment or "",
+        "hp_max": _hp_from_hd(m.hit_dice),
+        "hp": _hp_from_hd(m.hit_dice),
+        "attack_base": _leading_int(m.attack_bonus()),  # 20−THAC0, tiered
+        "armor_base": _leading_int(m.ascending_ac(), 10),  # ascending AC (sheet AC = this)
+        "move": _leading_int(m.movement, 12),
+    }
+    saves = cr.monster_saving_throws(hd)
+    for cat, key in _SAVE_KEYS.items():
+        out[key] = saves.get(cat, 20)
+
+    out["weapons"] = _monster_weapons(m)
+    out["spells"] = _monster_spells_rows(m, spell_index, spell_details)
+    # sections the PC sheet has but a monster doesn't fill
+    out["weapon_profs"], out["nwp"], out["gear"], out["armor"], out["thief_skills"] = [], [], [], [], []
+    return out
+
+
+def _leading_int(text, default: int = 0) -> int:
+    """The first (optionally signed) integer in ``text``, else ``default``."""
+    mm = re.search(r"-?\d+", str(text or ""))
+    return int(mm.group()) if mm else default
+
+
+#: A Hit Dice field written in **hit points** instead of dice — '1 hp', '1-4 hp',
+#: '45-75 hp' — plus the '9 (40 hp)' form that gives both. The MM uses it for
+#: creatures below a full die and for a few fixed-HP constructs.
+_HP_FORM = re.compile(r"(?:(\d+)\s*-\s*)?(\d+)\s*hp\b", re.IGNORECASE)
+
+
+def _hp_from_hd(hit_dice) -> int:
+    """Hit points for a Hit Dice string. A field written in hit points ('1 hp',
+    '1-4 hp', '9 (40 hp)') is taken at its word — the top of a range, since this seeds
+    the sheet's *maximum*. Otherwise it's dice: d8 each (4.5, rounded half up) plus any
+    bonus, so '5' -> 23 and '5+2' -> 25. Only a '+N' counts as a bonus — an 'N-M' Hit
+    Dice string ('3-8') is a range/oddity, not a penalty, so its tail is ignored.
+    Roll20 tracks the actual HP at the table; this just seeds a sensible maximum."""
+    text = str(hit_dice or "")
+    hp = _HP_FORM.search(text)
+    if hp:
+        return max(1, int(hp.group(2)))
+    mm = re.match(r"\s*(\d+)\s*(\+\s*\d+)?", text)
+    if not mm:
+        return 0
+    dice = int(mm.group(1))
+    bonus = int(mm.group(2).replace(" ", "")) if mm.group(2) else 0
+    return max(1, int(dice * 4.5 + 0.5) + bonus)      # round half *up*, not to even
+
+
+def _hd_level(hit_dice) -> int:
+    """The warrior level a monster saves at: its Hit Dice, or **0** for a creature of
+    less than one full die — the MM writes those either as hit points ('1 hp',
+    '1-4 hp') or as a die minus a penalty ('1-1'). A Hit Dice field that merely
+    *mentions* hit points alongside its dice ('9 (40 hp)') is still a 9 HD monster."""
+    text = str(hit_dice or "")
+    if re.match(r"\s*1\s*-\s*1\b", text) or re.match(r"\s*1\s*/\s*\d", text):
+        return 0
+    if re.match(r"\s*\d+\s*(?:-\s*\d+\s*)?hp\b", text, re.IGNORECASE):   # hp, not dice
+        hp = _hp_from_hd(text)
+        return 0 if hp < 8 else hp // 8
+    return _leading_int(text, 1)
+
+
+def _range_to_dice(s: str) -> str:
+    """A damage range as dice Roll20 can roll: '3-18' -> '3d6', '1-6' -> '1d6'; left
+    alone when it doesn't divide cleanly ('2-5') or is already dice ('2d4'). The rule
+    is monster.damage_to_dice — the same one the sheet renders (in its terse display
+    form), so the export and the sheet can't disagree about a monster's damage."""
+    return monster.damage_to_dice(str(s or "").strip())
+
+
+def _monster_weapons(m) -> list:
+    """The monster's attack/damage line as weapon rows — one per '/'-separated attack
+    (claw/claw/bite), rolling at the house-rule attack bonus and the size-derived
+    initiative speed factor."""
+    tohit = _leading_int(m.attack_bonus())
+    speed = m.initiative_modifier() or 0
+    dmg = (m.damage_attack or "").strip()
+    parts = ([] if dmg.lower() in ("", "nil", "none", "see below")
+             else [p.strip() for p in dmg.split("/") if p.strip()])
+    weapons = []
+    for i, part in enumerate(parts, 1):
+        label = _paren_label(part) or (f"Attack {i}" if len(parts) > 1 else "Attack")
+        weapons.append({
+            "name": label, "tohit": tohit,
+            "damage": _norm_damage(_range_to_dice(_strip_paren(part))),
+            "dambonus": 0, "speed": speed, "type": "", "range": "",
+        })
+    if m.breath_weapon:                                 # the selected age tier's breath
+        weapons.append({
+            "name": "Breath Weapon", "tohit": 0,
+            "damage": _norm_damage(_range_to_dice(_strip_paren(m.breath_weapon))),
+            "dambonus": 0, "speed": speed, "type": "", "range": "",
+        })
+    return weapons
+
+
+def _paren_label(text: str) -> str:
+    mm = re.search(r"\(([^)]+)\)", text)
+    return mm.group(1).strip() if mm else ""
+
+
+def _strip_paren(text: str) -> str:
+    return re.sub(r"\s*\([^)]*\)", "", text).strip()
+
+
+def _monster_spells_rows(m, spell_index, spell_details: dict) -> list:
+    """The monster's spell-like abilities (matched by monster_spells) as spell rows,
+    enriched from the compendium so they land in the sheet's spell section."""
+    if not spell_index:
+        return []
+    import monster_spells
+    rows = []
+    for name, _slug in monster_spells.find_in(m, spell_index):
+        d = spell_details.get(name, {})
+        comp = (d.get("components") or "").upper()
+        rows.append({
+            "level": d.get("level") or 1, "name": name,
+            "school": d.get("school", ""), "range": d.get("range", ""),
+            "castingTime": _casting_segments(d.get("casting_time")),
+            "save": d.get("save", ""), "aoe": d.get("aoe", ""),
+            "duration": d.get("duration", ""), "damage": d.get("damage", ""),
+            "materials": d.get("materials", ""), "description": d.get("description", ""),
+            "verbal": 1 if "V" in comp else 0,
+            "somatic": 1 if "S" in comp else 0,
+            "material": 1 if "M" in comp else 0,
+        })
+    return rows
 
 
 def _norm_damage(dmg) -> str:

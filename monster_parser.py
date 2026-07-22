@@ -16,6 +16,7 @@ result into the monster sheet where the DM can edit and save it.
 """
 import re
 from html.parser import HTMLParser
+from itertools import permutations
 
 from monster import Monster
 
@@ -59,10 +60,16 @@ _LABEL_ALIASES = {
     "LEVEL/XP VALUE": "XP VALUE",
 }
 
-#: Prose section header (matched at line start) -> Monster field.
+#: Prose section header (matched at line start) -> Monster field. The extra
+#: Habitat/Society spellings are OCR/typo variants in the scrape ("Habit/Society"
+#: on the Blue Dragon page, "Society/Habitat", "Habitat Society"); without them the
+#: section is misread as a continuation of Combat and habitat_society comes out empty.
 _SECTIONS = [
     ("Combat:", "combat"),
     ("Habitat/Society:", "habitat_society"),
+    ("Habit/Society:", "habitat_society"),
+    ("Society/Habitat:", "habitat_society"),
+    ("Habitat Society:", "habitat_society"),
     ("Ecology:", "ecology"),
 ]
 
@@ -108,23 +115,293 @@ def _split_prose(text: str):
                  for k in ("description", "combat", "habitat_society", "ecology"))
 
 
+def _norm_header(s: str) -> str:
+    """Fold a header/name for comparison: lowercase, punctuation (colon, comma,
+    hyphen, parens, apostrophe) to spaces, whitespace collapsed."""
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", (s or "").lower()).split())
+
+
+#: Words that carry no identity in a creature name, dropped before comparing.
+_FILLER_WORDS = frozenset({"the", "a", "an", "of", "and"})
+
+
+def _name_tokens(text: str):
+    """The identity-bearing words of a name: normalized, filler dropped, de-pluralized
+    ('Giant Rats' -> ('giant', 'rat')). Order is preserved for the caller to permute."""
+    out = []
+    for w in _norm_header(text).split():
+        if w in _FILLER_WORDS:
+            continue
+        if len(w) >= 4 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        out.append(w)
+    return tuple(out)
+
+
+def _same_words(run: str, name: str) -> bool:
+    """Whether two names are **the same words, reordered and/or run together**. The MM
+    and its stat columns disagree about both constantly — the column is an index entry
+    ('Jelly, Stun-', 'Rat (Giant)', 'Sea Horse, Giant') while the prose sub-header reads
+    naturally ('Stunjelly', 'Giant Rats', 'Seahorse, Giant'), and a wrapped column name
+    closes up ('Megalo- centipede' -> 'Megalocentipede'). Comparing the tokens' possible
+    concatenations catches all of those without loosening the matcher for names that
+    merely *share* a word. Bounded: beyond 4 words, compare the words themselves."""
+    a, b = _name_tokens(run), _name_tokens(name)
+    if not a or not b:
+        return False
+    if max(len(a), len(b)) > 4:
+        return sorted(a) == sorted(b)
+    joins = {"".join(p) for p in permutations(a)}
+    return any("".join(p) in joins for p in permutations(b))
+
+
+def _header_score(run: str, name: str) -> int:
+    """How well a bold prose sub-header ``run`` names variant ``name`` (0 = not at all).
+    Higher is more specific, so a header is claimed by its best match:
+
+      3  exact                       "Owl" -> Owl (beats the prefix match "Owl, Giant")
+      2  plural/singular             "War Dogs" -> War Dog, "Efreet"/"Janni" -> Efreeti/Jann
+      2  the same words, reordered / run together (_same_words): "Giant Rats" -> "Rat
+         (Giant)", "Stunjelly" -> "Jelly, Stun-", "Greenhag" -> "Green Hag"
+      1  the header and variant name one creature at different specificity. When the
+         **header is the shorter** (a family/base word) it appears as a whole-word
+         prefix or suffix of the fuller variant name ("Abishai" -> "Black Abishai",
+         "Merrow" -> "Merrow Ogre"). When the **header is the longer** (a specific
+         name) the variant must be its leading word ("Undead Beholder" -> "Undead") —
+         a *trailing* family word is the base creature, so "Undead Beholder" does NOT
+         claim the base "Beholder"."""
+    r, v = _norm_header(run), _norm_header(name)
+    if not r or not v:
+        return 0
+    if r == v:
+        return 3
+    short, long = sorted((r, v), key=len)
+    plurals = {short + "s", short + "es", short + "i", short + "e"}
+    if len(short) > 1:                      # irregular: dwarf->dwarves, seawolf->seawolves
+        plurals |= {short[:-1] + "ves", short[:-1] + "ies"}
+    if long in plurals:
+        return 2
+    if _same_words(r, v):
+        return 2
+    if len(r) <= len(v):                          # header is the family/base word
+        if v.startswith(r + " ") or v.endswith(" " + r):
+            return 1
+    elif r.startswith(v + " "):                   # longer header, variant is its lead word
+        return 1
+    return 0
+
+
+def _match_score(run: str, m) -> int:
+    """How well a bold sub-header names monster ``m`` — scored against both its display
+    name *and* the raw stat column it came from, best wins. The two can differ: the
+    display name is built by _resolve_name (which prefixes a group noun, or applies a
+    curated override), so a header that reads exactly like the column ("The Gorgimera"
+    vs the column "Gorgimera") would otherwise miss once the name became "Gorgimera
+    Chimera"."""
+    return max(_header_score(run, m.name),
+               _header_score(run, m.variant) if m.variant else 0)
+
+
+#: The page's own prose section headers, normalized (see _SECTIONS).
+_SECTION_HEADER_KEYS = frozenset({"combat", "habitat society", "habit society",
+                                  "society habitat", "ecology"})
+
+#: Bold prose sub-headers that are *not* a creature name — the page's own section
+#: headers, dragon age categories, and psionic-discipline / table captions. Anything
+#: else short enough to be a name is treated as a creature described only in prose
+#: (Phase C: the Archlich on the Lich page, the Kapoacinth on the Gargoyle page).
+_NON_CREATURE_HEADERS = frozenset({
+    "combat", "habitat society", "habit society", "society habitat", "ecology",
+    "general", "description", "psionics summary", "saving throws", "notes",
+    "hatchling", "very young", "young", "juvenile", "adult", "mature adult",
+    "old", "very old", "venerable", "wyrm", "great wyrm", "ancient",
+    # stat-block labels and table legends bolded in the prose (the Mummy age table)
+    "ac", "hd", "thac0", "to hit", "xp", "treasure", "alignment", "wisdom", "magic",
+    "disease", "defense", "defenses", "languages", "fear", "intelligence", "morale",
+    "movement", "size", "frequency", "organization", "diet", "armor class",
+    "hit dice", "activity cycle", "magic resistance", "no appearing", "note",
+    "psionics", "magical items", "leap", "venom", "related species",
+    # bare rank words heading a taxonomy list (Tanar'ri: Least / Lesser / Greater)
+    "least", "lesser", "greater", "true",
+})
+#: Substrings that mark a header as a caption/discipline rather than a creature.
+_NON_CREATURE_WORDS = (
+    "telepath", "clairsent", "clarsent", "psychokin", "psychometab", "psychoport",
+    "metapsion", "metabolism", "science", "devotion", "common power", "attack mode",
+    "defense mode", "table", "level", "breath weapon", "special bonus", "legend of",
+    "saving throw",
+)
+#: A header opening with one of these reads as a spell/ability name, not a creature
+#: ("Create Crypt Thing", "Call Phoenix").
+_NON_CREATURE_VERBS = frozenset({"create", "call", "summon", "control", "cast",
+                                 "detect", "cause", "animate"})
+
+
+def _starts_a_line(prose_text: str, off: int) -> bool:
+    """Whether the bold run at ``off`` opens a line — a real block sub-header. Bold
+    used mid-sentence for emphasis ("...the **mummies** of...") is not a header, and
+    must not be allowed to cut the creature's prose in half."""
+    i = off - 1
+    while i >= 0 and prose_text[i] in " \t":
+        i -= 1
+    return i < 0 or prose_text[i] == "\n"
+
+
+def _is_titlecase_name(run: str) -> bool:
+    """Whether every significant word is capitalized, as a creature name is in this
+    book ('Black Cloud of Vengeance', 'Half-orcs'). A trailing lowercase word marks a
+    sentence fragment the author merely bolded — 'Dodge missiles', 'Rrakkma bands',
+    'Giant marine spiders' — which is a caption, not a creature."""
+    words = [w for w in run.rstrip(":").split() if w.strip("(),")]
+    return bool(words) and all(w[0].isupper() or not w[0].isalpha()
+                               or _norm_header(w) in _FILLER_WORDS for w in words)
+
+
+def _is_creature_header(run: str) -> bool:
+    """Whether a bold prose sub-header that matched no stat column reads like a
+    *creature* name (so its block is a prose-only variant) rather than one of the
+    page's structural captions, stat labels, or a spell name."""
+    k = _norm_header(run)
+    if not k or len(k.split()) > 4 or k[0].isdigit():
+        return False
+    if k in _NON_CREATURE_HEADERS or k.split()[0] in _NON_CREATURE_VERBS:
+        return False
+    if not _is_titlecase_name(run):
+        return False
+    return not any(w in k for w in _NON_CREATURE_WORDS)
+
+
+def _resolve_block(block, shared):
+    """(description, combat, habitat, ecology) for one variant's prose block. A block
+    written as one flowing paragraph (no Combat:/Habitat:/Ecology: sub-headers — the
+    Gauth, a bird) stays in **Description**, its natural home; the spell parse (find_in)
+    and ability parse read description too, so its mechanics still surface. ``shared``
+    is the page's general sections to layer under the block's own (Naga-style pages),
+    or None when the block stands alone (Beholder kin)."""
+    d, c, h, e = _split_prose(block)
+    if shared is not None:                       # inherit the page's shared sections
+        sd, sc, sh, se = shared
+        d = "\n\n".join(x for x in (sd, d) if x)
+        c, h, e = c or sc, h or sh, e or se
+    return d, c, h, e
+
+
+def _attribute_variant_prose(monsters, prose_text, bold_runs):
+    """Give each variant on a multi-creature page *its own* slice of the prose.
+
+    The MM writes a shared page which v1 handed to every variant identically (so a
+    variant's ecology was every kin's text concatenated). Where bold sub-headers name
+    the variants, split at them. Two page shapes, told apart by whether any column is
+    left without a header of its own:
+
+    * **a base creature** (Beholder, Bear): its Combat/Habitat/Ecology sit before the
+      first sub-header and belong to it; each kin's block stands alone.
+    * **all-variant** (Naga, Cat): the leading Combat/Habitat/Ecology are *general* and
+      shared by every variant, each of which then adds its own block.
+
+    Each block takes its most-specific header ("Lamia Noble" heads the Noble, not the
+    base "Lamia"). A no-op when nothing matches (single creatures, shared-description
+    pages), so those stay untouched."""
+    if not monsters or not bold_runs:
+        return
+    # Each header goes to the variant(s) it matches best (an exact match wins the header
+    # outright; otherwise every equally-good family member shares it — "Abishai" heads
+    # all three abishai). Each variant then keeps its highest-scoring header. A header
+    # that names no column but reads like a creature is a **prose-only variant**: it
+    # still bounds the blocks (so it can't bleed into the creature above it) and is
+    # captured as a related creature.
+    assigned, orphans = {}, []         # index -> (offset, run, score); [(offset, run)]
+    for off, run in bold_runs:
+        if run.lstrip().startswith("("):        # a "(beholder-kin)" annotation, not a header
+            continue
+        scored = [(i, _match_score(run, m)) for i, m in enumerate(monsters)]
+        best = max((s for _, s in scored), default=0)
+        if best == 0:
+            if _is_creature_header(run) and _starts_a_line(prose_text, off):
+                orphans.append((off, run))
+            continue
+        for i, s in scored:
+            if s == best and (i not in assigned or best > assigned[i][2]):
+                assigned[i] = (off, run, best)
+    if not assigned and not orphans:
+        return
+
+    boundaries = sorted({off for off, _, _ in assigned.values()} | {off for off, _ in orphans})
+    section_offs = sorted(off for off, run in bold_runs
+                          if _norm_header(run) in _SECTION_HEADER_KEYS)
+
+    # A prose-only creature is a short blurb — it never owns Combat:/Habitat:/Ecology:
+    # sections. So its block stops at the next section header, and that text goes back
+    # to the page level (the Slaad's shared Habitat/Ecology sit *after* the Green/Gray/
+    # Death Slaad blurbs and belong to every slaad, not to the Death Slaad).
+    page_level = []
+
+    def block_at(off, run, is_orphan=False):
+        end = next((b for b in boundaries if b > off), len(prose_text))
+        if is_orphan:
+            cut = next((s for s in section_offs if s > off), None)
+            if cut is not None and cut < end:
+                page_level.append((cut, end))
+                end = cut
+        block = prose_text[off:end]
+        if block.lower().lstrip().startswith(run.lower()):            # drop the header line
+            block = block.lstrip()[len(run):]
+        return re.sub(r"^\s*\([^)]*\)", "", block).lstrip(" :\n")      # and a "(kin)" tag
+
+    related = [{"name": run.rstrip(":").strip(),
+                "text": _clean_prose(block_at(off, run, is_orphan=True))}
+               for off, run in orphans]
+    related = [r for r in related if r["text"]]
+
+    base_text = prose_text[:boundaries[0]] + "".join(
+        "\n" + prose_text[a:b] for a, b in sorted(page_level))
+    base_split = _split_prose(base_text)
+    # a base creature exists iff some column has no header; then the leading sections
+    # are its own, not shared. Otherwise they're general and every variant inherits them.
+    shared = None if any(i not in assigned for i in range(len(monsters))) else base_split
+
+    for i, m in enumerate(monsters):
+        if i in assigned:
+            off, run, _ = assigned[i]
+            fields = _resolve_block(block_at(off, run), shared)
+        else:
+            fields = base_split        # the base creature (no header of its own)
+        if any(f.strip() for f in fields):     # never blank out a variant we can't place
+            m.description, m.combat, m.habitat_society, m.ecology = fields
+        m.related_creatures = related
+
+
 class _StatBlockHTML(HTMLParser):
-    """Reads every <TABLE> as a grid of cell strings (column 0 = label, columns
-    1..N = one per variant) and collects the body text outside the tables as prose.
-    All tables are concatenated because a page may split the variant-name header
-    into its own table (Crocodile); the group segmentation sorts them out. Wrapped
-    values arrive as continuation rows (empty first cell), stitched back per column
-    by _group_to_monsters."""
+    """Reads each <TABLE> as its own grid of cell strings (column 0 = label,
+    columns 1..N = one per variant) and collects the body text outside the tables
+    as prose. ``self.tables`` keeps the tables *separate* — so parse_stat_block can
+    route the leading stat-block table(s) to the grid parser and hand the trailing
+    enrichment tables (dragon age charts, psionics summaries, per-attack damage) to
+    the classifier — while ``self.rows`` still exposes them concatenated for the
+    stat-block path. A page may split the variant-name header into its own table
+    (Crocodile) or spread the stat block across several (Dinosaur, Tabaxi); those
+    stay together because the stat-block region is every table up to the last one
+    bearing a canonical label. Wrapped values arrive as continuation rows (empty
+    first cell), stitched back per column by _group_to_monsters."""
 
     def __init__(self):
         super().__init__()
-        self.rows: list = []
+        self.tables: list = []
+        self._table = None
         self._row = None
         self._cell = None
         self._in_table = False
         self._seen_table = False
         self._prose: list = []
         self.image = ""
+        #: (char offset in prose(), text) for each <B>/<I> run in the prose region —
+        #: the per-variant sub-headers ("Death Kiss", "Gauth") that let a page's prose
+        #: be split per creature (see _attribute_variant_prose).
+        self.bold_runs: list = []
+        self._bold = False
+        self._bold_buf: list = []
+        self._bold_at = 0
+        self._plen = 0                 # running length of prose(), for the offsets
 
     def handle_starttag(self, tag, attrs):
         t = tag.lower()
@@ -132,6 +409,7 @@ class _StatBlockHTML(HTMLParser):
             self.image = dict(attrs).get("src", "") or ""
         if t == "table":
             self._in_table = self._seen_table = True
+            self._table = []
         elif self._in_table:
             if t == "tr":
                 self._row = []
@@ -139,8 +417,12 @@ class _StatBlockHTML(HTMLParser):
                 self._cell = []
             elif t == "br" and self._cell is not None:
                 self._cell.append(" ")
-        elif self._seen_table and t in ("br", "p"):
-            self._prose.append("\n")
+        elif self._seen_table:                       # prose region (outside any table)
+            if t in ("br", "p"):
+                self._prose.append("\n")
+                self._plen += 1
+            elif t in ("b", "strong"):
+                self._bold, self._bold_buf, self._bold_at = True, [], self._plen
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
@@ -148,21 +430,37 @@ class _StatBlockHTML(HTMLParser):
     def handle_endtag(self, tag):
         t = tag.lower()
         if t == "table":
+            if self._table:
+                self.tables.append(self._table)
             self._in_table = False
-            self._cell = self._row = None
+            self._table = self._cell = self._row = None
         elif self._in_table:
             if t == "td" and self._cell is not None:
                 self._row.append(" ".join("".join(self._cell).split()))
                 self._cell = None
             elif t == "tr" and self._row is not None:
-                self.rows.append(self._row)
+                self._table.append(self._row)
                 self._row = None
+        elif self._bold and t in ("b", "strong"):
+            run = " ".join("".join(self._bold_buf).split())
+            if run:
+                self.bold_runs.append((self._bold_at, run))
+            self._bold = False
 
     def handle_data(self, data):
         if self._cell is not None:
             self._cell.append(data)
         elif self._seen_table and not self._in_table:
             self._prose.append(data)
+            self._plen += len(data)
+            if self._bold:
+                self._bold_buf.append(data)
+
+    @property
+    def rows(self) -> list:
+        """Every table's rows concatenated — the flat grid the stat-block and
+        compact-table parsers consume."""
+        return [r for t in self.tables for r in t]
 
     def prose(self) -> str:
         return "".join(self._prose)
@@ -277,6 +575,10 @@ def _clean_title(title: str) -> str:
     suffix and render the scrape's '--' separator as a comma ('Cat-- Great')."""
     base = re.split(r"\s*\(Monstrous Manual", title or "")[0].strip()
     return re.sub(r"\s*--\s*", ", ", base)
+
+
+#: Public alias — app.py names a page's group from its title (the picker headings).
+clean_title = _clean_title
 
 
 def _monster_name(variant: str, group: str) -> str:
@@ -526,18 +828,152 @@ def _parse_compact_table(rows, source_page):
     return monsters
 
 
+def _split_stat_and_trailing(tables):
+    """Partition the page's parsed tables into (stat_block_rows, trailing_tables).
+
+    The stat block spans every table up to and including the last one bearing a
+    canonical stat label — leading variant-name headers (Crocodile) and cosmetically
+    split stat tables (Dinosaur, Shedu, Tabaxi) come along, so the grid parser sees
+    exactly the flat grid it saw before. Everything after the last label-bearing
+    table is an enrichment table for the classifier (dragon age charts, psionics,
+    per-attack damage). If no table carries a canonical label the page is a compact
+    summary (Mammal, Bird, …), handled on the whole flattened grid instead."""
+    last_label = -1
+    for i, t in enumerate(tables):
+        if any(r and _norm_label(r[0].strip()) for r in t):
+            last_label = i
+    if last_label < 0:
+        return [], []
+    stat_rows = [r for t in tables[:last_label + 1] for r in t]
+    return stat_rows, tables[last_label + 1:]
+
+
 def parse_stat_block(content_html: str, title: str = "", source_page: str = "") -> list:
     """Parse a Monstrous Manual page into a list of Monsters — one per variant (a
     single-creature page yields one). Falls back to the compact summary-table format
     (Mammal, Bird, …). Returns [] for pages without a real stat block (front matter,
-    generic category pages, the blank form)."""
+    generic category pages, the blank form).
+
+    Enrichment tables the page carries past the stat block (dragon age progression,
+    psionics summaries, per-attack damage) are classified and attached to every
+    monster on the page as ``extra_tables`` (Phase A of the monster v2 plan)."""
     parser = _StatBlockHTML()
     try:
         parser.feed(content_html or "")
     except Exception:
         return []
-    monsters = (_grid_to_monsters(parser.rows, _clean_title(title), source_page, parser.prose())
-                or _parse_compact_table(parser.rows, source_page))
+    stat_rows, trailing = _split_stat_and_trailing(parser.tables)
+    monsters = _grid_to_monsters(stat_rows, _clean_title(title), source_page, parser.prose())
+    if not monsters:
+        # compact summary tables filter their own junk rows, so feed them the whole
+        # flattened grid (the trailing-table split doesn't apply to them).
+        monsters = _parse_compact_table(parser.rows, source_page)
+        trailing = []
+    _attribute_variant_prose(monsters, parser.prose(), parser.bold_runs)
+    extras = classify_tables(trailing)
     for m in monsters:
         m.image = parser.image
+        m.extra_tables = extras
     return monsters
+
+
+# ── enrichment-table classifier (Phase A) ─────────────────────────────────────
+#
+# Past the stat block, ~73 MM pages carry extra <table>s the v1 parser dropped. Each
+# is classified off its header row(s) into a structured extra attached to the
+# Monster (rendered as its own sheet section, consumed by Phase B's tier selector):
+#   age           dragon age progression (Age -> HD/size, AC, breath, spells, XP)
+#   psionics      psionics summary (Level | Dis/Sci/Dev | Attack/Defense | Score | PSPs)
+#   attack_damage per-attack damage breakdown (Baatezu/Tanar'ri: Attack | Damage rows)
+#   other         anything else the page carries (kept so nothing is silently lost)
+# Each extra is a plain JSON-friendly dict — {kind, title, header_rows, rows} — so it
+# roundtrips through Monster.to_dict/from_dict without bespoke (de)serialization.
+
+#: Header cells that mark an Age-keyed table as a *combat* progression (Phase B feed)
+#: rather than an age→lore note table ("Age | Ability").
+_AGE_COMBAT_COLS = ("ac", "hd", "thac0", "breath", "xp", "weapon", "lgt", "spells")
+
+
+def _normalize_grid(rows):
+    """Drop blank rows and any leading columns that are empty in every row, padding
+    ragged rows to a common width. Leaves a rectangular grid the classifier and the
+    view can read by column (folds away the stray leading spacer column some tables
+    carry — Crystal Dragon's psionics, the Beholder hit-location charts)."""
+    rows = [list(r) for r in rows if any(c.strip() for c in r)]
+    if not rows:
+        return rows
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    while width > 1 and all(not r[0].strip() for r in rows):
+        rows = [r[1:] for r in rows]
+        width -= 1
+    return rows
+
+
+def _age_header_rows(rows):
+    """How many leading rows form an Age-progression header (0 if it isn't one): the
+    dragon charts wrap it across two rows ('' / 'Age'), the White-Dragon/Mummy form
+    keeps it on one ('Age')."""
+    if rows and rows[0] and rows[0][0].strip().lower() == "age":
+        return 1
+    if len(rows) > 1 and rows[1] and rows[1][0].strip().lower() == "age":
+        return 2
+    return 0
+
+
+def _is_age_table(rows):
+    hr = _age_header_rows(rows)
+    if not hr:
+        return False
+    header = " ".join(c.lower() for r in rows[:hr] for c in r)
+    return any(col in header for col in _AGE_COMBAT_COLS)
+
+
+def _is_psionics_table(rows):
+    cells = [c.strip().lower() for r in rows[:2] for c in r]
+    has_level = any(c == "level" for c in cells)
+    has_psp = any("psp" in c or "dis/sci" in c for c in cells)
+    return has_level and has_psp
+
+
+def _psionics_header_rows(rows):
+    """Psionics headers usually sit on one row; a few wrap the column names onto a
+    second ('Level | Dis/Sci | Attack/ | Power | PSPs' then '' | Dev | Defense |
+    Score | ''). A following row with no digits and no '=' (i.e. not a data row,
+    whose Power Score reads '= Int' or a level number) is that continuation."""
+    if len(rows) > 1:
+        r1 = [c.strip() for c in rows[1]]
+        if (any(c for c in r1[1:]) and not any(re.search(r"\d", c) for c in r1)
+                and not any("=" in c for c in r1)):
+            return 2
+    return 1
+
+
+def _is_attack_damage_table(rows):
+    header = {c.strip().lower() for c in rows[0] if c.strip()}
+    return bool(header) and header <= {"attack", "damage"} and "damage" in header
+
+
+def _classify_table(table):
+    """Classify one trailing <table> into a structured extra ({kind, title,
+    header_rows, rows}), or None if it holds nothing. Recognizes the three shapes
+    the MM repeats and keeps everything else as ``other`` so the page's content
+    isn't lost."""
+    rows = _normalize_grid(table)
+    if not rows:
+        return None
+    if _is_attack_damage_table(rows):
+        kind, header_rows = "attack_damage", 1
+    elif _is_psionics_table(rows):
+        kind, header_rows = "psionics", _psionics_header_rows(rows)
+    elif _is_age_table(rows):
+        kind, header_rows = "age", _age_header_rows(rows)
+    else:
+        kind, header_rows = "other", 1
+    return {"kind": kind, "header_rows": header_rows, "rows": rows}
+
+
+def classify_tables(tables):
+    """Classify each trailing table, dropping the empties. The order the page lists
+    them in is preserved."""
+    return [c for c in (_classify_table(t) for t in tables) if c]
