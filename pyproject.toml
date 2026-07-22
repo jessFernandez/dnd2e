@@ -10,6 +10,13 @@ testpaths = ["tests"]
 # and conftest.py bridges that for both layouts (see CLAUDE.md). Duplicating it
 # as `pythonpath = ["."]` would give two mechanisms for one job.
 
+# A deadlock guard, not a performance budget. The whole suite runs in ~7s and the
+# slowest single test is under a second, so 60s never fires on a merely slow
+# machine -- it fires when a QThread in test_ask_lifecycle/test_search_worker
+# never joins. Needs pytest-timeout (requirements-dev.txt); without the plugin
+# installed pytest just warns about the unknown setting rather than failing.
+timeout = 60
+
 [tool.ruff]
 line-length = 100
 extend-exclude = ["build", "dist"]

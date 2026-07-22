@@ -18,4 +18,10 @@ ruff==0.15.22
 # no reason to opt into pytest 10 the day it ships.
 pytest>=8.0,<10
 
+# test_ask_lifecycle.py and test_search_worker.py drive real QThreads -- the one
+# place in this suite that can genuinely deadlock. Without this, a hang burns the
+# job's timeout and dies with no traceback; with it, the offending test fails and
+# names itself. See the `timeout` setting in pyproject.toml.
+pytest-timeout>=2.3
+
 coverage>=7.0
