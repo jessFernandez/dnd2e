@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Kept in step with tests.yml and the development machine: the bundle
       # should be frozen against the interpreter the code is actually run on.
