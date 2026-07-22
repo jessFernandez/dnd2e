@@ -1,0 +1,78 @@
+name: build
+
+# What tests.yml cannot catch. tests/test_architecture.py checks that
+# dnd2e.spec's hiddenimports list stays in sync with the modules on disk, but
+# that is a static check on a list -- it says nothing about whether the bundle
+# assembles. A data file missing from `datas`, a PyInstaller release that breaks
+# the PyQtWebEngine hooks, a moved icon: all of those pass the whole suite and
+# fail at `pyinstaller dnd2e.spec`. The bundle is the artifact users actually
+# run, and it was the one layer nothing exercised.
+#
+# Deliberately not on pull_request: the build pulls Qt WebEngine and copies the
+# 65 MB rulebook DB, so it costs minutes where the suite costs seconds. Post-
+# merge and on tags is the right cadence for a packaging smoke test.
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    # The platform this ships on; the spec is Windows-shaped (console=False,
+    # an .ico, win_private_assemblies).
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Unlike the test job this needs the real runtime set, PyQtWebEngine
+      # included: dnd2e.spec calls collect_data_files('PyQtWebEngine') at build
+      # time. PyInstaller is pinned for the same reason ruff is -- a release of
+      # the build tool should not be able to break the build unannounced.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller==6.21.0
+
+      - name: Build the bundle
+        run: pyinstaller dnd2e.spec --noconfirm
+
+      # A zero exit code is not proof the bundle is usable: PyInstaller warns
+      # rather than fails when a data file is missing, so assert the two things
+      # whose absence would ship a dead app. The DB is located by search because
+      # PyInstaller 6 moved bundled data under _internal/.
+      - name: Verify the bundle
+        run: |
+          $root = "dist/DnD2eRules"
+          $exe  = Join-Path $root "DnD2eRules.exe"
+          if (-not (Test-Path $exe)) { throw "no executable at $exe" }
+          $db = Get-ChildItem -Path $root -Recurse -Filter dnd2e.db | Select-Object -First 1
+          if ($null -eq $db) { throw "dnd2e.db was not bundled -- the app would open an empty library" }
+          "exe : {0:N1} MB" -f ((Get-Item $exe).Length / 1MB)
+          "db  : {0:N1} MB at {1}" -f ($db.Length / 1MB), $db.FullName
+          "total: {0:N1} MB" -f ((Get-ChildItem $root -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB)
+
+      # Only on tags. The bundle measures ~330 MB, and parking that against the
+      # repo's storage quota on every master push buys nothing -- nobody
+      # downloads a mid-week build. A tagged one is a build someone installs.
+      - name: Upload the bundle
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: DnD2eRules-${{ github.ref_name }}
+          path: dist/DnD2eRules
+          retention-days: 14
