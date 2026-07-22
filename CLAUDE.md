@@ -51,7 +51,8 @@ into it.
 
 ```
 db.py                data-access layer — ALL SQL lives here, functions take a
-                     connection as first arg (thread-safe, testable)
+                     connection as first arg (thread-safe, testable). Saved
+                     characters and monsters share one `BlobStore` (see below)
 char_rules.py        the computable AD&D 2e rules: chargen tables, THAC0/AC/save
                      progressions, house-rule conversions. Single source of truth.
 character.py         Character — the mutable in-progress build; derives everything
@@ -231,6 +232,19 @@ book-contents page and per-chapter house-rule callouts.) Background:
 - **`dnd2e.db`** (~55 MB) is the scraped rulebook DB, committed to the repo and
   bundled by PyInstaller. The app also opens a separate writable **user DB**
   (bookmarks, saved characters) so user data survives app updates.
+- **Saving a new kind of thing** in the user DB? It's a `db.BlobStore` — the whole
+  object as a JSON blob plus a few loose columns for listing, which is how saved
+  characters and saved monsters both work. Declare a descriptor
+  (`BlobStore("table", ("name", …))`) rather than writing another set of
+  CREATE/INSERT/UPDATE/SELECT/DELETE. **The generated DDL is pinned by
+  `tests/test_blob_store.py`**: `CREATE TABLE IF NOT EXISTS` never migrates an
+  existing user's database, so DDL that drifts would hand old and new users
+  different tables.
+- **`Model.from_dict` is where untyped JSON becomes a typed record** — coerce there,
+  so the rest of the model can assume its declared types. `Monster.from_dict` takes
+  `""` for a null and `str(v)` for a number in `str` fields, leaves genuinely
+  nullable ints alone, and drops unknown keys so an older build can open a newer
+  save.
 - Some modules are **generated — do not hand-edit**. They say so at the top:
   - `equipment.py` ← `scripts/build_items.py`
   - spell data ← `scripts/build_spells.py`; economics ← `scripts/build_economics.py`;

@@ -117,8 +117,28 @@ class Monster:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Monster":
-        known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in known})
+        """Rebuild a Monster from a stored blob, coercing as it goes.
+
+        This is the boundary where untyped JSON becomes a typed record, so it's the
+        place to be strict — the rest of the model then gets to assume a stat field
+        is a string. A blob can disagree with the dataclass in two ordinary ways: a
+        `null` where a string belongs (a field added since the save was written), and
+        a bare number where the MM's own notation is expected. Both used to travel
+        straight through: a null crashed the sheet's escaping, and a number reached
+        `re.sub` in the house-rule conversions (docs/audit-2-plan.md findings 1 and 1c).
+
+        Unknown keys are dropped, so an older app version can open a newer save.
+        """
+        by_name = {f.name: f for f in fields(cls)}
+        kwargs = {}
+        for key, value in d.items():
+            f = by_name.get(key)
+            if f is None:
+                continue                       # a field this version doesn't know
+            if f.type is str or f.type == "str":
+                value = "" if value is None else str(value)
+            kwargs[key] = value
+        return cls(**kwargs)
 
 
 # ── conversions ───────────────────────────────────────────────────────────────

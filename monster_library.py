@@ -41,9 +41,8 @@ class MonsterLibrary:
 
     def load(self, mid) -> Monster | None:
         """The saved monster, or None if the id is malformed or missing."""
-        try:
-            mid = int(mid)
-        except (ValueError, TypeError):
+        mid = db.row_id(mid)
+        if mid is None:
             return None
         db.ensure_monsters_schema(self.user_db)
         raw = db.get_monster(self.user_db, mid)
@@ -52,9 +51,8 @@ class MonsterLibrary:
     def delete(self, mid) -> int | None:
         """Delete a saved monster; return the deleted id, or None if the id is
         malformed."""
-        try:
-            mid = int(mid)
-        except (ValueError, TypeError):
+        mid = db.row_id(mid)
+        if mid is None:
             return None
         db.ensure_monsters_schema(self.user_db)
         db.delete_monster(self.user_db, mid)

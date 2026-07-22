@@ -1,6 +1,6 @@
 # Architecture / code-quality audit — round 2 (post-monster-mode)
 
-Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 · Baseline
+Status: **complete** on `chore/architecture-audit-2` · Written 2026-07-21 · Baseline
 `feat/monster-mode-v2` @ `e8473d4`
 
 | Phase | State |
@@ -10,7 +10,10 @@ Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 ·
 | 3 — `route_destination` | **done** (1257 passed, 1 skipped) |
 | 4 — search/bookmarks extraction | **done** (1278 passed, 1 skipped) |
 | 5 — `theme.py` | **done, partial by design** (1299 passed, 1 skipped) |
-| 6 — JSON-blob store + `from_dict` coercion | not started |
+| 6 — JSON-blob store + `from_dict` coercion | **done** (1323 passed, 1 skipped) |
+
+All six phases landed. `master` baseline was 1182 passed; the branch ends at **1323
+passed, 1 skipped**, ruff clean, every screen re-rendered against the real DB.
 
 Baseline, measured: **1182 passed, 1 skipped in 6.2 s**. Line coverage by module is in
 Finding 2. The first audit ([`audit-plan.md`](audit-plan.md), complete 2026-07-10) left
@@ -298,6 +301,39 @@ its last step; `MonsterLibrary.load` returns a `Monster`) and that difference is
 Minor, same area: `character_library.roll20_payload` does a function-local
 `import roll20_export` (character_library.py:80) as if guarding a cycle. There is no cycle
 — `roll20_export` doesn't import `character_library`. Hoist it to module scope.
+
+### Landed — with an honest note on what it cost
+
+One `db.BlobStore` describes both tables; `CHARACTERS` and `MONSTERS` are its two
+instances. The per-entity functions (`insert_character`, `get_monster`, …) survive as
+one-line wrappers, so call sites and `test_db.py` read as before. `db.row_id` replaces the
+same four-line `try/int/except` that appeared **four** times across the two libraries. The
+lazy import is hoisted.
+
+**`db.py` grew: 332 → 387 lines.** The duplicated SQL is genuinely gone — five statements
+where there were ten — but the class, its docstrings and the twelve wrappers cost more
+than the duplication did. Reporting it because the finding implied a reduction and there
+wasn't one.
+
+The payoff isn't today's line count, it's the marginal cost of the *next* store: v3's
+saved Roll20 sheets are now a two-line `BlobStore(...)` descriptor instead of another
+~48 lines of hand-written CREATE/INSERT/UPDATE/SELECT/DELETE. If v3 never adds one, this
+phase roughly broke even.
+
+**The schema is pinned.** `CREATE TABLE IF NOT EXISTS` will not migrate an existing user's
+database, so generated DDL that differs by even a keyword would silently give old and new
+users different tables. `test_blob_store.py` asserts the generated SQL byte-for-byte
+against the DDL that shipped.
+
+### Finding 1c closed
+
+`Monster.from_dict` is the boundary where untyped JSON becomes a typed record, so it
+coerces there: declared-`str` fields take `""` for a null and `str(v)` for a number, while
+the genuinely nullable `initiative_override` / `selected_tier` pass through untouched
+(coercing those to `""` would break "derive from size" and "base stat block"). Unknown
+keys are still dropped, so an older build can open a newer save. Both crash paths from
+findings 1 and 1c are now covered end to end: a blob with nulls and numbers saves, loads
+and renders.
 
 ---
 
