@@ -36,7 +36,7 @@ jobs:
 
       # Kept in step with tests.yml and the development machine: the bundle
       # should be frozen against the interpreter the code is actually run on.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
