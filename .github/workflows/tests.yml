@@ -31,7 +31,7 @@ jobs:
       # not the patch -- 3.14.x fixes should arrive without a workflow edit.
       # PyQt5 ships cp38-abi3 wheels, so it installs here without waiting for a
       # per-version build.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
