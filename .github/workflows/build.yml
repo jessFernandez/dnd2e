@@ -73,7 +73,7 @@ jobs:
       # downloads a mid-week build. A tagged one is a build someone installs.
       - name: Upload the bundle
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DnD2eRules-${{ github.ref_name }}
           path: dist/DnD2eRules
