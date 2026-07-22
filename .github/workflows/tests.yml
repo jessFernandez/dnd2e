@@ -5,21 +5,43 @@ on:
     branches: [master]
   pull_request:
 
+# A second push to the same branch makes the first run's result irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # a Windows-only break should not hide the Linux result
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # The suite runs in seconds; anything near this ceiling is a hung QThread,
+    # and a hung QThread would otherwise burn the full six-hour default.
+    timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
 
+      # Matches the interpreter the app is developed on. Pinned to the minor,
+      # not the patch -- 3.14.x fixes should arrive without a workflow edit.
+      # PyQt5 ships cp38-abi3 wheels, so it installs here without waiting for a
+      # per-version build.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
 
       # PyQt5 needs these to import on a headless runner. The app code under test
       # is Qt-free, but tests/test_ask_lifecycle.py and tests/test_search_worker.py
-      # drive real QThreads, so PyQt5 has to load.
+      # drive real QThreads, so PyQt5 has to load. Windows runners ship the Qt
+      # platform dependencies already.
       - name: Install system libraries for headless Qt
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
@@ -34,9 +56,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyQt5 -r requirements-dev.txt
 
+      # Ruff's verdict does not vary by platform, so one leg is enough.
       - name: Lint
+        if: matrix.os == 'ubuntu-latest'
         run: ruff check .
 
+      # Windows is the platform this ships on: app.py's _user_data_dir() reads
+      # APPDATA first, so the primary branch of that path only ever executes here.
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
