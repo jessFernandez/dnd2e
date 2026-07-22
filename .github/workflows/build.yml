@@ -96,7 +96,12 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      # v8 pairs with upload-artifact@v7 above -- the two move in lockstep (v8
+      # skips unzipping non-archive uploads, which is exactly the v7 feature it
+      # exists to support). Leaving this at v4 against a v7 upload would be a
+      # mismatched pair, and nothing on a pull request would catch it: build.yml
+      # does not run on PRs, and these two steps are tags-only.
+      - uses: actions/download-artifact@v8
         with:
           name: DnD2eRules-${{ github.ref_name }}
 
