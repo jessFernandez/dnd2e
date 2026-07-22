@@ -7,7 +7,7 @@ All, wizard specialization for Wizard, priest sphere for Priest. Cards are
 masonry-packed and colour-coded by school.
 """
 import re
-from html import escape
+from view_common import esc
 
 
 def spell_slug(name: str) -> str:
@@ -48,20 +48,20 @@ def _tok(csv: str) -> str:
 
 
 def _desc_html(text: str) -> str:
-    paras = [escape(p).strip() for p in (text or "").split("\n") if p.strip()]
+    paras = [esc(p).strip() for p in (text or "").split("\n") if p.strip()]
     return "<br><br>".join(paras)
 
 
 def _stat(label: str, value: str) -> str:
     v = (value or "").strip()
-    return f'<div class="st"><span>{escape(label)}</span><b>{escape(v) if v else "—"}</b></div>'
+    return f'<div class="st"><span>{esc(label)}</span><b>{esc(v) if v else "—"}</b></div>'
 
 
 def _card(s: dict, anchor: str = "") -> str:
     school = s.get("school") or ""
     color = SCHOOL_COLORS.get(school, "#8b93b8")
     caster = (s.get("caster") or "").capitalize()
-    comps = "".join(f"<i>{escape(c.strip())}</i>" for c in (s.get("components") or "").split(",") if c.strip())
+    comps = "".join(f"<i>{esc(c.strip())}</i>" for c in (s.get("components") or "").split(",") if c.strip())
     spheres, specs = (s.get("spheres") or ""), (s.get("specializations") or "")
     # Priest cards read more naturally by sphere than by the site's assigned school.
     cat_label = spheres if (s.get("caster") == "priest" and spheres) else school
@@ -76,26 +76,26 @@ def _card(s: dict, anchor: str = "") -> str:
     ])
     mat = ""
     if (s.get("materials") or "").strip():
-        mat = f'<div class="mat"><span>Materials</span> {escape(s["materials"].strip())}</div>'
+        mat = f'<div class="mat"><span>Materials</span> {esc(s["materials"].strip())}</div>'
 
     foot_bits = []
     if (s.get("residue") or "").strip():
-        foot_bits.append(f'<span class="res">Residue: {escape(s["residue"].strip())}</span>')
+        foot_bits.append(f'<span class="res">Residue: {esc(s["residue"].strip())}</span>')
     if (s.get("source") or "").strip():
-        foot_bits.append(f'<span class="src">{escape(s["source"].strip())}</span>')
+        foot_bits.append(f'<span class="src">{esc(s["source"].strip())}</span>')
     foot = f'<div class="foot">{"".join(foot_bits)}</div>' if foot_bits else ""
 
     lvl = s.get("level") or 0
     anchor_attr = f' id="{anchor}"' if anchor else ""
     return (
         f'<article class="card"{anchor_attr} style="--sc:{color}" '
-        f'data-caster="{escape(s.get("caster",""))}" data-level="{lvl}" '
-        f'data-school="{escape(school)}" '
-        f'data-spheres="{escape(_tok(spheres))}" data-specs="{escape(_tok(specs))}">'
+        f'data-caster="{esc(s.get("caster",""))}" data-level="{lvl}" '
+        f'data-school="{esc(school)}" '
+        f'data-spheres="{esc(_tok(spheres))}" data-specs="{esc(_tok(specs))}">'
         f'<div class="chead">'
         f'<span class="lvl" title="Level {lvl}">{lvl}</span>'
-        f'<div class="ctitle"><div class="nm">{escape(s.get("name",""))}</div>'
-        f'<div class="meta">{caster} · {escape(cat_label)}<span class="comp">{comps}</span></div></div>'
+        f'<div class="ctitle"><div class="nm">{esc(s.get("name",""))}</div>'
+        f'<div class="meta">{caster} · {esc(cat_label)}<span class="comp">{comps}</span></div></div>'
         f'</div>'
         f'<div class="stats">{stats}</div>'
         f'{mat}'
@@ -111,7 +111,7 @@ def _cat_pills(names, with_dots=False) -> str:
     for name in names:
         dot = (f'<span class="dot" style="background:{SCHOOL_COLORS[name]}"></span>'
                if with_dots else "")
-        out.append(f'<button class="pill" data-k="{escape(name)}">{dot}{escape(name)}</button>')
+        out.append(f'<button class="pill" data-k="{esc(name)}">{dot}{esc(name)}</button>')
     return "".join(out)
 
 

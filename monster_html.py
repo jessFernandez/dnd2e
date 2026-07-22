@@ -12,7 +12,7 @@ and actions navigate to ``dnd:///mon/…`` links, which app.py intercepts (phase
 mirroring the ``cm(…)`` / ``cmText(…)`` helpers in charactermancer_html. This module
 only builds the HTML; the round-trip wiring is the Qt layer's job.
 """
-from html import escape as esc
+from view_common import esc
 
 import monster
 import monster_abilities

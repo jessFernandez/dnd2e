@@ -9,6 +9,7 @@ is shared with app.py so the sidebar's anchors match the page's ids.
 import re
 
 import char_rules as cr
+from view_common import esc
 
 ACCENT = "#c9a84c"
 
@@ -16,11 +17,6 @@ ACCENT = "#c9a84c"
 def slug(name: str) -> str:
     """Anchor id for a proficiency name, e.g. 'Bowyer/Fletcher' -> 'bowyer-fletcher'."""
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-
-
-def _esc(s) -> str:
-    import html
-    return html.escape(str(s), quote=True)
 
 
 def _slots_label(n: int) -> str:
@@ -44,14 +40,14 @@ def _render_desc(desc: str) -> str:
             continue
         bullets = [ln for ln in lines if ln[0] in "*•"]
         if len(bullets) >= 2:            # a real list
-            items = "".join(f"<li>{_esc(ln.lstrip('*• ').strip())}</li>" for ln in lines
+            items = "".join(f"<li>{esc(ln.lstrip('*• ').strip())}</li>" for ln in lines
                             if ln[0] in "*•")
             leads = [ln for ln in lines if ln[0] not in "*•"]
             if leads:
-                out.append("<p>" + "<br>".join(_esc(ln) for ln in leads) + "</p>")
+                out.append("<p>" + "<br>".join(esc(ln) for ln in leads) + "</p>")
             out.append(f"<ul>{items}</ul>")
         else:
-            out.append("<p>" + "<br>".join(_esc(ln) for ln in lines) + "</p>")
+            out.append("<p>" + "<br>".join(esc(ln) for ln in lines) + "</p>")
     return "".join(out)
 
 
@@ -77,16 +73,16 @@ def grouped() -> dict:
 def _card(p) -> str:
     badges = [
         f'<span class="badge slots">{_slots_label(p.slots)}</span>',
-        (f'<span class="badge">{_esc(p.ability)} check ({p.modifier:+d})</span>'
+        (f'<span class="badge">{esc(p.ability)} check ({p.modifier:+d})</span>'
          if p.ability else '<span class="badge">No ability check</span>'),
-        f'<span class="badge cls">{_esc(_classes_label(p.classes))}</span>',
+        f'<span class="badge cls">{esc(_classes_label(p.classes))}</span>',
     ]
     if p.prereq:
         badges.append(f'<span class="badge pre" title="Prerequisite">'
-                      f'{_esc(", ".join(p.prereq))}</span>')
+                      f'{esc(", ".join(p.prereq))}</span>')
     return (
         f'<article class="prof" id="prof-{slug(p.name)}">'
-        f'<h3>{_esc(p.name)}</h3>'
+        f'<h3>{esc(p.name)}</h3>'
         f'<div class="badges">{"".join(badges)}</div>'
         f'<div class="body">{_render_desc(p.description)}</div>'
         '</article>'
@@ -139,7 +135,7 @@ def generate() -> str:
   a {{ color: {ACCENT}; }}
 </style></head><body>
   <header>
-    <h1>{_esc(cr.PROFICIENCY_BOOK)}</h1>
+    <h1>{esc(cr.PROFICIENCY_BOOK)}</h1>
     <div class="subtitle">Nonweapon Proficiencies &middot; {total} skills &middot;
       hover a skill in the picker or open the Character Builder to spend slots.</div>
   </header>

@@ -17,7 +17,8 @@ import json
 
 import char_rules as cr
 from charactermancer import STEPS, STEP_TITLES
-from charactermancer_common import ABBR, ACCENT, budget_bar, esc
+from charactermancer_common import ABBR, ACCENT, budget_bar
+from view_common import esc
 from charactermancer_profs_html import _nonweapon_body, _weapons_body
 
 

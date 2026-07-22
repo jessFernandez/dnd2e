@@ -4,9 +4,14 @@ house-rules callout.
 Pure string builders (no DB, no Qt), matching the other *_html screen modules.
 Callers pass the resolved book name / accent colour and the already-fetched
 chapters and house rules, so this is unit-testable (see tests/test_screens.py).
-Content comes from the local rulebook DB and is treated as trusted (not escaped),
-preserving the previous in-MainWindow behaviour.
+
+Content comes from the local rulebook DB, so it is trusted — but trusted is not the
+same as *well-formed*, which is why it is escaped anyway. Nine `toc_entries` rows
+carry a bare `&` ("AD&D Game Line", "Gear & Equipment"); emitting those raw is
+invalid markup that only renders correctly because browsers recover from it. No
+row in either table contains `<`, so escaping changes nothing else on screen.
 """
+from view_common import esc
 
 
 def _chapter_house_rules(chapter_name: str, hr_by_chapter: dict) -> list:
@@ -24,8 +29,8 @@ def book_toc(book_name: str, accent: str, chapters: list, hr_by_chapter: dict) -
     for i, ch in enumerate(chapters, 1):
         count = len(ch["entries"])
         num   = f"{i:02d}"
-        name_html = (f'<a href="dnd:///{ch["page_url"]}">{ch["name"]}</a>'
-                     if ch.get("page_url") else ch["name"])
+        name_html = (f'<a href="dnd:///{esc(ch["page_url"])}">{esc(ch["name"])}</a>'
+                     if ch.get("page_url") else esc(ch["name"]))
 
         ch_rules = _chapter_house_rules(ch["name"], hr_by_chapter)
         badge = hr_block = ""
@@ -40,8 +45,8 @@ def book_toc(book_name: str, accent: str, chapters: list, hr_by_chapter: dict) -
                 by_cat.setdefault(cat, []).append(text)
             inner = ""
             for cat, texts in by_cat.items():
-                inner += f'<div class="hr-cat">{cat}</div><ul class="hr-list">'
-                inner += "".join(f"<li>{text}</li>" for text in texts)
+                inner += f'<div class="hr-cat">{esc(cat)}</div><ul class="hr-list">'
+                inner += "".join(f"<li>{esc(text)}</li>" for text in texts)
                 inner += "</ul>"
             hr_block = f'<div class="hr-block">{inner}</div>'
 
@@ -155,7 +160,7 @@ def book_toc(book_name: str, accent: str, chapters: list, hr_by_chapter: dict) -
 </head>
 <body>
   <div class="book-tag">2nd Edition AD&amp;D</div>
-  <h1>{book_name}</h1>
+  <h1>{esc(book_name)}</h1>
   <div class="divider"></div>
   <div class="toc">
 {rows}
@@ -172,8 +177,8 @@ def house_rules_callout(rules: list, accent: str) -> str:
 
     inner = ""
     for cat, texts in by_cat.items():
-        items = "".join(f"<li>{text}</li>" for text in texts)
-        inner += (f'<div class="hrx-cat" style="color:{accent}">{cat}</div>'
+        items = "".join(f"<li>{esc(text)}</li>" for text in texts)
+        inner += (f'<div class="hrx-cat" style="color:{accent}">{esc(cat)}</div>'
                   f'<ul class="hrx-list">{items}</ul>')
 
     return f"""<style>

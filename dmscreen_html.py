@@ -1,5 +1,5 @@
 """dmscreen_html.py — Generates the DM Quick Reference Screen HTML."""
-from html import escape as e
+from view_common import esc
 
 import char_rules as cr
 from screen_common import page, render_sections
@@ -26,13 +26,13 @@ CAT_LABELS = {
 
 def _t(headers, rows, right_cols=()):
     head = "".join(
-        f'<th class="r">{e(h)}</th>' if i in right_cols else f"<th>{e(h)}</th>"
+        f'<th class="r">{esc(h)}</th>' if i in right_cols else f"<th>{esc(h)}</th>"
         for i, h in enumerate(headers)
     )
     body = ""
     for row in rows:
         cells = "".join(
-            f'<td class="r">{e(str(v))}</td>' if i in right_cols else f"<td>{e(str(v))}</td>"
+            f'<td class="r">{esc(str(v))}</td>' if i in right_cols else f"<td>{esc(str(v))}</td>"
             for i, v in enumerate(row)
         )
         body += f"<tr>{cells}</tr>\n"
@@ -43,10 +43,10 @@ def _card(title, cat, content, span=1):
     col = CAT_COLORS[cat]
     span_cls = f" span-{span}" if span > 1 else ""
     return (
-        f'<div class="card {cat}{span_cls}" data-cat="{cat}" data-title="{e(title.lower())}">'
+        f'<div class="card {cat}{span_cls}" data-cat="{cat}" data-title="{esc(title.lower())}">'
         f'<div class="card-head" style="border-left:3px solid {col}">'
         f'<span class="cat-dot" style="background:{col}"></span>'
-        f'<span class="card-title">{e(title)}</span></div>'
+        f'<span class="card-title">{esc(title)}</span></div>'
         f'<div class="card-body">{content}</div></div>\n'
     )
 

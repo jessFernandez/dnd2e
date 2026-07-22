@@ -1,6 +1,16 @@
 # Architecture / code-quality audit — round 2 (post-monster-mode)
 
-Status: **proposed**, nothing landed · Written 2026-07-21 · Branch `feat/monster-mode-v2` @ `e8473d4`
+Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 · Baseline
+`feat/monster-mode-v2` @ `e8473d4`
+
+| Phase | State |
+|---|---|
+| 1 — one coercing `esc` everywhere | **done** (1195 passed, 1 skipped) |
+| 2 — tooling + invariant tests | not started |
+| 3 — `route_destination` | not started |
+| 4 — search/bookmarks extraction | not started |
+| 5 — `theme.py` | not started |
+| 6 — JSON-blob store + `from_dict` coercion | not started |
 
 Baseline, measured: **1182 passed, 1 skipped in 6.2 s**. Line coverage by module is in
 Finding 2. The first audit ([`audit-plan.md`](audit-plan.md), complete 2026-07-10) left
@@ -50,11 +60,10 @@ fiddly layer", it's 979 lines, and it is **99% covered**. The parser/model split
 
 ---
 
-## Finding 1 — HTML escaping is four functions with two different behaviours (**highest value**)
+## Finding 1 — HTML escaping is six spellings with two different behaviours (**highest value**)
 
-`charactermancer_common.esc` coerces (`html.escape(str(s), quote=True)`). Every other
-view module imports `html.escape` raw, under four different names, and raw
-`html.escape` **raises on non-`str`**:
+Two modules wrap `html.escape` in a coercing helper; the rest call it raw, under three
+more names; one escapes nothing. Raw `html.escape` **raises on non-`str`**:
 
 ```
 html.escape(None) -> AttributeError: 'NoneType' object has no attribute 'replace'
@@ -66,11 +75,15 @@ Spelling, per module:
 | Module | Escapes as | Coerces? |
 |---|---|---|
 | `charactermancer_common` (→ `charactermancer_html`, `_profs_html`) | `esc` | **yes** |
+| `proficiencies_html` | private `_esc` wrapper | **yes** |
 | `monster_html` | `esc` | no |
 | `actionsscreen_html`, `askscreen_html`, `dmscreen_html`, `splash_html` | `e` | no |
 | `spellsscreen_html` | `escape` | no |
-| `proficiencies_html` | `html.escape` | no |
-| `toc_html`, `screen_common` | **nothing** | — |
+| `toc_html` | **nothing** — see 1b | — |
+| `screen_common` | n/a — pure CSS/JS, interpolates no data | — |
+
+Two modules independently arrived at the same coercing wrapper, which is the clearest
+evidence the raw form doesn't survive contact with optional fields.
 
 ### 1a. Reproducible crash
 
@@ -113,6 +126,28 @@ to a neutral module (see Finding 5, which wants the same module for the palette)
 Regression test worth having: parametrize over every public `generate*` in every view
 module, feed it a model with `None`/`int` in each field, assert no exception. That single
 test would have caught 1a.
+
+### 1c. Follow-up found while fixing this — `Monster.from_dict` doesn't coerce
+
+Writing the fuzz test turned up a *second*, unrelated crash on the same input shape.
+It is **not** an escaping problem and was deliberately left out of phase 1:
+
+```python
+monster_html.generate(monster.Monster.from_dict({"armor_class": 5}))
+# TypeError: expected string or bytes-like object, got 'int'
+#   monster.py:155  _map_numbers -> re.sub(pattern, ..., text)
+```
+
+`_map_numbers` guards `if not text` (so `None` and `""` are fine) but a non-empty
+non-string sails through into `re.sub`. **Not currently reachable** — `monster_parser`
+only ever produces strings, so nothing writes a JSON number into a stat field — which is
+why it's recorded rather than fixed.
+
+The principled fix is at the boundary: `Monster.from_dict` is where untyped JSON becomes
+a typed model, and it currently trusts the blob completely (`selected_tier` and
+`initiative_override` are the only fields whose types it thinks about). Coercing declared
+`str` fields there would close this and anything like it. That's a model-layer decision,
+so it belongs with Finding 4's persistence work in phase 6, not here.
 
 ---
 
@@ -343,7 +378,7 @@ is the only one fixing a live defect; 2 is the guardrail that protects the rest.
 | 3 | **`route_destination`** — finish `nav-controller-plan.md` phase 4; update it and `CLAUDE.md` | Finding 3 | Closes a known open item; grammar ends up in one tested place. |
 | 4 | **Extract search + bookmarks row formatting** | Finding 2 | The two candidates `CLAUDE.md` already names. Small, proven pattern. |
 | 5 | **`theme.py`** — palette + shared CSS + `esc` + `spell_slug`; retire the duplicated literals | Findings 5, 6 | Do before v3 adds another stylesheet and another view importer. |
-| 6 | **Parameterize the JSON-blob store**; hoist the lazy `roll20_export` import | Finding 4 | Do before v3 adds a third saved-thing table. |
+| 6 | **Parameterize the JSON-blob store**; coerce in `from_dict` (1c); hoist the lazy `roll20_export` import | Findings 4, 1c | Do before v3 adds a third saved-thing table. |
 
 Phases 5 and 6 are both "do it before v3" — if v3 starts first, they get harder, not
 impossible. Phases 1-4 stand alone and are worth doing regardless.

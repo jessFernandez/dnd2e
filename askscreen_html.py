@@ -1,12 +1,12 @@
 """askscreen_html.py — "Ask the Rules" page (local Ollama-powered rules Q&A)."""
 import re
-from html import escape as e
+from view_common import esc
 
 
 # ── Minimal Markdown → HTML ──────────────────────────────────────────────────
 
 def _inline(t: str) -> str:
-    t = e(t)
+    t = esc(t)
     t = re.sub(r'\[([^\]]+)\]\(([^)\s]+)\)',
                lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', t)
     t = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', t)
@@ -149,7 +149,7 @@ def _model_select(model: str, models) -> str:
     if model not in models:
         models = [model] + models
     opts = "".join(
-        f'<option value="{e(m)}"{" selected" if m == model else ""}>{e(m)}</option>'
+        f'<option value="{esc(m)}"{" selected" if m == model else ""}>{esc(m)}</option>'
         for m in models
     )
     return f'<select onchange="setModel(this.value)">{opts}</select>'
@@ -158,7 +158,7 @@ def _model_select(model: str, models) -> str:
 def _askbar(question: str = "") -> str:
     return (
         '<form class="askbar" onsubmit="return submitAsk();">'
-        f'<input id="q" type="text" autocomplete="off" placeholder="Ask Jarvis a 2e rules question…" value="{e(question)}">'
+        f'<input id="q" type="text" autocomplete="off" placeholder="Ask Jarvis a 2e rules question…" value="{esc(question)}">'
         '<button class="btn" type="submit">Ask</button></form>'
     )
 
@@ -177,7 +177,7 @@ def _meta(model: str, models, show_new: bool = False) -> str:
 
 def _turn_card(q: str, answer_md: str) -> str:
     return ('<div class="card"><div class="q-label">Question</div>'
-            f'<div class="q-text">{e(q)}</div>'
+            f'<div class="q-text">{esc(q)}</div>'
             f'<div class="answer">{render_markdown(answer_md)}</div></div>')
 
 
@@ -187,7 +187,7 @@ def _thread_html(thread) -> str:
 
 def _loading_card(q: str) -> str:
     return ('<div class="card"><div class="q-label">Question</div>'
-            f'<div class="q-text">{e(q)}</div>'
+            f'<div class="q-text">{esc(q)}</div>'
             '<div class="status-row">'
             '<div id="ask-status"><span class="spinner"></span><span>Thinking…</span></div>'
             '<a class="stopbtn" href="dnd:///ask-stop">Stop</a></div>'
@@ -196,8 +196,8 @@ def _loading_card(q: str) -> str:
 
 def _error_card(q: str, error: str) -> str:
     return ('<div class="card"><div class="q-label">Question</div>'
-            f'<div class="q-text">{e(q)}</div>'
-            f'<div class="err">{e(error)}</div></div>')
+            f'<div class="q-text">{esc(q)}</div>'
+            f'<div class="err">{esc(error)}</div></div>')
 
 
 def _page(body: str) -> str:

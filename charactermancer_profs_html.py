@@ -12,7 +12,8 @@ Pure string templating, Qt-free. (Not `proficiencies_html.py`, which renders the
 """
 import char_rules as cr
 from charactermancer import THIEF_POINT_STEP
-from charactermancer_common import ABBR, budget_bar, esc
+from charactermancer_common import ABBR, budget_bar
+from view_common import esc
 
 def _handedness_field(cm) -> str:
     """House-rule handedness roll (d10, 10 = ambidextrous). Rendered in the

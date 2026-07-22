@@ -1,5 +1,5 @@
 """splash_html.py — Welcome / landing screen for the D&D 2E app."""
-from html import escape as e
+from view_common import esc
 
 BOOKS = [
     ("PHB", "Player's Handbook",        "#5b9bd5"),
@@ -35,8 +35,8 @@ def generate() -> str:
     for code, name, color in BOOKS:
         book_chips += (
             f'<a class="book-chip" href="dnd:///toc/{code}" '
-            f'style="border-color:{color};color:{color}" title="{e(name)}">'
-            f'{e(code)}</a>'
+            f'style="border-color:{color};color:{color}" title="{esc(name)}">'
+            f'{esc(code)}</a>'
         )
 
     feature_cards = ""
@@ -45,8 +45,8 @@ def generate() -> str:
 <a class="feat-card" href="dnd:///{url}"
    style="--fc:{color};--fb:{bg}">
   <div class="feat-icon">{icon}</div>
-  <div class="feat-title">{e(title)}</div>
-  <div class="feat-desc">{e(desc)}</div>
+  <div class="feat-title">{esc(title)}</div>
+  <div class="feat-desc">{esc(desc)}</div>
   <div class="feat-arrow">Open →</div>
 </a>"""
 
