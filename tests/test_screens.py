@@ -96,11 +96,26 @@ def test_book_toc_links_and_house_rule_badge():
     hr = {"Chapter 9": [("Combat", "THAC0 is replaced by attack bonus")]}
     html = toc_html.book_toc("Player's Handbook", "#5b9bd5", chapters, hr)
     _is_page(html)
-    assert "Player's Handbook" in html
+    # Escaped, not raw: esc() quotes apostrophes so one escape function is safe in
+    # both text and attribute position. Renders identically.
+    assert "Player&#x27;s Handbook" in html
     assert 'href="dnd:///PHB/DD01661.htm"' in html
     assert "Chapter 9: Combat" in html
     assert "⚔ HR" in html                          # keyword matched the chapter
     assert "THAC0 is replaced by attack bonus" in html
+
+
+def test_book_toc_escapes_ampersands_from_the_db():
+    """Real toc_entries rows carry bare '&' ("AD&D Game Line", "Gear & Equipment").
+    Emitting those raw is invalid markup; see docs/audit-2-plan.md finding 1b."""
+    chapters = [{"name": "Gear & Equipment", "page_url": "PHB/a&b.htm", "entries": []}]
+    hr = {"Gear & Equipment": [("Cost", "Prices <halved> at market")]}
+    html = toc_html.book_toc("AD&D Player's Handbook", "#5b9bd5", chapters, hr)
+    assert "Gear &amp; Equipment" in html
+    assert "AD&amp;D" in html
+    assert 'href="dnd:///PHB/a&amp;b.htm"' in html
+    assert "&lt;halved&gt;" in html
+    assert "<halved>" not in html
 
 
 def test_book_toc_no_house_rules_no_badge():

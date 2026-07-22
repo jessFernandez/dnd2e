@@ -1,0 +1,14 @@
+# Development dependencies — the test suite and the linter.
+# Runtime deps are in requirements.txt.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Note that the *suite* still needs PyQt5 even though almost none of the code
+# under test does. Nearly every module is Qt-free by design (see CLAUDE.md), but
+# tests/test_ask_lifecycle.py and tests/test_search_worker.py import PyQt5 at
+# module scope to drive the worker threads, so collection fails without it.
+# Running those headless needs QT_QPA_PLATFORM=offscreen (see .github/workflows).
+
+pytest>=8.0
+coverage>=7.0
+ruff>=0.15

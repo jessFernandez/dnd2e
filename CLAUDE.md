@@ -19,9 +19,16 @@ below are shell-agnostic.
 
 ```bash
 python app.py                 # run the app (needs dnd2e.db present)
-python -m pytest -q           # run the test suite (fast, Qt-free) — from the repo root
+python -m pytest -q           # run the test suite — from the repo root
+ruff check .                  # lint (correctness rules only; see pyproject.toml)
 pyinstaller dnd2e.spec        # build the distributable bundle into dist/
 ```
+
+Runtime deps are in `requirements.txt`, the suite's in `requirements-dev.txt`. Almost
+every module is Qt-free, but the *suite* still needs PyQt5 installed — `test_ask_lifecycle`
+and `test_search_worker` drive real `QThread`s, so collection fails without it (headless:
+`QT_QPA_PLATFORM=offscreen`). CI runs lint + tests on push and PR
+(`.github/workflows/tests.yml`).
 
 Run tests **from the repo root**. The modules under test live at the repo root but
 the tests live in `tests/`; `conftest.py` is a `sys.path` shim that bridges that
@@ -44,7 +51,8 @@ into it.
 
 ```
 db.py                data-access layer — ALL SQL lives here, functions take a
-                     connection as first arg (thread-safe, testable)
+                     connection as first arg (thread-safe, testable). Saved
+                     characters and monsters share one `BlobStore` (see below)
 char_rules.py        the computable AD&D 2e rules: chargen tables, THAC0/AC/save
                      progressions, house-rule conversions. Single source of truth.
 character.py         Character — the mutable in-progress build; derives everything
@@ -112,9 +120,9 @@ Two link grammars belong to this stack, both classified in `navigation.py` (see
   `pick/<page>`, `save`, `roll20`, …). `navigation.route_mon` parses it into a tagged
   `MonAct`; `app.py._mon_action` is a `match` of side effects.
 - `dnd:///spell/<slug>` — a monster's spell-like ability linking into the Spell
-  Compendium. `spellsscreen_html` owns both `spell_slug()` and the `id=` anchors it
-  emits, and `monster_spells` imports that function, so a link can't drift from the
-  anchor it points at.
+  Compendium. `slugs.py` owns the slug *and* the `spell-` anchor prefix, so the `id=`
+  `spellsscreen_html` emits and the fragment `navigation` builds come from the same
+  function and can't drift. `monster_spells` imports `slugs`, never the view module.
 
 Editing is guarded on both sides: `monster.house_rule_round_trips` decides whether a
 field can be shown in house-rule form *and* taken back (a conditional THAC0 can't —
@@ -139,20 +147,35 @@ zoom/find, and sessions). The direction of travel is to keep extracting Qt-light
 clusters into pure controllers with tests, the way `character_library.py` was
 pulled out of the `_cm_*` methods, `ask_controller.py` out of the `_ask_*` ones,
 `session.py` out of session save/restore (`_save_session` / `_restore_session`
-keep the Qt orchestration; `session.py` does the QSettings coercion), and
-`navigation.py` out of the link/pane/history logic (see **Navigation** below).
-Good next candidates: the book search (`SearchWorker` + `_do_search`) and
-bookmarks.
+keep the Qt orchestration; `session.py` does the QSettings coercion),
+`navigation.py` out of the link/pane/history logic (see **Navigation** below), and
+`browse_lists.py` out of the three side lists.
+
+`browse_lists.py` is worth knowing about: the browse tree, the search results and
+the bookmarks list all render the same thing — a rulebook page as a cleaned-up title
+over its book name, tinted by which book it came from. That formatting had been
+written three times inside `MainWindow`. It now lives in one pure module
+(`display_title`, `snippet`, `book_color`, `page_row`, `BOOK_ITEM_COLORS`), with
+`_add_row` / `_add_placeholder` as the only Qt left.
+
+Good next candidate: `_build_ui` (215 lines) — though see
+[`docs/audit-2-plan.md`](docs/audit-2-plan.md) on why chasing `app.py`'s coverage
+number is the wrong target; extract *decisions*, not widget construction.
 
 ### Navigation
 
 `navigation.py` is the pure, Qt-free navigation layer, extracted from `MainWindow`
-(recorded in [`docs/nav-controller-plan.md`](docs/nav-controller-plan.md), phases
-1–3 complete). A "destination" is one canonical string that doubles as a history
+(recorded in [`docs/nav-controller-plan.md`](docs/nav-controller-plan.md), complete).
+A "destination" is one canonical string that doubles as a history
 entry (`"PHB/DD01671.htm"`, `"toc:PHB"`, `"proficiencies#anchor"`, `"dmscreen"`).
 The module owns the grammar and the policy:
 
 - `History` — the per-tab back/forward state machine.
+- `route_destination(dest)` — classifies a destination into what should be rendered,
+  returning a tagged `Dest` (`Page`, `Toc`, `Screen`, `Spells`, `MonsterFamily`, …);
+  `app.py._render_destination` is then just a `match` of side effects. **New
+  destinations go here and nowhere else** — `takes_full_width` derives from this
+  same classification, so the two can't disagree the way they used to.
 - `link_to_destination` / `takes_full_width` / `FULLWIDTH_SCREENS` — the grammar.
 - `pane_action(dest, trigger)` — the single truth table for when the browse pane
   opens/closes/stays (a book page reached by a *link* opens it; a full-width
@@ -170,9 +193,30 @@ only the side effects (render, show/hide pane, open tab).
 
 ### Reference screens
 
-`screen_common.py` holds the shared card-grid chrome (CSS + masonry/filter script);
-`dmscreen_html.py`, `actionsscreen_html.py`, `spellsscreen_html.py`, `splash_html.py`
-each just supply their cards. `toc_html.py` / `toc.py` build tables of contents.
+`screen_common.py` holds the card-grid chrome (CSS + masonry/filter script) — used by
+`dmscreen_html.py` and `actionsscreen_html.py`; the other screens still carry their own
+CSS. `toc_html.py` / `toc.py` build tables of contents.
+
+**`theme.py` owns the colours.** `theme.BOOKS` is one `Book` record per rulebook — its
+name (spelled as `pages.book_name` spells it) plus the three colours that identify it: a
+vivid `tree` for the sidebar and splash chip, a saturated `accent` for its TOC page, a
+dark `item` tint for search/bookmark rows. That replaced four dicts and two copies of the
+names, which had already drifted. Also here: the neutral ramp (`TEXT`, `BG`, `BORDER*`),
+`ACCENT`, and the status colours. **Take a shared colour from here rather than retyping
+the hex.** The stylesheets still hold literals — deliberately; the module's docstring
+explains why and what the safe migration looks like.
+
+**`slugs.py` owns anchor ids** for the two long single-document screens: `slug()`, plus
+`spell_anchor()` / `prof_anchor()`, so the `id=` a screen emits and the link that targets
+it are built by the same function. `monster_spells` imports this, *not* `spellsscreen_html`
+— a logic module must never import a view (enforced by `tests/test_architecture.py`).
+
+**`view_common.py` is the bottom of the view layer** — the templating primitives every
+HTML module needs, currently `esc`. Use it: escaping is the one thing every view does at
+every interpolation, and it only stays correct with a single implementation. It coerces,
+so `None` and numbers are safe to interpolate; raw `html.escape` raises on both. Don't
+add a local escape helper — `tests/test_architecture.py` and `test_view_common.py` fail
+if one comes back.
 Navigation uses `dnd://` links intercepted in `app.py._on_content_navigate`.
 
 The browse sidebar renders the site's **real nested tree** (Book → Chapter →
@@ -188,6 +232,19 @@ book-contents page and per-chapter house-rule callouts.) Background:
 - **`dnd2e.db`** (~55 MB) is the scraped rulebook DB, committed to the repo and
   bundled by PyInstaller. The app also opens a separate writable **user DB**
   (bookmarks, saved characters) so user data survives app updates.
+- **Saving a new kind of thing** in the user DB? It's a `db.BlobStore` — the whole
+  object as a JSON blob plus a few loose columns for listing, which is how saved
+  characters and saved monsters both work. Declare a descriptor
+  (`BlobStore("table", ("name", …))`) rather than writing another set of
+  CREATE/INSERT/UPDATE/SELECT/DELETE. **The generated DDL is pinned by
+  `tests/test_blob_store.py`**: `CREATE TABLE IF NOT EXISTS` never migrates an
+  existing user's database, so DDL that drifts would hand old and new users
+  different tables.
+- **`Model.from_dict` is where untyped JSON becomes a typed record** — coerce there,
+  so the rest of the model can assume its declared types. `Monster.from_dict` takes
+  `""` for a null and `str(v)` for a number in `str` fields, leaves genuinely
+  nullable ints alone, and drops unknown keys so an older build can open a newer
+  save.
 - Some modules are **generated — do not hand-edit**. They say so at the top:
   - `equipment.py` ← `scripts/build_items.py`
   - spell data ← `scripts/build_spells.py`; economics ← `scripts/build_economics.py`;
@@ -219,4 +276,9 @@ book-contents page and per-chapter house-rule callouts.) Background:
 - **Adding a new top-level app module?** Add it to `dnd2e.spec`'s `hiddenimports`
   (the spec lists every app module explicitly, belt-and-suspenders over
   PyInstaller's auto-detection) so the frozen build can't miss it.
+- **The layering rules above are enforced, not just documented.**
+  `tests/test_architecture.py` checks that PyQt stays in the three Qt modules, that SQL
+  stays in `db.py` (`rules_agent` is grandfathered), that `dnd2e.spec` lists every module
+  and no stale ones, that the import graph stays acyclic, and that every module imports
+  standalone. If one fails, the rule it names is the thing to fix — not the test.
 - `*.log`, `build/`, `dist/`, `__pycache__/` are gitignored build/run artifacts.

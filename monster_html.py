@@ -12,14 +12,15 @@ and actions navigate to ``dnd:///mon/…`` links, which app.py intercepts (phase
 mirroring the ``cm(…)`` / ``cmText(…)`` helpers in charactermancer_html. This module
 only builds the HTML; the round-trip wiring is the Qt layer's job.
 """
-from html import escape as esc
+import theme
+from view_common import esc
 
 import monster
 import monster_abilities
 import monster_spells
 import monster_tiers
 
-ACCENT = "#c9a84c"
+ACCENT = theme.ACCENT
 
 #: (display label, Monster field) for the 21 stat-block rows, in MM order.
 _STAT_ROWS = [

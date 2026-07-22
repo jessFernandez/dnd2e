@@ -1,7 +1,7 @@
 """Tests for monster_spells.py — matching a monster's spell-like abilities to the
 compendium — and the spellsscreen anchor scheme they link to."""
 import monster_spells as ms
-from spellsscreen_html import spell_slug
+from slugs import slug as spell_slug
 
 # A tiny stand-in compendium: multi-word names, distinctive/common single words that
 # cue-gate (Entangle, Suggestion, Fear, Slow), and stoplisted words (Regenerate, Armor).

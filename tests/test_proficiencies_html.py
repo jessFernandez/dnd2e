@@ -9,13 +9,14 @@ import re
 
 import char_rules as cr
 import proficiencies_html as ph
+import slugs
 
 
 def test_slug_is_url_safe_and_stable():
-    assert ph.slug("Bowyer/Fletcher") == "bowyer-fletcher"
-    assert ph.slug("Animal Handling") == "animal-handling"
-    assert ph.slug("Reading/Writing") == "reading-writing"
-    assert ph.slug("  Weird---Name!!  ") == "weird-name"
+    assert slugs.slug("Bowyer/Fletcher") == "bowyer-fletcher"
+    assert slugs.slug("Animal Handling") == "animal-handling"
+    assert slugs.slug("Reading/Writing") == "reading-writing"
+    assert slugs.slug("  Weird---Name!!  ") == "weird-name"
 
 
 def test_slots_label():
@@ -74,7 +75,7 @@ def test_generate_is_one_document_with_every_skill_anchored():
     assert cr.PROFICIENCY_BOOK in html
     # Every skill has its card, at the id the sidebar's slug() will link to.
     for name in cr.NONWEAPON_PROFICIENCIES:
-        assert f'id="prof-{ph.slug(name)}"' in html, name
+        assert f'id="{slugs.prof_anchor(name)}"' in html, name
     # The A–Z index links resolve to real section anchors on the same page.
     for letter in re.findall(r'href="#letter-([A-Z])"', html):
         assert f'id="letter-{letter}"' in html

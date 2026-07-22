@@ -1,12 +1,16 @@
 """Tests for navigation.py — the per-tab back/forward state machine, the pure
-destination grammar (link_to_destination, takes_full_width), the browse-pane
-policy (pane_action), and link routing (route_link)."""
+destination grammar (link_to_destination, takes_full_width, route_destination),
+the browse-pane policy (pane_action), and link routing (route_link)."""
+import pytest
+
 from navigation import (
     History, FULLWIDTH_SCREENS, link_to_destination, takes_full_width,
     pane_action, Trigger, Pane,
     route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
     route_mon, MonSet, MonTier, MonInit, MonPick, MonPickVariant, MonLoad, MonDelete,
     MonFamily, MonPicker, MonNew, MonSave, MonExport,
+    route_destination, SIMPLE_SCREENS, Dest, Page, Toc, Screen, Spells, Proficiencies,
+    Charactermancer, AskScreen, MonsterPicker, MonsterSheet, MonsterFamily, MonsterVariant,
 )
 
 
@@ -200,3 +204,64 @@ def test_restore_from_state():
     assert h.current() == "spells"
     assert h.can_back() and h.can_forward()
     assert h.forward() == "ask"
+
+
+# ── route_destination (the dispatch grammar) ─────────────────────────────────
+#
+# Extracted from MainWindow._render_destination, which was the only place that
+# knew the full set. See docs/audit-2-plan.md finding 3.
+
+@pytest.mark.parametrize("dest,expected", [
+    ("toc:PHB",                     Toc("PHB")),
+    ("toc:CT",                      Toc("CT")),
+    ("splash",                      Screen("splash")),
+    ("dmscreen",                    Screen("dmscreen")),
+    ("actions",                     Screen("actions")),
+    ("ask",                         AskScreen()),
+    ("charactermancer",             Charactermancer()),
+    ("spells",                      Spells("")),
+    ("spells#spell-fireball",       Spells("spell-fireball")),
+    ("proficiencies",               Proficiencies("")),
+    ("proficiencies#prof-riding",   Proficiencies("prof-riding")),
+    ("monster",                     MonsterPicker()),
+    ("monster-sheet",               MonsterSheet()),
+    ("monster-family/Dragon",       MonsterFamily("Dragon")),
+    ("monster-variant/MM/DD1.htm",  MonsterVariant("MM/DD1.htm")),
+    ("PHB/DD01671.htm",             Page("PHB/DD01671.htm")),
+    ("",                            Page("")),
+])
+def test_route_destination_classifies(dest, expected):
+    assert route_destination(dest) == expected
+
+
+def test_unknown_destination_is_a_page():
+    """page_urls are the open-ended part of the grammar, so anything unrecognised
+    falls through to Page and fails at render time rather than here."""
+    assert route_destination("monster-typo") == Page("monster-typo")
+    assert route_destination("not-a-screen") == Page("not-a-screen")
+
+
+def test_every_route_destination_result_is_tagged():
+    for dest in ("toc:PHB", "splash", "spells", "monster-sheet", "PHB/x.htm", ""):
+        assert isinstance(route_destination(dest), Dest)
+
+
+def test_simple_screens_all_route_to_screen():
+    for name in SIMPLE_SCREENS:
+        assert route_destination(name) == Screen(name)
+
+
+def test_takes_full_width_agrees_with_route_destination():
+    """takes_full_width derives from route_destination now; FULLWIDTH_SCREENS is the
+    independent list that catches the classification drifting."""
+    for dest in FULLWIDTH_SCREENS:
+        assert takes_full_width(dest), dest
+        assert not isinstance(route_destination(dest), (Page, Toc)), dest
+    for dest in ("PHB/DD01671.htm", "toc:PHB", ""):
+        assert not takes_full_width(dest), dest
+
+
+def test_fragment_only_split_on_own_prefix():
+    """A page_url containing '#' is still a page, not a fragmented screen."""
+    assert route_destination("PHB/DD01.htm#anchor") == Page("PHB/DD01.htm#anchor")
+    assert route_destination("spellsomething") == Page("spellsomething")

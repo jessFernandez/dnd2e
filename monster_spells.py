@@ -28,7 +28,7 @@ spellsscreen_html (which owns the ``id=`` targets) so links can't drift from ids
 import re
 from dataclasses import dataclass
 
-from spellsscreen_html import spell_slug
+from slugs import slug as spell_slug
 
 #: Single-word spell names too ambiguous to link *even beside a casting cue* — the
 #: monster-trait words whose innate description reads like a cast ("the ogre

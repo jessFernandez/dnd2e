@@ -16,7 +16,10 @@ from dmscreen_html import generate as generate_dmscreen_html
 from actionsscreen_html import generate as generate_actions_html
 from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
+import browse_lists
 import db
+import slugs
+import theme
 import toc
 import toc_html
 from navigation import (
@@ -24,6 +27,8 @@ from navigation import (
     route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
     route_mon, MonSet, MonTier, MonInit, MonPick, MonPickVariant, MonLoad, MonDelete,
     MonFamily, MonPicker, MonNew, MonSave, MonExport,
+    route_destination, Page, Toc, Screen, Spells, Proficiencies, Charactermancer as CmDest,
+    AskScreen, MonsterPicker, MonsterSheet, MonsterFamily, MonsterVariant,
 )
 import askscreen_html
 import charactermancer_html
@@ -46,10 +51,10 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QHBoxLayout, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
-    QLabel, QSizePolicy, QShortcut,
+    QLabel, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter, QIcon
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSettings, QEvent, QTimer, QRect
+from PyQt5.QtGui import QFont, QColor, QPalette, QKeySequence, QPen, QPainter, QIcon
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
@@ -81,61 +86,11 @@ DB_PATH      = _bundle_dir() / "dnd2e.db"
 USER_DB_PATH = _user_data_dir() / "userdata.db"
 BASE_URL     = "https://regalgoblins.com/2erules/"
 
-BOOK_ORDER = ["PHB", "DMG", "MM", "SP", "HLC", "TM", "SM", "CT", "AEG", "ECO"]
-BOOK_NAMES = {
-    "PHB": "Player's Handbook",
-    "DMG": "Dungeon Master Guide",
-    "MM":  "Monstrous Manual",
-    "SP":  "Skills and Powers",
-    "HLC": "High-Level Campaigns",
-    "TM":  "Tome of Magic",
-    "SM":  "Spells and Magic",
-    "CT":  "Combat and Tactics",
-    "AEG": "Arms and Equipment Guide",
-    "ECO": "Economics of the Realm",
-}
+# Book names and their three colour roles (sidebar tree, TOC accent, list-row
+# tint) all live in theme.BOOKS; BOOK_ORDER is theme.BOOK_ORDER.
 
-# Vivid foreground colours for book nodes on the dark sidebar
-BOOK_TREE_COLORS = {
-    "PHB": "#5b9bd5",
-    "DMG": "#e07b2a",
-    "MM":  "#4db870",
-    "SP":  "#c8a828",
-    "HLC": "#a76bcc",
-    "TM":  "#e05555",
-    "SM":  "#3dbfa8",
-    "CT":  "#e0924a",
-    "AEG": "#8a9bb0",
-    "ECO": "#c9a84c",
-}
-
-# Accent colours used in the generated TOC HTML pages
-BOOK_ACCENT_COLORS = {
-    "PHB": "#2563eb",
-    "DMG": "#ea580c",
-    "MM":  "#16a34a",
-    "SP":  "#ca8a04",
-    "HLC": "#7c3aed",
-    "TM":  "#dc2626",
-    "SM":  "#0d9488",
-    "CT":  "#b45309",
-    "AEG": "#4b5563",
-    "ECO": "#b7930a",
-}
-
-# Subtle dark tints used for list items in results / bookmarks panels
-BOOK_ITEM_COLORS = {
-    "PHB": "#192233",
-    "DMG": "#2a1e12",
-    "MM":  "#132213",
-    "SP":  "#232012",
-    "HLC": "#1f1430",
-    "TM":  "#261212",
-    "SM":  "#122424",
-    "CT":  "#251b12",
-    "AEG": "#1c1f24",
-    "ECO": "#22200a",
-}
+# Per-book colours (sidebar tree, TOC accent, list-row tint) and book names all
+# come from theme.BOOKS — see the constants replaced below.
 
 # ── Global stylesheet ─────────────────────────────────────────────────────────
 
@@ -1097,8 +1052,8 @@ class MainWindow(QMainWindow):
 
     def _generate_toc_html(self, book_code: str, chapters: list[dict]) -> str:
         return toc_html.book_toc(
-            BOOK_NAMES.get(book_code, book_code),
-            BOOK_ACCENT_COLORS.get(book_code, "#8b0000"),
+            theme.book_name(book_code, book_code),
+            theme.accent_color(book_code),
             chapters,
             self._get_all_house_rules_for_book(book_code),
         )
@@ -1112,15 +1067,15 @@ class MainWindow(QMainWindow):
         self._book_page_order.clear()
 
         total_entries = 0
-        for book_code in BOOK_ORDER:
-            book_name = BOOK_NAMES.get(book_code, book_code)
+        for book_code in theme.BOOK_ORDER:
+            book_name = theme.book_name(book_code, book_code)
             chapters  = self._get_chapters(book_code)          # flat: TOC page + house rules
             tree      = toc.build_tree(db.toc_tree(self.db, book_code))  # site's real nesting
             if not chapters and not tree:
                 continue
 
             self._book_chapters[book_code] = chapters
-            tree_color = BOOK_TREE_COLORS.get(book_code, "#c9ccd6")
+            tree_color = theme.tree_color(book_code)
 
             # Book node
             book_item = QTreeWidgetItem([f"  {book_name}"])
@@ -1141,7 +1096,7 @@ class MainWindow(QMainWindow):
                     chap_item.setForeground(0, QColor("#8a90a8"))
                     chap_item.setData(0, Qt.UserRole, ("chapter", ch.get("page_url")))
                     for page_url, subtopic in ch["entries"]:
-                        label = re.sub(r"\s*\([^)]+\)\s*$", "", subtopic).strip()
+                        label = browse_lists.display_title(subtopic)
                         entry_item = QTreeWidgetItem([f"   {label}"])
                         entry_item.setFont(0, QFont("Segoe UI", 10))
                         entry_item.setForeground(0, QColor("#7a8098"))
@@ -1180,7 +1135,7 @@ class MainWindow(QMainWindow):
                 entry_item.setFont(0, QFont("Segoe UI", 10))
                 entry_item.setForeground(0, QColor("#7a8098"))
                 entry_item.setData(0, Qt.UserRole,
-                                   ("profnav", "prof-" + proficiencies_html.slug(p.name)))
+                                   ("profnav", slugs.prof_anchor(p.name)))
                 letter_item.addChild(entry_item)
                 total_entries += 1
             prof_item.addChild(letter_item)
@@ -1310,30 +1265,24 @@ class MainWindow(QMainWindow):
         self._update_nav_buttons()
 
     def _render_destination(self, dest: str) -> bool:
-        """Display a destination's content. Returns False if it could not be shown."""
-        if dest.startswith("toc:"):
-            return self._render_toc(dest[4:])
-        if dest == "ask":
-            return self._render_ask()
-        if dest == "spells" or dest.startswith("spells#"):
-            frag = dest.split("#", 1)[1] if "#" in dest else ""
-            return self._render_spells(frag)
-        if dest == "charactermancer":
-            return self._render_charactermancer()
-        if dest == "monster":
-            return self._render_monster_picker()
-        if dest == "monster-sheet":
-            return self._render_monster_sheet()
-        if dest.startswith("monster-family/"):
-            return self._render_family_picker(dest[len("monster-family/"):])
-        if dest.startswith("monster-variant/"):
-            return self._render_variant_picker(dest[len("monster-variant/"):])
-        if dest == "proficiencies" or dest.startswith("proficiencies#"):
-            frag = dest.split("#", 1)[1] if "#" in dest else ""
-            return self._render_proficiencies(frag)
-        if dest in self._screens:
-            return self._render_screen(dest)
-        return self._render_page(dest)
+        """Display a destination's content. Returns False if it could not be shown.
+
+        The grammar lives in navigation.route_destination; this is only the side
+        effect for each tag.
+        """
+        match route_destination(dest):
+            case Toc(book_code=code):        return self._render_toc(code)
+            case Screen(name=name):          return self._render_screen(name)
+            case AskScreen():                return self._render_ask()
+            case CmDest():                   return self._render_charactermancer()
+            case Spells(fragment=frag):      return self._render_spells(frag)
+            case Proficiencies(fragment=f):  return self._render_proficiencies(f)
+            case MonsterPicker():            return self._render_monster_picker()
+            case MonsterSheet():             return self._render_monster_sheet()
+            case MonsterFamily(family=fam):  return self._render_family_picker(fam)
+            case MonsterVariant(page_url=u): return self._render_variant_picker(u)
+            case Page(page_url=url):         return self._render_page(url)
+        return False
 
     def _render_screen(self, key: str) -> bool:
         generator, title, status = self._screens[key]
@@ -1724,7 +1673,7 @@ class MainWindow(QMainWindow):
         self.current_page_url = None
         self.bookmark_btn.setEnabled(False)
         self._set_tab_title(f"{book_code} — Contents")
-        self.status.showMessage(f"  {BOOK_NAMES.get(book_code, book_code)}  ·  Table of Contents")
+        self.status.showMessage(f"  {theme.book_name(book_code, book_code)}  ·  Table of Contents")
         return True
 
     # Thin public entry points used by the nav-bar buttons and tree.
@@ -1869,7 +1818,7 @@ class MainWindow(QMainWindow):
     def _build_house_rules_callout(self, rules: list, book_code: str) -> str:
         """Build a slim, collapsed house-rules chip for the top of a rules page."""
         return toc_html.house_rules_callout(
-            rules, BOOK_ACCENT_COLORS.get(book_code, "#c9a84c"))
+            rules, theme.accent_color(book_code))
 
     def _load_page(self, page_url: str, add_to_history: bool = True):
         """Public entry point for opening a scraped rules page (tree/results/bookmarks)."""
@@ -2017,39 +1966,40 @@ class MainWindow(QMainWindow):
         self._search_worker.failed.connect(self._show_search_error)
         self._search_worker.start()
 
+    def _add_row(self, widget, row: browse_lists.Row):
+        """Put one browse_lists.Row into a QListWidget."""
+        item = QListWidgetItem(row.text)
+        item.setData(Qt.UserRole, row.page_url)
+        item.setForeground(QColor(row.fg))
+        item.setBackground(QColor(row.color))
+        widget.addItem(item)
+
+    def _add_placeholder(self, widget, text: str, color: str):
+        """A non-clickable message row ("No results found.", "Search failed…")."""
+        item = QListWidgetItem(text)
+        item.setForeground(QColor(color))
+        widget.addItem(item)
+
     def _show_results(self, rows):
         self.results_list.clear()
         if not rows:
-            empty = QListWidgetItem("  No results found.")
-            empty.setForeground(QColor("#505870"))
-            self.results_list.addItem(empty)
+            self._add_placeholder(self.results_list, "  No results found.",
+                                  browse_lists.MUTED_FG)
             self.status.showMessage("  No results found.")
             return
 
-        for page_url, title, book_name, book_code, _snip in rows:
-            label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
-            text  = f"  {label}\n  {book_name or ''}"
-            snip  = re.sub(r"\s+", " ", (_snip or "").replace("**", "")).strip()
-            if snip:
-                if len(snip) > 120:
-                    snip = snip[:118].rstrip() + "…"
-                text += f"\n  {snip}"
-            item = QListWidgetItem(text)
-            item.setData(Qt.UserRole, page_url)
-            item.setForeground(QColor("#c0c4d4"))
-            item.setBackground(QColor(BOOK_ITEM_COLORS.get(book_code or "", "#1a1d24")))
-            self.results_list.addItem(item)
+        for row in browse_lists.search_rows(rows):
+            self._add_row(self.results_list, row)
 
-        self.tabs.setTabText(1, f"Results ({len(rows)})")
+        self.tabs.setTabText(1, browse_lists.results_tab_label(len(rows)))
         self.status.showMessage(f"  Found {len(rows)} results")
 
     def _show_search_error(self, message: str):
         """A search that actually failed (bad DB, FTS syntax) — surfaced distinctly
         from a genuine zero-match so the user isn't told 'no results' for an error."""
         self.results_list.clear()
-        item = QListWidgetItem("  Search failed — try a simpler query.")
-        item.setForeground(QColor("#c07070"))
-        self.results_list.addItem(item)
+        self._add_placeholder(self.results_list, "  Search failed — try a simpler query.",
+                              browse_lists.ERROR_FG)
         self.status.showMessage(f"  Search failed: {message}")
 
     def _on_result_click(self, item: QListWidgetItem):
@@ -2079,15 +2029,11 @@ class MainWindow(QMainWindow):
         for page_url in db.bookmark_urls(self.user_db):
             prow = db.page_meta(self.db, page_url)
             title, book_name, book_code = prow if prow else (page_url, "", "")
-            label = re.sub(r"\s*\([^)]+\)\s*$", "", title or page_url).strip()
-            item  = QListWidgetItem(f"  {label}\n  {book_name or ''}")
-            item.setData(Qt.UserRole, page_url)
-            item.setForeground(QColor("#c0c4d4"))
-            item.setBackground(QColor(BOOK_ITEM_COLORS.get(book_code or "", "#1a1d24")))
-            self.bookmarks_list.addItem(item)
+            self._add_row(self.bookmarks_list,
+                          browse_lists.page_row(page_url, title, book_name, book_code))
 
         count = self.bookmarks_list.count()
-        self.tabs.setTabText(2, f"Bookmarks ({count})" if count else "Bookmarks")
+        self.tabs.setTabText(2, browse_lists.bookmarks_tab_label(count))
 
     def _on_bookmark_click(self, item: QListWidgetItem):
         url = item.data(Qt.UserRole)

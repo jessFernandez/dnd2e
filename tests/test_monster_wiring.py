@@ -10,7 +10,6 @@ import pytest
 
 import app
 import db
-import monster
 from monster import Monster
 from monster_library import MonsterLibrary
 

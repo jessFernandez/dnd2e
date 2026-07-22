@@ -12,7 +12,8 @@ Pure string templating, Qt-free. (Not `proficiencies_html.py`, which renders the
 """
 import char_rules as cr
 from charactermancer import THIEF_POINT_STEP
-from charactermancer_common import ABBR, budget_bar, esc
+from charactermancer_common import ABBR, budget_bar
+from view_common import esc
 
 def _handedness_field(cm) -> str:
     """House-rule handedness roll (d10, 10 = ambidextrous). Rendered in the
@@ -414,7 +415,6 @@ def _talents_block(cm) -> str:
     c = cm.character
     if not c.char_class:
         return ""
-    chosen = set(c.special_talents)
 
     out = (
         '<div class="grp-label" style="margin-top:16px">Special talents</div>'
@@ -453,7 +453,7 @@ def _talents_block(cm) -> str:
 
 def _weapon_section(cm) -> str:
     c = cm.character
-    total, used, left = c.weapon_slots_total(), c.weapon_slots_used(), c.weapon_slots_left()
+    total, used = c.weapon_slots_total(), c.weapon_slots_used()   # budget_bar derives "left"
 
     chosen = "".join(_weapon_row(cm, w, rung) for w, rung in c.weapon_profs.items())
     # Weapons a bought group grants: shown so they can still be specialised.
@@ -623,7 +623,7 @@ def _thief_skills_block(cm) -> str:
     c = cm.character
     if not c.has_thief_skills():
         return ""
-    total, used, left = c.thief_points_total(), c.thief_points_used(), c.thief_points_left()
+    total, used = c.thief_points_total(), c.thief_points_used()   # budget_bar derives "left"
     cap = cr.thief_max_points_in_skill(c.char_class, c.level)
     step = THIEF_POINT_STEP
 

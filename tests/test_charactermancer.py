@@ -1,7 +1,6 @@
 """Tests for charactermancer.py — the step-flow controller."""
 import random
 
-import pytest
 
 from charactermancer import Charactermancer, STEPS, STEP_TITLES
 from character import Character
@@ -1470,7 +1469,6 @@ def test_ct_rules_cover_every_style_discipline_and_talent():
 
 
 def test_combat_and_tactics_references_are_not_badged_as_phb():
-    import re
     for step in STEPS:
         for label, url, kind in cmh._STEP_REFS.get(step, []):
             if url.startswith("CT/"):

@@ -8,21 +8,20 @@ imports the other.
 Pure string templating, Qt-free — see `charactermancer_html` for the layer rules.
 (Not to be confused with `proficiencies_html.py`, which renders the *Codex of
 Worldly Craft* reference screen rather than anything in the builder.)
+
+Only what's specific to the *builder* lives here. `esc` used to as well, until it
+turned out to be one of six spellings of HTML-escaping in the view layer; it now
+lives in `view_common.py` alongside the rest of the shared templating primitives.
 """
-import html
+import theme
 
 #: The builder's gold. Also read by app.py to tint the sidebar's builder entry.
-ACCENT = "#c9a84c"
+ACCENT = theme.ACCENT
 
 #: Ability name -> the three-letter form the sheet and the step headers use.
 ABBR = {"Strength": "Str", "Dexterity": "Dex", "Constitution": "Con",
         "Intelligence": "Int", "Wisdom": "Wil", "Charisma": "Cha",
         "Perception": "Per"}
-
-
-def esc(s) -> str:
-    """HTML-escape a value for interpolation into a template."""
-    return html.escape(str(s), quote=True)
 
 
 def budget_bar(used: int, total: int, label: str, unit: str = "slots used",

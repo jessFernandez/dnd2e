@@ -9,7 +9,7 @@ Self-contained (own skeleton/CSS/JS): unlike the DM screen it is a list, not a
 masonry card grid, so it does not use screen_common. All spacing is margin-based
 because QtWebEngine (the app's bundled Chromium) silently ignores flexbox `gap`.
 """
-from html import escape as e
+from view_common import esc
 
 CAT_COLORS = {
     "offense":  "#e05555",
@@ -128,16 +128,16 @@ def _summary(title, gist):
     return (
         f'<summary>'
         f'<span class="chev">▸</span>'
-        f'<span class="act-name">{e(title)}</span>'
-        f'<span class="act-gist">{e(gist)}</span>'
+        f'<span class="act-name">{esc(title)}</span>'
+        f'<span class="act-gist">{esc(gist)}</span>'
         f'</summary>'
     )
 
 
 def _action(cat, title, gist, rules):
-    lis = "".join(f"<li>{e(r)}</li>" for r in rules)
+    lis = "".join(f"<li>{esc(r)}</li>" for r in rules)
     return (
-        f'<details class="act" data-cat="{cat}" data-title="{e(title.lower())}" '
+        f'<details class="act" data-cat="{cat}" data-title="{esc(title.lower())}" '
         f'style="--c:{CAT_COLORS[cat]}">'
         f'{_summary(title, gist)}'
         f'<div class="act-body"><ul class="rules">{lis}</ul></div>'
@@ -147,15 +147,15 @@ def _action(cat, title, gist, rules):
 
 def _movement_action():
     body_rows = "".join(
-        f'<tr><td class="mv-speed">{e(s)}</td><td class="mv-dist">{e(d)}</td>'
-        f'<td>{e(n)}</td></tr>'
+        f'<tr><td class="mv-speed">{esc(s)}</td><td class="mv-dist">{esc(d)}</td>'
+        f'<td>{esc(n)}</td></tr>'
         for s, d, n in _MOVE_ROWS
     )
     table = (
         '<div class="tscroll"><table>'
         '<thead><tr><th>Speed</th><th>Distance / Round</th><th>Penalties &amp; Notes</th></tr></thead>'
         f'<tbody>{body_rows}</tbody></table></div>'
-        f'<p class="note">{e(_MOVE_NOTE)}</p>'
+        f'<p class="note">{esc(_MOVE_NOTE)}</p>'
     )
     return (
         f'<details class="act" data-cat="movement" data-title="movement speeds" '
@@ -180,7 +180,7 @@ def _sections():
             continue
         out.append(
             f'<section class="cat-section" data-cat="{cat}" style="--c:{CAT_COLORS[cat]}">'
-            f'<div class="cat-header"><span class="cat-name">{e(CAT_LABELS[cat])}</span>'
+            f'<div class="cat-header"><span class="cat-name">{esc(CAT_LABELS[cat])}</span>'
             f'<span class="cat-count">{len(items)}</span></div>'
             f'<div class="act-list">{"".join(items)}</div>'
             f'</section>'
@@ -191,7 +191,7 @@ def _sections():
 def _cat_buttons():
     return "".join(
         f'<button class="cat-btn" data-cat="{k}" onclick="filterCat(\'{k}\')" '
-        f'style="border-bottom:3px solid {v}">{e(CAT_LABELS[k])}</button>'
+        f'style="border-bottom:3px solid {v}">{esc(CAT_LABELS[k])}</button>'
         for k, v in CAT_COLORS.items()
     )
 

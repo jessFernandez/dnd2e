@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # PyQt5 needs these to import on a headless runner. The app code under test
+      # is Qt-free, but tests/test_ask_lifecycle.py and tests/test_search_worker.py
+      # drive real QThreads, so PyQt5 has to load.
+      - name: Install system libraries for headless Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libdbus-1-3
+
+      # PyQt5 only, not PyQtWebEngine: app.py guards that import and falls back to
+      # QTextBrowser (HAS_WEBENGINE), and the four tests that `import app` never
+      # build a ContentView. Keeps the runner install small.
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt5 -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q

@@ -27,7 +27,7 @@ from PyQt5.QtCore import Qt
 # (The rules themselves are unit-tested in tests/test_char_rules.py.)
 from char_rules import (
     thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc,
-    to_hit_need, hit_chance, is_critical, CRIT_MIN_ROLL, CRIT_MIN_MARGIN,
+    to_hit_need, hit_chance, is_critical, CRIT_MIN_ROLL,
 )
 
 

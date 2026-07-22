@@ -11,6 +11,7 @@ the loose columns are just for listing.
 import json
 
 import db
+import roll20_export
 from character import Character
 from charactermancer import Charactermancer, STEPS
 
@@ -50,9 +51,8 @@ class CharacterLibrary:
     def load(self, cid) -> Charactermancer | None:
         """Return a Charactermancer for the saved character, or None if the id is
         malformed or missing. A loaded build opens on its finished sheet."""
-        try:
-            cid = int(cid)
-        except (ValueError, TypeError):
+        cid = db.row_id(cid)
+        if cid is None:
             return None
         db.ensure_characters_schema(self.user_db)
         raw = db.get_character(self.user_db, cid)
@@ -66,9 +66,8 @@ class CharacterLibrary:
     def delete(self, cid) -> int | None:
         """Delete a saved character; return the deleted id, or None if the id is
         malformed. Callers use the returned id to clear a matching in-progress build."""
-        try:
-            cid = int(cid)
-        except (ValueError, TypeError):
+        cid = db.row_id(cid)
+        if cid is None:
             return None
         db.ensure_characters_schema(self.user_db)
         db.delete_character(self.user_db, cid)
@@ -77,7 +76,6 @@ class CharacterLibrary:
     def roll20_payload(self, cm: Charactermancer, all_spells: list) -> dict:
         """Build the Roll20 import JSON for the build, enriching spells from the
         rulebook spell list. ``all_spells`` is the app's cached ``db.all_spells``."""
-        import roll20_export
         details = {s["name"]: {"level": s.get("level"), "school": s.get("school"),
                                "range": s.get("range"), "casting_time": s.get("casting_time"),
                                "duration": s.get("duration"), "aoe": s.get("aoe"),

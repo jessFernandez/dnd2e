@@ -1,0 +1,38 @@
+# Tooling config. This project has no build step and is not packaged as a
+# distribution — it ships as a PyInstaller bundle (dnd2e.spec) — so there is no
+# [project] table here on purpose. This file exists to give pytest and ruff a
+# home, which the repo previously lacked.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# NOTE: sys.path is set up by the root conftest.py, not by `pythonpath` here.
+# The modules under test live at the repo root while the tests live in tests/,
+# and conftest.py bridges that for both layouts (see CLAUDE.md). Duplicating it
+# as `pythonpath = ["."]` would give two mechanisms for one job.
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# Correctness only, deliberately.
+#
+#   F  — pyflakes: undefined names, unused imports, dead locals. Real defects.
+#   E9 — syntax and IO errors.
+#
+# The stylistic pycodestyle families are *not* enabled. E701/E702 alone flag 63
+# sites, nearly all of them this codebase's deliberate compact style —
+#
+#     def _zoom_in(self):    self._set_zoom(self._zoom + 0.1)
+#     f = painter.font(); f.setPointSizeF(8.0); painter.setFont(f)
+#
+# — and E402 flags the intentional function-local imports that keep Qt and heavy
+# modules out of import time. CLAUDE.md says to match the surrounding style;
+# a linter that argues with it would be churn, not quality. Add rules here only
+# when they catch bugs.
+select = ["F", "E9"]
+
+[tool.ruff.lint.per-file-ignores]
+# The generated data modules are machine-written (see scripts/build_*.py).
+"equipment.py" = ["E501"]
+"nonweapon_book.py" = ["E501"]

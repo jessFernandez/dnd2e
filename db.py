@@ -63,6 +63,17 @@ def list_monster_pages(conn):
     ).fetchall()
 
 
+def all_mm_page_titles(conn) -> dict:
+    """{page_url: title} for *every* Monstrous Manual page, stat block or not.
+
+    Deliberately broader than list_monster_pages: the family/variant picker has to
+    see the '-- General' lore pages too, so it can group a family and link to its
+    write-up even though there's nothing there to import.
+    """
+    return dict(conn.execute(
+        "SELECT page_url, title FROM pages WHERE book_code = 'MM'").fetchall())
+
+
 def search_pages(conn, query: str, limit: int = 300):
     """Full-text search over page content; rows carry a highlighted snippet.
 
@@ -232,101 +243,145 @@ def toggle_bookmark(conn, page_url: str) -> bool:
     return True
 
 
-# ── saved characters (charactermancer) ──────────────────────────────────────
-# Lives in the writable user DB (survives app updates), like bookmarks. The full
-# build is stored as a JSON blob (Character.to_dict); the loose columns are just
-# for listing/searching.
+# ── saved things (characters, monsters) ─────────────────────────────────────
+#
+# Both live in the writable user DB, so they survive app updates the way bookmarks
+# do, and both have the same shape: the whole object as a JSON blob, plus a few
+# loose columns purely so a list of saved things can be shown without deserialising
+# every one of them. That was written out twice — two CREATE TABLEs, two inserts,
+# two updates, two of everything — differing only in the table name and which loose
+# columns it carried (docs/audit-2-plan.md finding 4).
+#
+# One store now, described by a BlobStore. The per-entity functions below are thin
+# named wrappers so call sites still read as `db.insert_character(...)` rather than
+# passing a descriptor around.
+
+
+class BlobStore:
+    """A user-DB table holding whole objects as JSON, with a few columns lifted out
+    for listing. `columns` are those loose columns, in the order `all_rows` returns
+    them after the id."""
+
+    def __init__(self, table: str, columns: tuple):
+        self.table = table
+        self.columns = columns
+
+    def ensure(self, conn):
+        cols = ", ".join(
+            f"{c} TEXT NOT NULL" if c == "name" else f"{c} TEXT" for c in self.columns)
+        conn.execute(
+            f"CREATE TABLE IF NOT EXISTS {self.table} ("
+            f"id INTEGER PRIMARY KEY AUTOINCREMENT, {cols}, data TEXT NOT NULL, "
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+            "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.commit()
+
+    def insert(self, conn, values, data_json) -> int:
+        cols = ", ".join(self.columns)
+        marks = ",".join("?" * (len(self.columns) + 1))
+        cur = conn.execute(
+            f"INSERT INTO {self.table} ({cols}, data) VALUES ({marks})",
+            (*values, data_json))
+        conn.commit()
+        return cur.lastrowid
+
+    def update(self, conn, row_id, values, data_json):
+        sets = ", ".join(f"{c}=?" for c in self.columns)
+        conn.execute(
+            f"UPDATE {self.table} SET {sets}, data=?, updated_at=CURRENT_TIMESTAMP "
+            "WHERE id=?", (*values, data_json, row_id))
+        conn.commit()
+
+    def all_rows(self, conn) -> list:
+        """(id, *columns) for every saved row, most-recently-updated first."""
+        cols = ", ".join(self.columns)
+        return conn.execute(
+            f"SELECT id, {cols} FROM {self.table} ORDER BY updated_at DESC").fetchall()
+
+    def blob(self, conn, row_id):
+        """The stored JSON for one row, or None."""
+        row = conn.execute(
+            f"SELECT data FROM {self.table} WHERE id=?", (row_id,)).fetchone()
+        return row[0] if row else None
+
+    def delete(self, conn, row_id):
+        conn.execute(f"DELETE FROM {self.table} WHERE id=?", (row_id,))
+        conn.commit()
+
+
+def row_id(value):
+    """A saved row's id as an int, or None if it isn't one.
+
+    Ids reach the libraries out of `dnd:///cm/load/<id>` and `dnd:///mon/delete/<id>`
+    link payloads, so a malformed one is an ordinary thing to be handed, not an
+    error. Both libraries did this same try/int/except in both load() and delete().
+    """
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
+#: Saved character builds (Character.to_dict).
+CHARACTERS = BlobStore("characters", ("name", "race", "char_class", "alignment"))
+
+#: Saved DM monster sheets (Monster.to_dict). Named saved_monsters to stay distinct
+#: from the MM source pages in the rulebook DB.
+MONSTERS = BlobStore("saved_monsters", ("name", "source_page"))
+
+
+# ── saved characters ────────────────────────────────────────────────────────
 
 def ensure_characters_schema(conn):
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS characters ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, race TEXT, "
-        "char_class TEXT, alignment TEXT, data TEXT NOT NULL, "
-        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-    )
-    conn.commit()
+    CHARACTERS.ensure(conn)
 
 
 def insert_character(conn, name, race, char_class, alignment, data_json) -> int:
-    cur = conn.execute(
-        "INSERT INTO characters (name, race, char_class, alignment, data) "
-        "VALUES (?,?,?,?,?)", (name, race, char_class, alignment, data_json))
-    conn.commit()
-    return cur.lastrowid
+    return CHARACTERS.insert(conn, (name, race, char_class, alignment), data_json)
 
 
 def update_character(conn, char_id, name, race, char_class, alignment, data_json):
-    conn.execute(
-        "UPDATE characters SET name=?, race=?, char_class=?, alignment=?, data=?, "
-        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (name, race, char_class, alignment, data_json, char_id))
-    conn.commit()
+    CHARACTERS.update(conn, char_id, (name, race, char_class, alignment), data_json)
 
 
 def all_characters(conn) -> list:
     """Saved-character rows (id, name, race, char_class, alignment), most-recent first."""
-    return conn.execute(
-        "SELECT id, name, race, char_class, alignment FROM characters "
-        "ORDER BY updated_at DESC").fetchall()
+    return CHARACTERS.all_rows(conn)
 
 
 def get_character(conn, char_id):
     """The stored JSON blob for one character, or None."""
-    row = conn.execute("SELECT data FROM characters WHERE id=?", (char_id,)).fetchone()
-    return row[0] if row else None
+    return CHARACTERS.blob(conn, char_id)
 
 
 def delete_character(conn, char_id):
-    conn.execute("DELETE FROM characters WHERE id=?", (char_id,))
-    conn.commit()
+    CHARACTERS.delete(conn, char_id)
 
 
 # ── saved monsters (DM monster sheets) ──────────────────────────────────────
-# Also user-DB rows, mirroring saved characters. The full monster is a JSON blob
-# (Monster.to_dict); name/source_page are loose columns for listing. Named
-# saved_monsters to stay distinct from the MM source pages in the rulebook DB.
 
 def ensure_monsters_schema(conn):
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS saved_monsters ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, "
-        "source_page TEXT, data TEXT NOT NULL, "
-        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-    )
-    conn.commit()
+    MONSTERS.ensure(conn)
 
 
 def insert_monster(conn, name, source_page, data_json) -> int:
-    cur = conn.execute(
-        "INSERT INTO saved_monsters (name, source_page, data) VALUES (?,?,?)",
-        (name, source_page, data_json))
-    conn.commit()
-    return cur.lastrowid
+    return MONSTERS.insert(conn, (name, source_page), data_json)
 
 
 def update_monster(conn, monster_id, name, source_page, data_json):
-    conn.execute(
-        "UPDATE saved_monsters SET name=?, source_page=?, data=?, "
-        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (name, source_page, data_json, monster_id))
-    conn.commit()
+    MONSTERS.update(conn, monster_id, (name, source_page), data_json)
 
 
 def all_monsters(conn) -> list:
     """Saved-monster rows (id, name, source_page), most-recent first."""
-    return conn.execute(
-        "SELECT id, name, source_page FROM saved_monsters "
-        "ORDER BY updated_at DESC").fetchall()
+    return MONSTERS.all_rows(conn)
 
 
 def get_monster(conn, monster_id):
     """The stored JSON blob for one saved monster, or None."""
-    row = conn.execute("SELECT data FROM saved_monsters WHERE id=?", (monster_id,)).fetchone()
-    return row[0] if row else None
+    return MONSTERS.blob(conn, monster_id)
 
 
 def delete_monster(conn, monster_id):
-    conn.execute("DELETE FROM saved_monsters WHERE id=?", (monster_id,))
-    conn.commit()
+    MONSTERS.delete(conn, monster_id)
