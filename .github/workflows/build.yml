@@ -34,9 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Kept in step with tests.yml and the development machine: the bundle
+      # should be frozen against the interpreter the code is actually run on.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
 
       # Unlike the test job this needs the real runtime set, PyQtWebEngine

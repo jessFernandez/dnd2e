@@ -27,9 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Matches the interpreter the app is developed on. Pinned to the minor,
+      # not the patch -- 3.14.x fixes should arrive without a workflow edit.
+      # PyQt5 ships cp38-abi3 wheels, so it installs here without waiting for a
+      # per-version build.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
 
       # PyQt5 needs these to import on a headless runner. The app code under test
