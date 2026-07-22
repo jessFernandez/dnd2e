@@ -63,6 +63,17 @@ def list_monster_pages(conn):
     ).fetchall()
 
 
+def all_mm_page_titles(conn) -> dict:
+    """{page_url: title} for *every* Monstrous Manual page, stat block or not.
+
+    Deliberately broader than list_monster_pages: the family/variant picker has to
+    see the '-- General' lore pages too, so it can group a family and link to its
+    write-up even though there's nothing there to import.
+    """
+    return dict(conn.execute(
+        "SELECT page_url, title FROM pages WHERE book_code = 'MM'").fetchall())
+
+
 def search_pages(conn, query: str, limit: int = 300):
     """Full-text search over page content; rows carry a highlighted snippet.
 

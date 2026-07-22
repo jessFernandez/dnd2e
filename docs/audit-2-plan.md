@@ -6,7 +6,7 @@ Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 ·
 | Phase | State |
 |---|---|
 | 1 — one coercing `esc` everywhere | **done** (1195 passed, 1 skipped) |
-| 2 — tooling + invariant tests | not started |
+| 2 — tooling + invariant tests | **done** (1234 passed, 1 skipped; ruff clean) |
 | 3 — `route_destination` | not started |
 | 4 — search/bookmarks extraction | not started |
 | 5 — `theme.py` | not started |
@@ -332,15 +332,36 @@ do the same job declaratively, and gives ruff and coverage somewhere to live.
 ### Fix
 
 `pyproject.toml` (pytest config + ruff), a `requirements-dev.txt`, and one CI workflow
-running the suite. Plus two cheap invariant tests that encode rules `CLAUDE.md` currently
-states in prose:
+running the suite. Plus invariant tests that encode rules `CLAUDE.md` currently states in
+prose, turning conventions into checks.
 
-```python
-def test_qt_confined_to_three_modules(): ...   # the rule that matters
-def test_spec_hiddenimports_in_sync(): ...     # currently true by discipline only
-```
+**Landed as `tests/test_architecture.py`** (39 tests). Ruff is configured for
+**correctness only** — `select = ["F", "E9"]`. The stylistic pycodestyle families are
+deliberately off: `E701`/`E702` alone flag 63 sites, nearly all of them this codebase's
+intentional compact style (`def _zoom_in(self):    self._set_zoom(...)`), and `E402`
+flags the intentional function-local imports. CLAUDE.md says match the surrounding style;
+a linter that argues with it would be churn.
 
-Both are ~10 lines and turn a convention into a check.
+Pyflakes found 15 real defects, all fixed: 10 unused imports, 5 dead locals. One was
+load-bearing — an unused `import db` in `monster_parser` sitting directly above the raw
+SQL from Finding 7's sibling, evidence someone meant to route it through `db.py` and
+didn't. That query is now `db.all_mm_page_titles`, so **`monster_parser` no longer
+contains SQL**.
+
+Each guard was mutation-tested (break the rule, confirm the test fails) rather than
+merely observed passing:
+
+| Test | Guards |
+|---|---|
+| `test_qt_stays_out_of_the_pure_modules` | the rule that matters |
+| `test_sql_stays_in_the_data_access_layer` | allowlist `{db, rules_agent}` — see below |
+| `test_spec_lists_every_app_module` + stale-entry check | the frozen build |
+| `test_no_import_cycles_between_app_modules` | layering direction |
+| `test_every_app_module_is_importable` (parametrized) | no import-order dependencies |
+
+`rules_agent` is **grandfathered** on the SQL rule, not endorsed: its FTS queries are
+shaped by what's being retrieved, and moving them is a refactor of a 52%-covered module.
+The allowlist exists so *new* violations fail.
 
 ---
 

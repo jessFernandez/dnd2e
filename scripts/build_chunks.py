@@ -12,7 +12,6 @@ Idempotent: drops and rebuilds chunks_fts. Run:  python scripts/build_chunks.py
 """
 import re
 import sqlite3
-import sys
 from pathlib import Path
 
 DB = str(Path(__file__).resolve().parent.parent / "dnd2e.db")   # repo root (script lives in scripts/)

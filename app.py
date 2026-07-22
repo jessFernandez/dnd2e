@@ -46,10 +46,10 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QHBoxLayout, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QTabWidget, QTreeWidget, QTreeWidgetItem, QStatusBar, QMessageBox,
-    QLabel, QSizePolicy, QShortcut,
+    QLabel, QShortcut,
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSize, QSettings, QEvent, QTimer, QRect
-from PyQt5.QtGui import QFont, QColor, QPalette, QFontDatabase, QKeySequence, QPen, QPainter, QIcon
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QSettings, QEvent, QTimer, QRect
+from PyQt5.QtGui import QFont, QColor, QPalette, QKeySequence, QPen, QPainter, QIcon
 
 try:
     from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage

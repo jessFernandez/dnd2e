@@ -18,6 +18,7 @@ import re
 from html.parser import HTMLParser
 from itertools import permutations
 
+import db
 from monster import Monster
 
 # ── The stat-block grammar ────────────────────────────────────────────────────
@@ -730,9 +731,7 @@ def importable_index(conn):
     listed standalone. The '-- General'/'Generic Information' lore pages — which have
     no stat block, so aren't importable — are attached so the picker can link to
     them."""
-    import db
-    titles = dict(conn.execute(
-        "SELECT page_url, title FROM pages WHERE book_code='MM'").fetchall())
+    titles = db.all_mm_page_titles(conn)
     generals = {}
     for url, title in titles.items():
         family, subtype = _split_family(title)

@@ -19,9 +19,16 @@ below are shell-agnostic.
 
 ```bash
 python app.py                 # run the app (needs dnd2e.db present)
-python -m pytest -q           # run the test suite (fast, Qt-free) — from the repo root
+python -m pytest -q           # run the test suite — from the repo root
+ruff check .                  # lint (correctness rules only; see pyproject.toml)
 pyinstaller dnd2e.spec        # build the distributable bundle into dist/
 ```
+
+Runtime deps are in `requirements.txt`, the suite's in `requirements-dev.txt`. Almost
+every module is Qt-free, but the *suite* still needs PyQt5 installed — `test_ask_lifecycle`
+and `test_search_worker` drive real `QThread`s, so collection fails without it (headless:
+`QT_QPA_PLATFORM=offscreen`). CI runs lint + tests on push and PR
+(`.github/workflows/tests.yml`).
 
 Run tests **from the repo root**. The modules under test live at the repo root but
 the tests live in `tests/`; `conftest.py` is a `sys.path` shim that bridges that
@@ -170,9 +177,18 @@ only the side effects (render, show/hide pane, open tab).
 
 ### Reference screens
 
-`screen_common.py` holds the shared card-grid chrome (CSS + masonry/filter script);
-`dmscreen_html.py`, `actionsscreen_html.py`, `spellsscreen_html.py`, `splash_html.py`
-each just supply their cards. `toc_html.py` / `toc.py` build tables of contents.
+`screen_common.py` holds the card-grid chrome (CSS + masonry/filter script) — used by
+`dmscreen_html.py` and `actionsscreen_html.py`; the other screens still carry their own
+CSS, and the palette is duplicated across all of them (a known gap, see
+[`docs/audit-2-plan.md`](docs/audit-2-plan.md) finding 5). `toc_html.py` / `toc.py` build
+tables of contents.
+
+**`view_common.py` is the bottom of the view layer** — the templating primitives every
+HTML module needs, currently `esc`. Use it: escaping is the one thing every view does at
+every interpolation, and it only stays correct with a single implementation. It coerces,
+so `None` and numbers are safe to interpolate; raw `html.escape` raises on both. Don't
+add a local escape helper — `tests/test_architecture.py` and `test_view_common.py` fail
+if one comes back.
 Navigation uses `dnd://` links intercepted in `app.py._on_content_navigate`.
 
 The browse sidebar renders the site's **real nested tree** (Book → Chapter →
@@ -219,4 +235,9 @@ book-contents page and per-chapter house-rule callouts.) Background:
 - **Adding a new top-level app module?** Add it to `dnd2e.spec`'s `hiddenimports`
   (the spec lists every app module explicitly, belt-and-suspenders over
   PyInstaller's auto-detection) so the frozen build can't miss it.
+- **The layering rules above are enforced, not just documented.**
+  `tests/test_architecture.py` checks that PyQt stays in the three Qt modules, that SQL
+  stays in `db.py` (`rules_agent` is grandfathered), that `dnd2e.spec` lists every module
+  and no stale ones, that the import graph stays acyclic, and that every module imports
+  standalone. If one fails, the rule it names is the thing to fix — not the test.
 - `*.log`, `build/`, `dist/`, `__pycache__/` are gitignored build/run artifacts.

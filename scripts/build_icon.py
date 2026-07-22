@@ -12,7 +12,6 @@ repo root:
 Pillow is the only dependency (already in requirements via the scraper deps).
 """
 import argparse
-import math
 import os
 
 from PIL import Image, ImageDraw, ImageFont

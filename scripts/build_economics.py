@@ -399,8 +399,7 @@ def build_jobs():
 
 def build_spell_components():
     raw = load_csv("Spell_Components.csv")
-    # First 3 rows are legend; row index 3 is the real header
-    header_row = raw[3]
+    # First 3 rows are legend; row index 3 is the real header, replaced below
     useful_headers = ["Item", "Animal", "Plant", "Mineral", "Rarity Group",
                       "Other", "Acquisition", "Scarcity", "Cost (cp)",
                       "Weight (lb)", "Expires (days)", "Notes"]
