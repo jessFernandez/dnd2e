@@ -32,11 +32,11 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Kept in step with tests.yml and the development machine: the bundle
       # should be frozen against the interpreter the code is actually run on.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -78,7 +78,7 @@ jobs:
 
       - name: Hand the zip to the release job
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DnD2eRules-${{ github.ref_name }}
           path: DnD2eRules-${{ github.ref_name }}.zip
