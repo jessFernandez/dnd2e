@@ -18,6 +18,7 @@ from spellsscreen_html import generate as generate_spells_html
 from splash_html import generate as generate_splash_html
 import browse_lists
 import db
+import page_images
 import slugs
 import theme
 import toc
@@ -1488,40 +1489,24 @@ class MainWindow(QMainWindow):
         return self._spell_index
 
     def _mon_image_url(self, m) -> str:
-        """A monster's MM illustration for the sheet. Once cached locally it's served
-        as a data URI (loads offline and instantly, no webview origin issues); the
-        first time it falls back to the remote URL (BASE_URL + the page's folder +
-        filename, same as the book pages) and caches a copy in the background. '' when
-        the page had no image."""
+        """A monster's MM illustration for the sheet, as an inline data URI. '' when
+        the page had no image.
+
+        This used to fetch from regalgoblins.com and cache a copy under %APPDATA%,
+        which meant the first view of every monster needed the network. The art now
+        ships in the rulebook DB, so that second cache — and the background
+        downloader that filled it — are gone; scripts/build_images.py is what fills
+        the one that remains. A DB predating the images table falls back to the
+        remote URL rather than showing nothing.
+        """
         if not (m.image and "/" in m.source_page):
             return ""
+        key = page_images.resolve(m.source_page, m.image)
+        blob = db.get_image(self.db, key) if key else None
+        if blob:
+            return page_images.data_uri(key, blob)
         folder = m.source_page.rsplit("/", 1)[0]
-        remote = f"{BASE_URL}{folder}/{m.image}"
-        cache_path = _user_data_dir() / "images" / folder / m.image
-        if cache_path.exists():
-            try:
-                import base64, mimetypes
-                mime = mimetypes.guess_type(m.image)[0] or "image/gif"
-                return f"data:{mime};base64," + base64.b64encode(cache_path.read_bytes()).decode()
-            except Exception:
-                pass
-        self._cache_image(remote, cache_path)
-        return remote
-
-    def _cache_image(self, url: str, path):
-        """Download a monster illustration into the local cache in a background
-        thread, so it's available offline next time. Fire-and-forget; ignore errors."""
-        import threading, urllib.request
-
-        def fetch():
-            try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                with urllib.request.urlopen(url, timeout=10) as resp:
-                    data = resp.read()
-                path.write_bytes(data)
-            except Exception:
-                pass
-        threading.Thread(target=fetch, daemon=True).start()
+        return f"{BASE_URL}{folder}/{m.image}"
 
     def _parse_mm_page(self, page_url: str):
         """(monsters, group_name) for an MM page, caching the last page. A pick funnels
@@ -1831,6 +1816,11 @@ class MainWindow(QMainWindow):
             return False
 
         html, title, book_name, book_code = row
+        # Inline the page's art before it reaches the view. The web view resolves
+        # relative URLs against BASE_URL, so an untouched <img> is a live request
+        # to regalgoblins.com; page_images swaps in the copy from the DB. Pages
+        # without art (4,290 of 4,609) come back untouched.
+        html = page_images.rewrite(html, page_url, lambda k: db.get_image(self.db, k))
         rules = self._get_chapter_house_rules(page_url, book_code)
         if rules:
             callout = self._build_house_rules_callout(rules, book_code)

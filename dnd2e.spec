@@ -58,6 +58,7 @@ a = Analysis(
         'nonweapon_book',
         'equipment',
         'db',
+        'page_images',
         'toc',
         'toc_html',
         'view_common',

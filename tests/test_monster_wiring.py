@@ -210,13 +210,29 @@ def test_render_monster_sheet_is_blank_when_none():
     assert "Stat Block" in calls["html"]            # a blank editable sheet
 
 
-def test_mon_image_url_builds_from_source_site():
-    win = SimpleNamespace(_cache_image=lambda url, path: None)   # don't hit the network
+def test_mon_image_url_serves_the_bundled_copy_as_a_data_uri(tmp_path):
+    """The art ships in the rulebook DB now, so a sheet never needs the network."""
+    conn = db.connect(tmp_path / "rules.db")
+    db.ensure_images_schema(conn)
+    db.put_image(conn, "MM/ANKHEG.gif", b"GIF89a fake bytes")
+    conn.commit()
     m = Monster(source_page="MM/DD03797.htm", image="ANKHEG.gif")
-    url = app.MainWindow._mon_image_url(win, m)
-    # remote URL when uncached, or a data: URI when a previous run already cached it
-    assert url == app.BASE_URL + "MM/ANKHEG.gif" or url.startswith("data:image")
-    assert app.MainWindow._mon_image_url(win, Monster()) == ""   # no image -> no url
+    url = app.MainWindow._mon_image_url(SimpleNamespace(db=conn), m)
+    assert url.startswith("data:image/gif;base64,")
+
+
+def test_mon_image_url_falls_back_to_remote_when_the_db_predates_images(tmp_path):
+    """An older dnd2e.db has no images table; the sheet should still show art."""
+    conn = db.connect(tmp_path / "old.db")
+    conn.execute("CREATE TABLE unrelated (x INTEGER)")
+    m = Monster(source_page="MM/DD03797.htm", image="ANKHEG.gif")
+    url = app.MainWindow._mon_image_url(SimpleNamespace(db=conn), m)
+    assert url == app.BASE_URL + "MM/ANKHEG.gif"
+
+
+def test_mon_image_url_is_empty_when_the_page_had_no_image(tmp_path):
+    win = SimpleNamespace(db=db.connect(tmp_path / "t.db"))
+    assert app.MainWindow._mon_image_url(win, Monster()) == ""
 
 
 # ── end-to-end: real DB parse -> sheet -> save -> load (Qt view faked) ─────────

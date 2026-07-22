@@ -188,6 +188,60 @@ def all_spells(conn) -> list:
         return []
 
 
+# ── images (rulebook DB) ────────────────────────────────────────────────────
+#
+# The scrape captured page text but not page art, so every <img> was a live
+# fetch from regalgoblins.com. The bytes now live here; page_images.py decides
+# what an <img src> resolves to and rewrites the tag. Written once by
+# scripts/build_images.py, read-only at runtime like the rest of this DB.
+
+def ensure_images_schema(conn):
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS images ("
+        "  key   TEXT PRIMARY KEY,"   # rulebook-root-relative, e.g. "MM/ABOLETH.gif"
+        "  bytes BLOB NOT NULL,"
+        "  size  INTEGER NOT NULL"    # denormalised so listings need not read blobs
+        ")"
+    )
+    conn.commit()
+
+
+def get_image(conn, key: str):
+    """Stored bytes for an image key, or None. Returns None rather than raising
+    when the table is absent, so a DB built before images shipped still opens."""
+    try:
+        row = conn.execute("SELECT bytes FROM images WHERE key = ?", (key,)).fetchone()
+    except sqlite3.Error:
+        return None
+    return row["bytes"] if row else None
+
+
+def put_image(conn, key: str, blob: bytes):
+    """Insert or replace one image. Used by scripts/build_images.py only."""
+    conn.execute(
+        "INSERT OR REPLACE INTO images (key, bytes, size) VALUES (?, ?, ?)",
+        (key, blob, len(blob)),
+    )
+
+
+def image_keys(conn) -> set:
+    """Every stored image key; empty set if the table is absent."""
+    try:
+        return {r["key"] for r in conn.execute("SELECT key FROM images")}
+    except sqlite3.Error:
+        return set()
+
+
+def image_stats(conn):
+    """(count, total_bytes) for the stored images; (0, 0) if the table is absent."""
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS b FROM images").fetchone()
+    except sqlite3.Error:
+        return (0, 0)
+    return (row["n"], row["b"])
+
+
 # ── bookmarks (user DB) ─────────────────────────────────────────────────────
 
 def ensure_bookmarks_schema(conn):
