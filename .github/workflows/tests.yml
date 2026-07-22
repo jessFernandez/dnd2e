@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Matches the interpreter the app is developed on. Pinned to the minor,
       # not the patch -- 3.14.x fixes should arrive without a workflow edit.
