@@ -154,12 +154,17 @@ bookmarks.
 ### Navigation
 
 `navigation.py` is the pure, Qt-free navigation layer, extracted from `MainWindow`
-(recorded in [`docs/nav-controller-plan.md`](docs/nav-controller-plan.md), phases
-1–3 complete). A "destination" is one canonical string that doubles as a history
+(recorded in [`docs/nav-controller-plan.md`](docs/nav-controller-plan.md), complete).
+A "destination" is one canonical string that doubles as a history
 entry (`"PHB/DD01671.htm"`, `"toc:PHB"`, `"proficiencies#anchor"`, `"dmscreen"`).
 The module owns the grammar and the policy:
 
 - `History` — the per-tab back/forward state machine.
+- `route_destination(dest)` — classifies a destination into what should be rendered,
+  returning a tagged `Dest` (`Page`, `Toc`, `Screen`, `Spells`, `MonsterFamily`, …);
+  `app.py._render_destination` is then just a `match` of side effects. **New
+  destinations go here and nowhere else** — `takes_full_width` derives from this
+  same classification, so the two can't disagree the way they used to.
 - `link_to_destination` / `takes_full_width` / `FULLWIDTH_SCREENS` — the grammar.
 - `pane_action(dest, trigger)` — the single truth table for when the browse pane
   opens/closes/stays (a book page reached by a *link* opens it; a full-width

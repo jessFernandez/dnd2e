@@ -100,6 +100,34 @@ def test_spec_does_not_list_modules_that_no_longer_exist():
     assert stale == [], f"dnd2e.spec lists modules that don't exist: {stale}"
 
 
+# ── the destination grammar has one home ─────────────────────────────────────
+
+def test_simple_screens_matches_the_registry_in_app():
+    """navigation.SIMPLE_SCREENS names the destinations route_destination tags as
+    Screen(...), and app.py's `self._screens` maps those names to their generator.
+    If they drift, _render_screen raises KeyError on a destination that routed fine.
+
+    Checked statically (the registry is built in MainWindow.__init__, which needs
+    Qt) by reading the dict literal's keys out of the source.
+    """
+    import navigation
+
+    tree = ast.parse((ROOT / "app.py").read_text(encoding="utf-8"))
+    keys = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            target = node.targets[0]
+            if isinstance(target, ast.Attribute) and target.attr == "_screens":
+                keys = {k.value for k in node.value.keys
+                        if isinstance(k, ast.Constant)}
+                break
+    assert keys is not None, "could not find `self._screens = {...}` in app.py"
+    assert keys == set(navigation.SIMPLE_SCREENS), (
+        f"app.py _screens {sorted(keys)} != navigation.SIMPLE_SCREENS "
+        f"{sorted(navigation.SIMPLE_SCREENS)}"
+    )
+
+
 # ── layering direction ───────────────────────────────────────────────────────
 
 def test_no_import_cycles_between_app_modules():

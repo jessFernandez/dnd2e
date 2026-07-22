@@ -24,6 +24,8 @@ from navigation import (
     route_link, Ask, AskSetModel, AskRefresh, AskStop, CmAction, MonAction, NewTab, Navigate,
     route_mon, MonSet, MonTier, MonInit, MonPick, MonPickVariant, MonLoad, MonDelete,
     MonFamily, MonPicker, MonNew, MonSave, MonExport,
+    route_destination, Page, Toc, Screen, Spells, Proficiencies, Charactermancer as CmDest,
+    AskScreen, MonsterPicker, MonsterSheet, MonsterFamily, MonsterVariant,
 )
 import askscreen_html
 import charactermancer_html
@@ -1310,30 +1312,24 @@ class MainWindow(QMainWindow):
         self._update_nav_buttons()
 
     def _render_destination(self, dest: str) -> bool:
-        """Display a destination's content. Returns False if it could not be shown."""
-        if dest.startswith("toc:"):
-            return self._render_toc(dest[4:])
-        if dest == "ask":
-            return self._render_ask()
-        if dest == "spells" or dest.startswith("spells#"):
-            frag = dest.split("#", 1)[1] if "#" in dest else ""
-            return self._render_spells(frag)
-        if dest == "charactermancer":
-            return self._render_charactermancer()
-        if dest == "monster":
-            return self._render_monster_picker()
-        if dest == "monster-sheet":
-            return self._render_monster_sheet()
-        if dest.startswith("monster-family/"):
-            return self._render_family_picker(dest[len("monster-family/"):])
-        if dest.startswith("monster-variant/"):
-            return self._render_variant_picker(dest[len("monster-variant/"):])
-        if dest == "proficiencies" or dest.startswith("proficiencies#"):
-            frag = dest.split("#", 1)[1] if "#" in dest else ""
-            return self._render_proficiencies(frag)
-        if dest in self._screens:
-            return self._render_screen(dest)
-        return self._render_page(dest)
+        """Display a destination's content. Returns False if it could not be shown.
+
+        The grammar lives in navigation.route_destination; this is only the side
+        effect for each tag.
+        """
+        match route_destination(dest):
+            case Toc(book_code=code):        return self._render_toc(code)
+            case Screen(name=name):          return self._render_screen(name)
+            case AskScreen():                return self._render_ask()
+            case CmDest():                   return self._render_charactermancer()
+            case Spells(fragment=frag):      return self._render_spells(frag)
+            case Proficiencies(fragment=f):  return self._render_proficiencies(f)
+            case MonsterPicker():            return self._render_monster_picker()
+            case MonsterSheet():             return self._render_monster_sheet()
+            case MonsterFamily(family=fam):  return self._render_family_picker(fam)
+            case MonsterVariant(page_url=u): return self._render_variant_picker(u)
+            case Page(page_url=url):         return self._render_page(url)
+        return False
 
     def _render_screen(self, key: str) -> bool:
         generator, title, status = self._screens[key]

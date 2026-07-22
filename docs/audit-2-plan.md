@@ -7,7 +7,7 @@ Status: **in progress** on `chore/architecture-audit-2` · Written 2026-07-21 ·
 |---|---|
 | 1 — one coercing `esc` everywhere | **done** (1195 passed, 1 skipped) |
 | 2 — tooling + invariant tests | **done** (1234 passed, 1 skipped; ruff clean) |
-| 3 — `route_destination` | not started |
+| 3 — `route_destination` | **done** (1257 passed, 1 skipped) |
 | 4 — search/bookmarks extraction | not started |
 | 5 — `theme.py` | not started |
 | 6 — JSON-blob store + `from_dict` coercion | not started |
@@ -231,6 +231,34 @@ that doc still lists as remaining while its header says "in progress" and `CLAUD
 `_render_destination` becomes a `match` of side effects and `takes_full_width` derives from
 the same enumeration instead of a `startswith`. Unit-tested in `test_navigation.py` with no
 Qt. Then update both docs.
+
+**Landed.** `route_destination` returns one of `Page`, `Toc`, `Screen`, `Spells`,
+`Proficiencies`, `Charactermancer`, `AskScreen`, `MonsterPicker`, `MonsterSheet`,
+`MonsterFamily`, `MonsterVariant`; `_render_destination` is an 11-line `match`.
+`takes_full_width` is now one line — `not isinstance(route_destination(dest), (Page, Toc))`
+— which reads as the actual rule: *a book page and a book TOC keep the pane, everything
+else is a screen*.
+
+Three things worth recording:
+
+- The tagged union beat the `classify(dest) -> Kind` enum the original nav plan sketched,
+  because a tag carries its arguments. `Toc("PHB")` and `MonsterFamily("Dragon")` mean the
+  Qt layer never re-parses the string it was just handed.
+- **A name collision, caught by the interpreter, not by review:** `navigation.Ask` already
+  existed as the *link* route "the reader submitted this question". The destination tag is
+  `AskScreen` — an action and a place aren't the same thing, and the second definition
+  would have silently shadowed the first.
+- **The fix introduced a new two-place grammar and had to be closed too.**
+  `SIMPLE_SCREENS` (navigation) and `self._screens` (app.py) must agree or `_render_screen`
+  raises `KeyError` on a destination that routed fine. `test_architecture.py` reads the
+  dict literal's keys out of app.py's source and compares. Trading one silent drift for
+  another would have missed the point.
+
+`FULLWIDTH_SCREENS` survives as the *independent* list the tests check the classification
+against — deliberately not derived, so dropping a route fails a test. Verified by mutation:
+removing the `monster-sheet` route fails both `test_route_destination_classifies` and
+`test_takes_full_width_covers_monster_subviews`, where previously the pane would just have
+misbehaved.
 
 ---
 

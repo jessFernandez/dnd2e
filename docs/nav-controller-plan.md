@@ -1,7 +1,22 @@
 # Navigation controller extraction — plan
 
-**Status:** in progress. Phases 1 (grammar), 2 (pane policy) and 3 (link routing)
-done; phase 4 (optional dispatch) remaining.
+**Status:** complete. Phases 1 (grammar), 2 (pane policy), 3 (link routing) and 4
+(dispatch) all done.
+
+Phase 4 landed later than the rest, as part of the round-2 audit
+([`audit-2-plan.md`](audit-2-plan.md) finding 3), and it turned out not to be
+optional. While it was outstanding, the grammar had two homes and the *Qt* one was
+authoritative: `navigation.takes_full_width` knew the monster destinations only as
+`startswith("monster-")` while `app._render_destination` enumerated `monster-sheet`,
+`monster-family/` and `monster-variant/` exactly. Adding a destination meant editing
+both files, and only one of them was tested.
+
+It shipped as `route_destination(dest) -> Dest` (a tagged union, matching the
+`Route`/`MonAct` shape phase 3 established) rather than the `classify(dest) -> Kind`
+enum sketched below — a tag can carry its arguments (`Toc("PHB")`,
+`MonsterFamily("Dragon")`, `Spells("spell-fireball")`), so `_render_destination`
+became a `match` with no re-parsing. `takes_full_width` now derives from the same
+classification instead of keeping its own prefix list.
 
 ## Goal
 
@@ -75,8 +90,17 @@ def pane_action(dest: str, trigger: Trigger) -> Pane: ...
    is now a `match route_link(...)` that only performs side effects. The routing
    (incl. `unquote`/`.strip()`) is tested directly in `test_navigation.py`;
    dispatch wiring is covered in `test_nav_reveal.py`. *Medium; done tests-first.*
-4. **(Optional) Dispatch.** Have `_render_destination` consult `classify()` instead
-   of re-parsing prefixes. *Polish; skip if it doesn't pull its weight.*
+4. **Dispatch. ✅ done.** Added `Dest` (`Page`, `Toc`, `Screen`, `Spells`,
+   `Proficiencies`, `Charactermancer`, `AskScreen`, `MonsterPicker`, `MonsterSheet`,
+   `MonsterFamily`, `MonsterVariant`) and `route_destination(dest)`;
+   `_render_destination` is now a `match` that only performs side effects, and
+   `takes_full_width` derives from the same classification rather than a parallel
+   prefix list. `SIMPLE_SCREENS` names the three registry screens and is held in step
+   with app.py's `_screens` by `tests/test_architecture.py`.
+
+   Filed as *optional polish* — that was wrong. It was the difference between the
+   grammar having one home and two, and the untested copy was the authoritative one.
+   Skipping it is what let `takes_full_width` drift.
 
 ## Test plan
 

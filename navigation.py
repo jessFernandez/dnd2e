@@ -4,25 +4,39 @@ Everything here is Qt-free and unit-tested without a running app (see
 tests/test_navigation.py); app.py's MainWindow supplies the Qt shell and the
 side effects (rendering, showing/hiding the browse pane, opening tabs).
 
-Two pieces:
+Three pieces:
 
 * ``History`` — a tiny back/forward state machine: a list of destination strings
   plus a cursor. The caller does the rendering; History only tracks position.
-* the *destination grammar* — small helpers that classify and translate the
-  canonical strings the rest of the app passes around.
+* the *destination grammar* — ``route_destination`` classifies a destination into
+  what should be rendered, and ``takes_full_width`` / ``pane_action`` decide what
+  the browse pane does about it. Both read the same classification, so the grammar
+  has one home.
+* *link routing* — ``route_link`` for content-link clicks and ``route_mon`` for the
+  monster sheet's own action grammar, each returning a tagged result app.py matches
+  on.
 
 A "destination" is the canonical string the app renders: a page_url
 ("PHB/DD01671.htm"), a book table of contents ("toc:PHB"), the Proficiencies
 codex ("proficiencies" / "proficiencies#anchor"), or a full-width screen name
-("splash", "dmscreen", "actions", "spells", "charactermancer", "ask").
+("splash", "dmscreen", "actions", "spells", "charactermancer", "ask", "monster",
+"monster-sheet", "monster-family/…", "monster-variant/…").
+
+New destinations go in ``route_destination`` — *only* there. app.py matches on the
+tag it returns; nothing else parses destination strings.
 """
 from dataclasses import dataclass
 from enum import Enum
 from urllib.parse import unquote
 
 # Built-in reference/tool screens that take the full content width; opening one
-# hides the book browser, while a book page or TOC keeps it. Single source of
-# truth for that split — see takes_full_width().
+# hides the book browser, while a book page or TOC keeps it.
+#
+# takes_full_width() no longer reads this — it derives from route_destination(), so
+# the grammar has one home. This stays as the *independent* list the tests check
+# that classification against: if route_destination stops recognising one of these,
+# test_navigation fails instead of the pane quietly misbehaving. Keep it in sync by
+# hand; that's the point of it.
 FULLWIDTH_SCREENS = frozenset({"splash", "dmscreen", "actions",
                                "spells", "charactermancer", "ask", "monster"})
 
@@ -47,12 +61,12 @@ def takes_full_width(dest: str) -> bool:
     """Whether a destination is a full-width reference/tool screen (so the browse
     pane makes way for it) rather than a book page or TOC (which keep the pane).
 
-    Proficiencies and the spell compendium are reference screens reached with a
-    `#fragment` (a codex anchor / a spell anchor), so they match by prefix too.
+    Derived from route_destination rather than a second prefix chain: a book page
+    and a book TOC keep the pane, and *everything else is a screen*. When this was
+    its own list of prefixes it drifted from the dispatch in app.py, which was the
+    only place that knew the real set (docs/audit-2-plan.md finding 3).
     """
-    return (dest in FULLWIDTH_SCREENS or dest.startswith("proficiencies")
-            or dest.startswith("spells#")       # spells screen scrolled to a spell
-            or dest.startswith("monster-"))     # monster-sheet, monster-variant/…
+    return not isinstance(route_destination(dest), (Page, Toc))
 
 
 class Trigger(Enum):
@@ -84,6 +98,129 @@ def pane_action(dest: str, trigger: Trigger) -> Pane:
     if trigger is Trigger.LINK:
         return Pane.OPEN
     return Pane.LEAVE
+
+
+# ── destination dispatch ──────────────────────────────────────────────────────
+#
+# What a destination string *is*. This used to be an if/elif prefix ladder inside
+# MainWindow._render_destination, which meant the grammar had two homes and the Qt
+# one was authoritative: navigation.py knew the monster destinations only as
+# `startswith("monster-")` while app.py enumerated all three exactly. Adding a
+# destination meant editing both files. Now app.py matches on these tags and
+# takes_full_width() derives from the same enumeration.
+#
+# Same shape as Route/MonAct below: a tagged result, no side effects.
+
+#: Screens that are just a generator + title + status line in app.py's `_screens`
+#: registry. The other full-width destinations need arguments or live state, so
+#: they get their own tags. Kept in step with that registry by
+#: tests/test_architecture.py.
+SIMPLE_SCREENS = frozenset({"splash", "dmscreen", "actions"})
+
+
+class Dest:
+    """Base for the tagged results of route_destination()."""
+
+
+@dataclass(frozen=True)
+class Page(Dest):
+    """A rulebook page, addressed by page_url ("PHB/DD01671.htm"). Keeps the pane."""
+    page_url: str
+
+
+@dataclass(frozen=True)
+class Toc(Dest):
+    """A book's table of contents ("toc:PHB"). Keeps the pane."""
+    book_code: str
+
+
+@dataclass(frozen=True)
+class Screen(Dest):
+    """One of the simple registry screens — splash, dmscreen, actions."""
+    name: str
+
+
+@dataclass(frozen=True)
+class Spells(Dest):
+    """The spell compendium, optionally scrolled to a spell anchor."""
+    fragment: str = ""
+
+
+@dataclass(frozen=True)
+class Proficiencies(Dest):
+    """The Codex of Worldly Craft, optionally scrolled to a skill anchor."""
+    fragment: str = ""
+
+
+@dataclass(frozen=True)
+class Charactermancer(Dest):
+    """The character builder, on whatever step the build is currently at."""
+
+
+@dataclass(frozen=True)
+class AskScreen(Dest):
+    """The Ask the Rules (Jarvis) page.
+
+    Named AskScreen, not Ask: `Ask` is already the *link* route meaning "the reader
+    submitted this question". A destination and an action aren't the same thing.
+    """
+
+
+@dataclass(frozen=True)
+class MonsterPicker(Dest):
+    """The monster import picker (families + standalone + saved)."""
+
+
+@dataclass(frozen=True)
+class MonsterSheet(Dest):
+    """The monster sheet for the monster currently loaded in the window."""
+
+
+@dataclass(frozen=True)
+class MonsterFamily(Dest):
+    """The variant picker for one family ("monster-family/Dragon")."""
+    family: str
+
+
+@dataclass(frozen=True)
+class MonsterVariant(Dest):
+    """The per-column variant picker for one MM page ("monster-variant/<page>")."""
+    page_url: str
+
+
+def _split_fragment(dest: str, prefix: str) -> str:
+    """The `#fragment` of a "<prefix>#anchor" destination, or "" for a bare prefix."""
+    return dest[len(prefix) + 1:] if dest.startswith(prefix + "#") else ""
+
+
+def route_destination(dest: str) -> Dest:
+    """Classify a destination string into what should be rendered.
+
+    Pure counterpart to MainWindow._render_destination. Anything unrecognised is a
+    Page — page_urls are the open-ended part of the grammar, and a bad one fails at
+    render time rather than here.
+    """
+    if dest.startswith("toc:"):
+        return Toc(dest[len("toc:"):])
+    if dest in SIMPLE_SCREENS:
+        return Screen(dest)
+    if dest == "ask":
+        return AskScreen()
+    if dest == "charactermancer":
+        return Charactermancer()
+    if dest == "spells" or dest.startswith("spells#"):
+        return Spells(_split_fragment(dest, "spells"))
+    if dest == "proficiencies" or dest.startswith("proficiencies#"):
+        return Proficiencies(_split_fragment(dest, "proficiencies"))
+    if dest == "monster":
+        return MonsterPicker()
+    if dest == "monster-sheet":
+        return MonsterSheet()
+    if dest.startswith("monster-family/"):
+        return MonsterFamily(dest[len("monster-family/"):])
+    if dest.startswith("monster-variant/"):
+        return MonsterVariant(dest[len("monster-variant/"):])
+    return Page(dest)
 
 
 # ── link routing ──────────────────────────────────────────────────────────────
