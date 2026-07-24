@@ -68,7 +68,7 @@ jobs:
           "db  : {0:N1} MB at {1}" -f ($db.Length / 1MB), $db.FullName
           "total: {0:N1} MB" -f ((Get-ChildItem $root -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB)
 
-      # Everything below is tags only. The bundle measures ~330 MB, and parking
+      # Everything below is tags only. The bundle measures ~340 MB, and parking
       # that against the repo's storage quota on every master push buys nothing
       # -- nobody downloads a mid-week build. A tagged one is a build someone
       # installs, so it gets zipped and handed to the release job.
