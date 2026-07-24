@@ -924,6 +924,33 @@ def saving_throws(class_name: str, level: int) -> dict:
     raise ValueError(f"no save band for level {level}")
 
 
+def saving_throw_bands(group: str) -> list:
+    """[(label, {category: target}), …] — Table 60 as the printed *bands* rather than
+    per-level lookups, so a reference screen can render the table the way the book
+    lays it out without transcribing it a second time.
+
+    The band structure is rules data (the levels at which saves improve), which is
+    why it lives here beside the table rather than being reverse-engineered by the
+    view probing saving_throws() level by level. Warriors start at 0 — a level-0
+    warrior is the man-at-arms row, and monster_saving_throws leans on the same
+    band; every other group starts at 1. The open final band is labelled "N+".
+    """
+    rows = _SAVES[group]
+    start = 0 if group == "Warrior" else 1
+    out = []
+    for i, (max_lvl, values) in enumerate(rows):
+        last = i == len(rows) - 1
+        if last:
+            label = f"{start}+"
+        elif start == max_lvl:
+            label = str(start)
+        else:
+            label = f"{start}-{max_lvl}"
+        out.append((label, dict(zip(SAVE_CATEGORIES, values))))
+        start = max_lvl + 1
+    return out
+
+
 def monster_saving_throws(hit_dice: int) -> dict:
     """{category: target number} for a monster of ``hit_dice`` HD — it saves as a
     Warrior of level = its Hit Dice (2e DMG). The single source of truth the Roll20
