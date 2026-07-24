@@ -75,6 +75,50 @@ def build_chapters(entries, markers) -> list:
     return chapters_from_markers(entries, markers) if markers else chapters_by_letter(entries)
 
 
+def tree_page_urls(nodes) -> set:
+    """Every page_url the nested tree reaches, at any depth. Folders carry None and
+    contribute nothing."""
+    found = set()
+
+    def walk(node):
+        if node["page_url"]:
+            found.add(node["page_url"])
+        for child in node["children"]:
+            walk(child)
+
+    for node in nodes or ():
+        walk(node)
+    return found
+
+
+def entries_missing_from_tree(nodes, entries) -> list:
+    """The (page_url, subtopic) entries the nested tree doesn't reach, in `entries`
+    order, deduplicated.
+
+    The site's TOC XML is not a complete index of its own pages: 25 real content
+    pages across six books have a `toc_entries` row but no `toc_tree` node — the
+    Skills & Powers ability-score write-ups (Strength, Reason, Knowledge, Intuition,
+    Willpower), *Arms and Equipment*'s Polearms, a Tome of Magic chapter opener,
+    *Spells and Magic*'s Spheres of Access, and five psionicist proficiencies.
+
+    Because a book with any tree rows renders from the tree alone, those pages had
+    no route in the browse sidebar at all — reachable only by search or a
+    cross-reference, and once there, stranded: the reading order Prev/Next walks is
+    built from the same tree, so both buttons went dead.
+
+    Pure so the gap can be measured in a test (see tests/test_toc.py) rather than
+    noticed by a reader who goes looking for a page that is in the book.
+    """
+    covered = tree_page_urls(nodes)
+    seen, out = set(), []
+    for page_url, subtopic in entries:
+        if page_url in covered or page_url in seen:
+            continue
+        seen.add(page_url)
+        out.append((page_url, subtopic))
+    return out
+
+
 def build_tree(rows) -> list:
     """Reconstruct the site's real nested TOC tree from flat rows.
 

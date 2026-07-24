@@ -260,21 +260,51 @@ def _range_to_dice(s: str) -> str:
     return monster.damage_to_dice(str(s or "").strip())
 
 
+#: The MM's "this attack, N times" notation — "1-6 (x 4)" on the Aboleth,
+#: "3-18(x2)/2-12(x6)/7-28" on the Kraken. Spacing and case both vary.
+_MULTIPLIER = re.compile(r"\(\s*x\s*(\d+)\s*\)", re.IGNORECASE)
+
+
+def _attack_count(text: str) -> int:
+    """How many times one '/'-separated attack is made: the "(x N)" multiplier, else 1."""
+    mm = _MULTIPLIER.search(text or "")
+    return int(mm.group(1)) if mm else 1
+
+
 def _monster_weapons(m) -> list:
     """The monster's attack/damage line as weapon rows — one per '/'-separated attack
     (claw/claw/bite), rolling at the house-rule attack bonus and the size-derived
-    initiative speed factor."""
+    initiative speed factor.
+
+    Parentheses in that line mean one of two things, and conflating them was a bug:
+    "1-6 (crush)" names the attack, while "1-6 (x 4)" says it happens four times.
+    Treating the multiplier as a label exported the Aboleth with a single weapon
+    called "x 4" and the Kraken with attacks called "x2" and "x6" — and threw the
+    counts away, which are the part a DM needs. A multiplier now becomes N rows.
+    """
     tohit = _leading_int(m.attack_bonus())
     speed = m.initiative_modifier() or 0
     dmg = (m.damage_attack or "").strip()
     parts = ([] if dmg.lower() in ("", "nil", "none", "see below")
              else [p.strip() for p in dmg.split("/") if p.strip()])
+
+    # Expand first, name second. A creature with "3-18(x2)/2-12(x6)/7-28" makes nine
+    # attacks, and numbering them 1-9 is what a DM counts — numbering within each
+    # part would produce "Attack 1 1", which is neither the part nor the attack.
+    expanded = []
+    for part in parts:
+        # A multiplier is not a name; anything else in parentheses still is.
+        label = _paren_label(_MULTIPLIER.sub("", part)) or None
+        damage = _norm_damage(_range_to_dice(_strip_paren(part)))
+        expanded.extend([(label, damage)] * _attack_count(part))
+
     weapons = []
-    for i, part in enumerate(parts, 1):
-        label = _paren_label(part) or (f"Attack {i}" if len(parts) > 1 else "Attack")
+    for i, (label, damage) in enumerate(expanded, 1):
+        # A named attack keeps its name even when it repeats — a creature with two
+        # claws should show two rows called "claw", not "claw 1" and "claw 2".
+        name = label or (f"Attack {i}" if len(expanded) > 1 else "Attack")
         weapons.append({
-            "name": label, "tohit": tohit,
-            "damage": _norm_damage(_range_to_dice(_strip_paren(part))),
+            "name": name, "tohit": tohit, "damage": damage,
             "dambonus": 0, "speed": speed, "type": "", "range": "",
         })
     if m.breath_weapon:                                 # the selected age tier's breath

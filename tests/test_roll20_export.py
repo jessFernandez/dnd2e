@@ -199,3 +199,74 @@ def test_monster_export_links_spell_like_abilities():
 def test_monster_export_no_attacks_or_spells_is_empty():
     j = rx.monster_to_roll20(Monster(name="Blob", hit_dice="2", damage_attack="Nil"))
     assert j["weapons"] == [] and j["spells"] == []
+
+
+# ── the MM's "(x N)" is a multiplier, not a name ─────────────────────────────
+#
+# Parentheses on a damage line mean one of two things: "1-6 (crush)" names the
+# attack, "1-6 (x 4)" says it happens four times. Conflating them exported the
+# Aboleth as a single weapon called "x 4" and the Kraken with attacks named "x2"
+# and "x6" -- and discarded the counts, which are the part a DM needs.
+
+def test_multiplier_becomes_one_row_per_attack():
+    m = Monster(name="Aboleth", hit_dice="8", thac0="13", size="L",
+                damage_attack="1-6 (x 4)")
+    weapons = rx.monster_to_roll20(m)["weapons"]
+    assert len(weapons) == 4
+    assert [w["name"] for w in weapons] == ["Attack 1", "Attack 2", "Attack 3", "Attack 4"]
+    assert all(w["damage"] == "1d6" for w in weapons)
+    assert "x 4" not in {w["name"] for w in weapons}
+
+
+def test_multipliers_and_plain_attacks_number_continuously():
+    """The Kraken: two tentacles, six arms, one bite -- nine attacks, numbered as a
+    DM counts them rather than restarting inside each part."""
+    m = Monster(name="Kraken", hit_dice="20", thac0="1", size="G",
+                damage_attack="3-18(x2)/2-12(x6)/7-28")
+    weapons = rx.monster_to_roll20(m)["weapons"]
+    assert [w["name"] for w in weapons] == [f"Attack {i}" for i in range(1, 10)]
+    assert [w["damage"] for w in weapons] == ["3d6"] * 2 + ["2d6"] * 6 + ["7d4"]
+
+
+def test_multiplier_spacing_and_case_are_tolerated():
+    for text in ("1-4(x3)", "1-4 (x 3)", "1-4 ( X 3 )"):
+        m = Monster(name="Xorn", hit_dice="7", thac0="13", damage_attack=text)
+        assert len(rx.monster_to_roll20(m)["weapons"]) == 3, text
+
+
+def test_a_named_attack_that_repeats_keeps_its_name():
+    """A two-clawed creature shows two rows called "claw", not "claw 1"/"claw 2" —
+    the multiplier handling must not renumber attacks the MM already names."""
+    m = Monster(name="Cat", hit_dice="3", thac0="17",
+                damage_attack="1-4 (claw)/1-4 (claw)/2-8 (bite)")
+    assert [w["name"] for w in rx.monster_to_roll20(m)["weapons"]] == [
+        "claw", "claw", "bite"]
+
+
+def test_the_multiplier_forms_the_corpus_actually_uses():
+    """The MM writes the multiplier bare — "(x 4)", "(x2)", "(x10)" — and never
+    alongside a name. Swept over every creature on every Monstrous Manual page: the
+    only parentheticals containing "x<digit>" are those. Pinned so a re-scrape that
+    introduces "(claw x2)" fails here rather than silently exporting one attack.
+    """
+    for text, expected in (("1-6 (x 4)", 4), ("1-4(x10)", 10), ("1-3(x3)", 3)):
+        m = Monster(name="M", hit_dice="4", thac0="17", damage_attack=text)
+        assert len(rx.monster_to_roll20(m)["weapons"]) == expected, text
+
+
+def test_a_label_that_merely_contains_an_x_is_not_a_multiplier():
+    """Guards the regex: "(x 4)" multiplies, "(xbow)" and "(max)" name."""
+    m = Monster(name="Archer", hit_dice="2", thac0="19", damage_attack="1-6 (xbow)")
+    weapons = rx.monster_to_roll20(m)["weapons"]
+    assert [w["name"] for w in weapons] == ["xbow"]
+
+
+def test_no_multiplier_still_yields_one_row_per_attack():
+    m = Monster(name="Cat", hit_dice="3", thac0="17", damage_attack="1-4/1-4/2-8")
+    assert [w["name"] for w in rx.monster_to_roll20(m)["weapons"]] == [
+        "Attack 1", "Attack 2", "Attack 3"]
+
+
+def test_a_single_unnamed_attack_is_just_attack():
+    m = Monster(name="Blob", hit_dice="2", thac0="19", damage_attack="1-6")
+    assert [w["name"] for w in rx.monster_to_roll20(m)["weapons"]] == ["Attack"]

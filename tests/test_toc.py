@@ -83,3 +83,49 @@ def test_build_tree_reconstructs_nesting_and_order():
 
 def test_build_tree_empty_falls_through():
     assert toc.build_tree([]) == []
+
+
+# ── pages the site's own TOC forgets ─────────────────────────────────────────
+#
+# The TOC XML is not a complete index of the site's pages. A book with any tree
+# rows renders from the tree alone, so a page missing from it had no route in the
+# sidebar at all -- and, because the reading order Prev/Next walks is built from
+# the same tree, no way out once reached by search either.
+
+def _tree():
+    return toc.build_tree([
+        (0, None, 0, "Chapter 1", None),
+        (1, 0, 0, "Overview", "b/o.htm"),
+        (2, 0, 1, "Warrior", "b/w.htm"),
+        (3, 2, 0, "Warrior Table", "b/wt.htm"),   # nested: must count as covered
+    ])
+
+
+def test_tree_page_urls_finds_pages_at_every_depth():
+    assert toc.tree_page_urls(_tree()) == {"b/o.htm", "b/w.htm", "b/wt.htm"}
+    assert toc.tree_page_urls([]) == set()
+
+
+def test_entries_missing_from_tree_returns_only_the_uncovered():
+    entries = [("b/o.htm", "Overview"), ("b/x.htm", "Polearms"),
+               ("b/wt.htm", "Warrior Table"), ("b/y.htm", "Spheres of Access")]
+    assert toc.entries_missing_from_tree(_tree(), entries) == [
+        ("b/x.htm", "Polearms"), ("b/y.htm", "Spheres of Access")]
+
+
+def test_entries_missing_from_tree_keeps_entry_order_and_dedupes():
+    entries = [("b/z.htm", "Zed"), ("b/a.htm", "Alpha"), ("b/z.htm", "Zed again")]
+    assert toc.entries_missing_from_tree(_tree(), entries) == [
+        ("b/z.htm", "Zed"), ("b/a.htm", "Alpha")]
+
+
+def test_a_complete_tree_leaves_nothing_over():
+    entries = [("b/o.htm", "Overview"), ("b/w.htm", "Warrior")]
+    assert toc.entries_missing_from_tree(_tree(), entries) == []
+
+
+def test_no_tree_means_everything_is_missing():
+    """A book with no tree rows renders from the flat fallback instead, but the
+    function must still describe the gap honestly rather than claim full coverage."""
+    entries = [("b/o.htm", "Overview"), ("b/w.htm", "Warrior")]
+    assert toc.entries_missing_from_tree([], entries) == entries

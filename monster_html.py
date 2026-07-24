@@ -96,16 +96,37 @@ def _stat_field(label, field, value, derived="", editable=True, control=""):
     )
 
 
-def _init_control(m, editable=True) -> str:
+#: Shown beside an empty Size row. The MM's compact summary grids (Bird, Fish,
+#: Insect, Mammal, Ooze) carry only #AP/AC/MV/HD/THAC0/#AT/Dmg/Morale/XP — no Size
+#: column at all — so 92 of the 634 importable creatures have none. That is the
+#: source data, not a parse failure, but it is *silently* consequential: initiative
+#: speed factor is derived from Size, so those sheets showed a bare "—" and the
+#: Roll20 export sent speed 0, with nothing saying why or what to do about it.
+SIZE_ABSENT_HINT = "not given in the MM — set initiative"
+
+
+def _size_missing(view, m) -> bool:
+    """Whether this creature has no Size *and* no initiative override to stand in."""
+    return not (view.size or "").strip() and m.initiative_override is None
+
+
+def _init_control(m, editable=True, unknown_size=False) -> str:
     """An editable initiative speed factor beside the Size row — the size-derived
     value, overridable (blank to fall back to size). Sets Monster.initiative_override
-    via the mon/init action; the combat-strip Initiative tile follows on re-render."""
+    via the mon/init action; the combat-strip Initiative tile follows on re-render.
+
+    When the MM printed no Size the box is the only way to get an initiative at all,
+    so it says so rather than sitting blank behind a generic placeholder."""
     n = m.initiative_modifier()
     val = "" if n is None else str(n)
     edit = ('onchange="monText(\'init\', this.value)"' if editable else "readonly")
-    return (f'<input class="init-ov" value="{esc(val)}" placeholder="init" '
-            f'title="Initiative speed factor — overrides the size-derived value" '
-            f'autocomplete="off" {edit}>')
+    placeholder, title = "init", "Initiative speed factor — overrides the size-derived value"
+    if unknown_size:
+        placeholder = "set"
+        title = ("This creature's Monstrous Manual entry lists no Size, so there is "
+                 "nothing to derive initiative from — type a speed factor here")
+    return (f'<input class="init-ov" value="{esc(val)}" placeholder="{esc(placeholder)}" '
+            f'title="{esc(title)}" autocomplete="off" {edit}>')
 
 
 def _tile(label, value):
@@ -275,7 +296,12 @@ def generate(m, saved_id=None, image_url="", spell_index=None) -> str:
                 derived, row_editable = _bonus_badge(value_fn(view)), False
         # the Size row carries an editable initiative speed factor (overrides the
         # size-derived value); the override lives on the base monster, so use m.
-        control = _init_control(m, editable) if field == "size" else ""
+        control = ""
+        if field == "size":
+            unknown = _size_missing(view, m)
+            control = _init_control(m, editable, unknown_size=unknown)
+            if unknown:
+                derived = SIZE_ABSENT_HINT
         rows += _stat_field(label, field, value, derived=derived,
                             editable=row_editable, control=control)
 
