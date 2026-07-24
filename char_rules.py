@@ -80,6 +80,43 @@ def is_critical(nat_roll: int, attack_bonus: int, target_asc_ac: int) -> bool:
     return (nat_roll + attack_bonus) - target_asc_ac >= CRIT_MIN_MARGIN
 
 
+def crit_threshold(attack_bonus: int, target_asc_ac: int):
+    """The lowest natural d20 that crits against this AC, or None if none can.
+
+    Searched from the rule rather than restated, so the two can't drift: against a
+    soft target every qualifying roll crits and the answer is CRIT_MIN_ROLL; against
+    a hard one the margin bites and only a 20 does; against a very hard one no roll
+    satisfies both halves at once.
+    """
+    return next((r for r in range(CRIT_MIN_ROLL, 21)
+                 if is_critical(r, attack_bonus, target_asc_ac)), None)
+
+
+def to_hit_summary(attack_bonus: int, target_asc_ac: int) -> str:
+    """One line describing an attack: what it needs, how likely that is, and where it
+    crits — e.g. "Need 14+ on d20  ·  35% to hit  ·  crit on 18+".
+
+    This is *presentation of a rule*, which is why it lives here rather than in the
+    calculator window that shows it: the phrasing has to stay true to the three
+    outcomes the rules actually allow (a hit that only a natural 1 can miss, a target
+    unreachable except by a natural 20, and the ordinary case), and it is worth
+    testing without a display. calculator.py now only calls this and sets the label.
+    """
+    need = to_hit_need(attack_bonus, target_asc_ac)
+    chance = hit_chance(need)
+    if need <= 1:
+        text = f"Hits on 2+ on d20  ·  {chance}% (only a natural 1 misses)"
+    elif need > 20:
+        text = "Can't hit by the numbers  ·  5% (only a natural 20)"
+    else:
+        text = f"Need {need}+ on d20  ·  {chance}% to hit"
+
+    crit_from = crit_threshold(attack_bonus, target_asc_ac)
+    if crit_from is not None:
+        text += f"  ·  crit on {crit_from}+" if crit_from < 20 else "  ·  crit on 20"
+    return text
+
+
 #: Initiative speed factor for a creature attacking with natural weapons, keyed by
 #: size category (DMG "Modifiers to the Initiative Roll"). Initiative is rolled low
 #: — a bigger creature carries a larger modifier and so tends to act later. The DM
@@ -1873,12 +1910,21 @@ def roll_starting_money(class_name: str, rng=None) -> int:
 
 
 def armor_class(worn_ac_bonus: int, dex_score: int = None, house_rules: bool = True) -> int:
-    """House-rule ascending AC: 10 (base) + worn armor bonuses + the Dexterity
-    defensive adjustment (dexterity_mods().defensive_ac is negative = better, so it
-    adds to an ascending score). Unarmored is 10 + Dex. asc_to_desc() converts it
-    to the descending equivalent for anything still using the old scale."""
+    """Armor Class: **ascending** under the house rule, descending under RAW.
+
+    Ascending is 10 (base) + worn armor bonuses + the Dexterity defensive adjustment
+    (dexterity_mods().defensive_ac is negative = better, so it adds to an ascending
+    score). Unarmored is 10 + Dex.
+
+    ``house_rules=False`` returns the printed descending value, via the same
+    asc_to_desc() the calculator and the monster sheet use — the parameter used to be
+    accepted and then ignored, so RAW callers silently got the house-rule number.
+    Ascending AC *is* one of the campaign's house rules, so this switch has to move
+    with it or not exist at all.
+    """
     dex_bonus = -dexterity_mods(dex_score).defensive_ac if dex_score is not None else 0
-    return 10 + worn_ac_bonus + dex_bonus
+    ascending = 10 + worn_ac_bonus + dex_bonus
+    return ascending if house_rules else asc_to_desc(ascending)
 
 
 # Encumbrance bands, as a fraction of the Strength weight allowance (PHB Table 47

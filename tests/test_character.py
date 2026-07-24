@@ -556,3 +556,73 @@ def test_serialization_preserves_equipment_and_spells():
     r = ch.Character.from_dict(json.loads(json.dumps(c.to_dict())))
     assert r.money_cp == 12345 and r.inventory == c.inventory
     assert r.worn == c.worn and r.spells == c.spells
+
+
+# ── to_dict must not fall behind the dataclass ───────────────────────────────
+#
+# Character.to_dict lists its 29 fields by hand, unlike Monster.to_dict which is
+# asdict() and cannot drift. A field added to the dataclass but missed there never
+# reaches the save blob: from_dict fills in the default and the user's choice is
+# quietly gone on reload. The existing round-trip tests each assert *specific*
+# fields survive, so a newly added one is exactly what they don't cover.
+#
+# In the spirit of test_blob_store.py pinning the generated DDL: the shape of what
+# gets persisted is an invariant, not an implementation detail.
+
+#: The one field deliberately not persisted -- freshly rolled scores not yet
+#: assigned. from_dict excludes it symmetrically, so a save never carries a pool.
+NOT_PERSISTED = {"rolled_pool"}
+
+
+def test_to_dict_covers_every_dataclass_field():
+    declared = set(ch.Character.__dataclass_fields__)
+    persisted = set(ch.Character().to_dict())
+    missing = declared - persisted - NOT_PERSISTED
+    assert missing == set(), (
+        f"fields on Character that to_dict() drops: {sorted(missing)}. "
+        "A field missing here is silently lost on save/reload."
+    )
+
+
+def test_to_dict_invents_nothing_the_dataclass_lacks():
+    stray = set(ch.Character().to_dict()) - set(ch.Character.__dataclass_fields__)
+    assert stray == set(), f"to_dict() emits keys Character has no field for: {sorted(stray)}"
+
+
+def test_rolled_pool_is_deliberately_not_persisted():
+    """Pins the one exclusion, so removing it is a decision rather than an accident."""
+    c = ch.Character()
+    c.roll_pool(random.Random(1))
+    assert c.rolled_pool
+    assert "rolled_pool" not in c.to_dict()
+    assert ch.Character.from_dict(c.to_dict()).rolled_pool == []
+
+
+def test_every_persisted_field_survives_a_round_trip():
+    """Not just present in the blob -- actually restored. Each field is set to a
+    value distinguishable from its default, then compared after a round trip."""
+    c = ch.Character()
+    c.set_level(1)
+    samples = {
+        "house_rules": False, "name": "Tordek", "gender": "m",
+        "abilities": {"Strength": 16}, "exceptional_str": 75,
+        "race": "Dwarf", "char_class": "Fighter", "alignment": "Lawful Good",
+        "level": 3, "xp": 9000, "hp_rolls": [4, 6],
+        "ambidextrous": True, "handedness_roll": 12, "age_level": 2,
+        "weapon_profs": {"Long sword": "expert"}, "weapon_groups": ["Blades"],
+        "respecialisations": 1, "sunk_slots": 2,
+        "shield_profs": ["Shield, Buckler"], "armor_profs": ["Plate, Body"],
+        "fighting_styles": {"Two-Weapon": 1}, "unarmed_profs": {"Wrestling": "expert"},
+        "nonweapon_profs": {"Riding, Land-based": 1},
+        "special_talents": {"Ambidexterity": "weapon"},
+        "money_cp": 4321, "inventory": {"Torch": 3}, "worn": ["Plate, Body"],
+        "spells": {"Magic Missile": 1}, "thief_skills": {"Climb Walls": 10},
+    }
+    assert set(samples) | NOT_PERSISTED == set(ch.Character.__dataclass_fields__), (
+        "a Character field has no sample here — add one so it is actually exercised")
+    for field, value in samples.items():
+        setattr(c, field, value)
+
+    back = ch.Character.from_dict(c.to_dict())
+    for field, value in samples.items():
+        assert getattr(back, field) == value, f"{field} did not survive the round trip"

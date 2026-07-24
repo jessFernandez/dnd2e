@@ -25,9 +25,13 @@ from PyQt5.QtCore import Qt
 # (the single source of truth the charactermancer also uses) so this converter and
 # the character builder can never disagree. This module is pure display on top.
 # (The rules themselves are unit-tested in tests/test_char_rules.py.)
+#
+# `to_hit_summary` is the result line itself: it was written out here, which made
+# the one piece of real logic in this file the least-tested code in the app (12 %
+# covered, and only because nothing constructs the window). Phrasing an outcome is
+# still part of stating the rule, so it moved to char_rules with the rest.
 from char_rules import (
-    thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc,
-    to_hit_need, hit_chance, is_critical, CRIT_MIN_ROLL,
+    thac0_to_bonus, bonus_to_thac0, desc_to_asc, asc_to_desc, to_hit_summary,
 )
 
 
@@ -129,20 +133,4 @@ class HouseRuleCalculator(QWidget):
         self._guard = False
 
     def _update_hit(self):
-        bonus, target = self.hb.value(), self.ha.value()
-        need = to_hit_need(bonus, target)
-        chance = hit_chance(need)
-        if need <= 1:
-            text = f"Hits on 2+ on d20  ·  {chance}% (only a natural 1 misses)"
-        elif need > 20:
-            text = "Can't hit by the numbers  ·  5% (only a natural 20)"
-        else:
-            text = f"Need {need}+ on d20  ·  {chance}% to hit"
-        # The lowest natural die that both shows CRIT_MIN_ROLL+ and clears AC by the
-        # crit margin — computed from the rule, not hard-coded, so the two can't drift.
-        crit_from = next((r for r in range(CRIT_MIN_ROLL, 21)
-                          if is_critical(r, bonus, target)), None)
-        if crit_from is not None:
-            span = f"{crit_from}+" if crit_from < 20 else "20"
-            text += f"  ·  crit on {span}"
-        self.result.setText(text)
+        self.result.setText(to_hit_summary(self.hb.value(), self.ha.value()))

@@ -471,8 +471,26 @@ def test_attack_bonus_is_20_minus_thac0():
     # unify: the calculator re-exports char_rules' combat math rather than owning it
     import calculator
     for name in ("thac0_to_bonus", "bonus_to_thac0", "desc_to_asc", "asc_to_desc",
-                 "to_hit_need", "hit_chance", "is_critical"):
+                 "to_hit_summary"):
         assert getattr(calculator, name) is getattr(cr, name), name
+
+
+def test_the_calculator_owns_no_combat_math_of_its_own():
+    """The invariant behind the re-export list above, stated directly.
+
+    It used to build its result line in the window -- to_hit_need, hit_chance and a
+    hand-rolled crit search -- which is why those names were imported. That line is
+    now cr.to_hit_summary, so the widget performs no rules arithmetic at all: it
+    reads two spin boxes and sets a label. Anything else appearing here means logic
+    has drifted back into the Qt layer.
+    """
+    import inspect
+
+    import calculator
+    body = inspect.getsource(calculator.HouseRuleCalculator._update_hit)
+    assert "to_hit_summary" in body
+    for leaked in ("hit_chance", "is_critical", "CRIT_MIN_ROLL", "range(", "%"):
+        assert leaked not in body, f"combat math back in the calculator window: {leaked}"
 
 
 def test_proficiency_slots():
@@ -594,3 +612,81 @@ def test_item_catalog_loaded():
     assert any(w.get("damage") for w in cr.items_in_category("Weapon"))
     assert cr.item(armor[0]["name"])["category"] == "Armor"
     assert cr.item("not-a-real-item") is None
+
+
+# ── the to-hit result line (was inline in calculator.py) ─────────────────────
+#
+# Phrasing an outcome is part of stating the rule, and this was the only real logic
+# in the calculator window -- which nothing constructs, so it was the least-tested
+# code in the app. The three branches are the three outcomes the rules allow.
+
+def test_to_hit_summary_ordinary_case():
+    s = cr.to_hit_summary(3, 17)                  # need 14
+    assert "Need 14+ on d20" in s
+    assert f"{cr.hit_chance(14)}% to hit" in s
+
+
+def test_to_hit_summary_when_only_a_natural_one_misses():
+    s = cr.to_hit_summary(20, 10)                 # need -10
+    assert "Hits on 2+ on d20" in s
+    assert "only a natural 1 misses" in s
+    assert "95%" in s                             # clamped, not 300%
+
+
+def test_to_hit_summary_when_the_numbers_cannot_reach():
+    s = cr.to_hit_summary(0, 35)                  # need 35
+    assert "Can't hit by the numbers" in s
+    assert "only a natural 20" in s
+    assert "5%" in s
+
+
+def test_to_hit_summary_reports_the_crit_threshold():
+    assert "crit on 18+" in cr.to_hit_summary(10, 10)   # soft target: every 18+ crits
+    assert "crit on 20" in cr.to_hit_summary(0, 15)     # margin bites: only a 20
+
+
+def test_to_hit_summary_omits_the_crit_when_none_is_possible():
+    """Against a hard enough target no natural die satisfies both halves of the rule
+    at once, and the line should simply not mention crits."""
+    assert cr.crit_threshold(0, 40) is None
+    assert "crit" not in cr.to_hit_summary(0, 40)
+
+
+def test_crit_threshold_is_the_lowest_qualifying_die():
+    for bonus, ac in ((10, 10), (0, 15), (3, 17), (5, 20)):
+        got = cr.crit_threshold(bonus, ac)
+        if got is None:
+            assert not any(cr.is_critical(r, bonus, ac) for r in range(1, 21))
+        else:
+            assert cr.is_critical(got, bonus, ac)
+            assert not any(cr.is_critical(r, bonus, ac) for r in range(1, got))
+
+
+def test_crit_threshold_never_reports_below_the_minimum_roll():
+    for bonus in range(0, 26):
+        got = cr.crit_threshold(bonus, 10)
+        assert got is None or got >= cr.CRIT_MIN_ROLL
+
+
+# ── AC: the house_rules switch has to mean something ─────────────────────────
+
+def test_armor_class_ascending_under_house_rules():
+    assert cr.armor_class(0) == 10                       # unarmoured, no Dex known
+    assert cr.armor_class(7) == 17                       # plate-equivalent bonus
+    assert cr.armor_class(7, 18) == 21                   # Dex 18 -> +4 ascending
+
+
+def test_armor_class_raw_returns_the_printed_descending_value():
+    """The parameter used to be accepted and ignored, so a RAW caller silently got
+    the house-rule number. Ascending AC *is* the house rule, so the switch moves with
+    it: plate + Dex 18 is AC -1 in the book."""
+    assert cr.armor_class(0, house_rules=False) == 10
+    assert cr.armor_class(7, house_rules=False) == 3
+    assert cr.armor_class(7, 18, house_rules=False) == -1
+
+
+def test_armor_class_raw_and_house_are_the_same_number_on_two_scales():
+    for worn in range(0, 11):
+        for dex in (None, 3, 10, 15, 18):
+            asc = cr.armor_class(worn, dex)
+            assert cr.armor_class(worn, dex, house_rules=False) == cr.asc_to_desc(asc)
