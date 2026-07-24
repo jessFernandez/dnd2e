@@ -346,3 +346,42 @@ def test_variant_picker_lists_indexed_choices():
     assert "Black Bear" in h and "Polar Bear" in h
     assert "dnd:///mon/pickvar/MM/DD03805.htm/0" in h
     assert "dnd:///mon/pickvar/MM/DD03805.htm/1" in h
+
+
+# ── a Size the Monstrous Manual never printed ────────────────────────────────
+#
+# The MM's compact summary grids (Bird, Fish, Insect, Mammal, Ooze) carry no Size
+# column at all, so 92 of the 634 importable creatures have none. That is the source
+# data rather than a parse failure -- but it is silently consequential: initiative
+# speed factor derives from Size, so those sheets showed a bare em dash and the
+# Roll20 export sent speed 0, with nothing saying why or what to do.
+
+def test_missing_size_explains_itself_and_points_at_the_override():
+    m = Monster(name="Blood Hawk", hit_dice="1+1", thac0="19", size="")
+    html = monster_html.generate(m)
+    assert monster_html.SIZE_ABSENT_HINT in html
+    assert 'placeholder="set"' in html          # the box is the only way to get one
+    assert "lists no Size" in html              # the tooltip says why
+
+
+def test_a_creature_with_a_size_gets_no_hint():
+    m = Monster(name="Ankheg", hit_dice="3", thac0="17", size="H (10' long)")
+    html = monster_html.generate(m)
+    assert monster_html.SIZE_ABSENT_HINT not in html
+    assert 'placeholder="init"' in html         # the ordinary override affordance
+
+
+def test_an_initiative_override_suppresses_the_hint():
+    """Once the DM has supplied a speed factor the gap is closed; nagging about the
+    absent Size would be noise."""
+    m = Monster(name="Blood Hawk", hit_dice="1+1", thac0="19", size="",
+                initiative_override=3)
+    html = monster_html.generate(m)
+    assert monster_html.SIZE_ABSENT_HINT not in html
+    assert m.initiative_modifier() == 3
+
+
+def test_the_hint_does_not_claim_a_size_the_sheet_would_show():
+    """Guards against firing on whitespace-only Size, which renders as empty."""
+    m = Monster(name="Thing", hit_dice="2", thac0="19", size="   ")
+    assert monster_html.SIZE_ABSENT_HINT in monster_html.generate(m)

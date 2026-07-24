@@ -1173,6 +1173,8 @@ class MainWindow(QMainWindow):
                 # Render the real nested tree (Book › Chapter › Section › page).
                 for node in tree:
                     total_entries += self._add_tree_node(book_item, node, order)
+                # ...then anything the site's TOC XML forgot about its own pages.
+                total_entries += self._add_unlisted(book_item, tree, book_code, order)
             else:
                 # Fallback (no toc_tree in this DB): the flat chapter → pages layout.
                 for ch in chapters:
@@ -1254,6 +1256,43 @@ class MainWindow(QMainWindow):
         for child in node["children"]:
             added += self._add_tree_node(item, child, order)
         return added
+
+    #: Label for the trailing node holding pages the site's TOC never listed.
+    UNLISTED_GROUP = "Other pages"
+
+    def _add_unlisted(self, book_item, tree: list, book_code: str, order: list) -> int:
+        """Append the book's pages that its TOC tree doesn't reach, under one group.
+
+        The site's TOC XML is an incomplete index of its own pages, so rendering a
+        book from `toc_tree` alone left 25 real content pages with no route in the
+        sidebar — among them the Skills & Powers ability-score write-ups this
+        campaign's house rules are built on. They all have `toc_entries` rows, so
+        nothing new has to be scraped; they just need somewhere to hang.
+
+        Appending to `order` matters as much as the tree node: Prev/Next walks that
+        list, so a page missing from it strands the reader even when they arrive by
+        search.
+        """
+        missing = toc.entries_missing_from_tree(tree, db.toc_entries(self.db, book_code))
+        if not missing:
+            return 0
+
+        group = QTreeWidgetItem([f"  {self.UNLISTED_GROUP}"])
+        group.setFont(0, QFont("Segoe UI", 10, QFont.DemiBold))
+        group.setForeground(0, QColor("#8a90a8"))
+        group.setData(0, Qt.UserRole, ("group", None))
+        group.setToolTip(0, "In the book, but absent from its table of contents")
+        for page_url, subtopic in missing:
+            item = QTreeWidgetItem([f"  {browse_lists.display_title(subtopic)}"])
+            item.setFont(0, QFont("Segoe UI", 10))
+            item.setForeground(0, QColor("#7a8098"))
+            item.setData(0, Qt.UserRole, ("entry", page_url))
+            item.setToolTip(0, subtopic)
+            group.addChild(item)
+            self._url_to_tree_item[page_url] = item
+            order.append(page_url)
+        book_item.addChild(group)
+        return len(missing)
 
     def _on_tree_click(self, item: QTreeWidgetItem, _col):
         data = item.data(0, Qt.UserRole)
