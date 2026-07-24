@@ -769,10 +769,18 @@ _COMPACT_HEADERS = {
     "MV": "movement", "MOVEMENT": "movement",
     "HD": "hit_dice", "HIT DICE": "hit_dice",
     "THAC0": "thac0", "THACO": "thac0",
+    # The MM is inconsistent about how far it abbreviates "attack": the Insect,
+    # Mammal and Fish grids write "# OF ATT" / "DMG/ATT", the Bird grid writes
+    # "# AT" / "DMG/AT". Missing the short pair cost that page's 18 creatures their
+    # attacks and damage entirely -- the two fields a DM actually needs -- and they
+    # exported to Roll20 with no weapon rows at all. test_monster.py's header sweep
+    # now fails on any compact-grid column this map doesn't consume.
     "# OF ATT": "no_of_attacks", "NO. OF ATTACKS": "no_of_attacks",
     "ATTACKS": "no_of_attacks", "# ATT": "no_of_attacks", "NO ATT": "no_of_attacks",
+    "# AT": "no_of_attacks", "NO. OF ATT": "no_of_attacks",
     "DMG/ATT": "damage_attack", "DAMAGE/ATTACK": "damage_attack",
     "DAMAGE": "damage_attack", "DMG": "damage_attack", "ATTACK": "damage_attack",
+    "DMG/AT": "damage_attack",
     "MORALE": "morale", "ML": "morale",
     "XP VALUE": "xp_value", "XP": "xp_value", "VALUE": "xp_value",
     "SIZE": "size", "SZ": "size", "AL": "alignment", "ALIGNMENT": "alignment",

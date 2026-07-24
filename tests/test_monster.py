@@ -546,6 +546,102 @@ def test_parse_real_mammal_compact_table(conn):
 
 
 @needs_db
+def test_every_compact_table_header_is_understood(conn):
+    """No compact summary grid may carry a column this parser silently drops.
+
+    `_COMPACT_HEADERS` is a hand-maintained list of the MM's abbreviations, and the
+    MM is not consistent: the Insect, Mammal and Fish grids write "# OF ATT" /
+    "DMG/ATT" while the Bird grid writes "# AT" / "DMG/AT". The short pair was
+    missing, so all 18 creatures on the Bird page imported with no attacks and no
+    damage and exported to Roll20 with zero weapon rows -- the entire content of a
+    monster sheet, gone, with nothing to notice.
+
+    Sweeping every MM page for unmapped header cells catches that class of bug on
+    the day a page is first parsed, rather than one creature at a time.
+    """
+    unmapped = {}
+    for row in db.list_monster_pages(conn):
+        page = db.get_page(conn, row["page_url"])
+        for table in _creature_grids(conn, page, row["page_url"]):
+            for key in _header_keys(table):
+                if key and key not in monster_parser._COMPACT_HEADERS:
+                    unmapped.setdefault(key, []).append(row["page_url"])
+    assert unmapped == {}, (
+        "compact-table headers no field maps to: "
+        + ", ".join(f"{k!r} ({v[0]})" for k, v in sorted(unmapped.items()))
+    )
+
+
+def _header_keys(table) -> list:
+    """The header row's columns, normalised the way _parse_compact_table keys them."""
+    return [" ".join(c.strip().rstrip(".").upper().split()) for c in table[0][1:]]
+
+
+def _creature_grids(conn, page, page_url) -> list:
+    """The compact *creature* grids on a page — the tables that list one monster per
+    row, as the Bird/Insect/Mammal/Fish pages do.
+
+    Deliberately narrower than "any table with an AC column", because two other
+    kinds of table have one and neither is a creature list:
+
+      * **age progression tables** (the dragons, the Greater Mummy) — the parser
+        classifies these as ``kind: "age"`` and monster_tiers turns them into
+        selectable tiers, so their columns are read elsewhere;
+      * **hit-location tables** (the Beholder's "Roll / Location / AC") — these have
+        an empty first header cell, where a creature grid names its subject ("Bird").
+
+    Matching the parser's own classification keeps this test about the thing it is
+    meant to guard rather than about every table in the Monstrous Manual.
+    """
+    parser = monster_parser._StatBlockHTML()
+    parser.feed(page["content_html"])
+    out = []
+    for table in parser.tables:
+        if not table or len(table) < 3:
+            continue
+        if not any(k in ("AC", "ARMOR CLASS") for k in _header_keys(table)):
+            continue
+        if monster_parser._is_age_table(table):
+            continue
+        if not (table[0] and table[0][0].strip()):
+            continue                     # hit-location table, not a creature grid
+        out.append(table)
+    return out
+
+
+@needs_db
+def test_compact_grids_yield_usable_stat_blocks(conn):
+    """Every creature from a compact grid carries the fields a DM needs to run it.
+
+    The Bird regression showed up here as empty attack/damage on 18 creatures. Size,
+    alignment and the rest are deliberately *not* asserted: the MM's summary grids
+    genuinely do not print those columns, so their absence is the source data rather
+    than a parse failure.
+    """
+    missing = []
+    for row in db.list_monster_pages(conn):
+        page = db.get_page(conn, row["page_url"])
+        monsters = parse_stat_block(page["content_html"], page["title"], row["page_url"])
+        if len(monsters) < 6:
+            continue                                  # not one of the compact grids
+        for m in monsters:
+            if not (m.damage_attack or "").strip() or not (m.no_of_attacks or "").strip():
+                missing.append(f"{row['page_url']}:{m.name}")
+    assert missing == [], f"compact-grid creatures with no attack line: {missing[:10]}"
+
+
+@needs_db
+def test_bird_page_creatures_carry_their_attacks(conn):
+    """The specific regression, named. MM/DD03810 is the grid that abbreviates to
+    "# AT" / "DMG/AT"."""
+    ms = _parse_page(conn, "MM/DD03810.htm")
+    assert len(ms) == 18
+    hawk = next(m for m in ms if m.name == "Blood Hawk")
+    assert hawk.no_of_attacks == "3"
+    assert hawk.damage_attack == "1-4/1-4/1-6"
+
+
+@needs_db
 def test_importable_index_groups_families(conn):
     families, standalone = monster_parser.importable_index(conn)
     by_name = {f[0]: f for f in families}
