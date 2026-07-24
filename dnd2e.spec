@@ -61,6 +61,7 @@ a = Analysis(
         'db',
         'page_images',
         'toc',
+        'ask_retrieval',
         'toc_html',
         'view_common',
         'browse_lists',
