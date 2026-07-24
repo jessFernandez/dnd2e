@@ -8,6 +8,8 @@ the same way test_ask_lifecycle drives _ask_stop.
 """
 from types import SimpleNamespace
 
+import pytest
+
 import app
 
 # The full-width-vs-book classification these methods rely on now lives as the
@@ -146,7 +148,9 @@ def _tab_ctx(dest, page_url=None):
 def _tab_win(ctx):
     calls = {"hidden": 0, "synced": []}
     win = SimpleNamespace(
-        _tabs=[ctx],
+        # _on_tab_changed resolves the context through the tab's widget (_ctx),
+        # not by indexing a parallel list — see TabContext.
+        _ctx=lambda index=None: ctx,
         _update_nav_buttons=lambda: None,
         _update_bookmark_btn=lambda: None,
         _hide_sidebar=lambda: calls.__setitem__("hidden", calls["hidden"] + 1),
@@ -179,6 +183,21 @@ def test_landing_on_an_empty_tab_is_harmless():
     win, calls = _tab_win(_tab_ctx(None))              # fresh tab, nothing rendered yet
     app.MainWindow._on_tab_changed(win, 0)
     assert calls["hidden"] == 0 and calls["synced"] == []
+
+
+def test_tab_change_on_an_index_with_no_context_does_nothing():
+    """currentChanged fires during teardown and while a tab is being removed, when
+    the index can name a widget that is already gone. _ctx returns None there."""
+    calls = {"hidden": 0, "synced": []}
+    win = SimpleNamespace(
+        _ctx=lambda index=None: None,
+        _update_nav_buttons=lambda: pytest.fail("should not run without a context"),
+        _update_bookmark_btn=lambda: pytest.fail("should not run without a context"),
+        _hide_sidebar=lambda: calls.__setitem__("hidden", 1),
+        _sync_tree_selection=lambda u: calls["synced"].append(u),
+    )
+    app.MainWindow._on_tab_changed(win, -1)
+    assert calls == {"hidden": 0, "synced": []}
 
 
 # ── the in-place routes (ask / builder) dispatch to the right handler ─────────
