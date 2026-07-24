@@ -38,8 +38,14 @@ def test_splash():
     html = splash_html.generate()
     _is_page(html)
     assert "2nd Edition" in html
-    assert "dnd:///screen/spells" in html          # the Spells feature card we added
-    assert "dnd:///screen/charactermancer" in html # Character Builder card (replaced the walkthrough)
+    # Every rail tool is a tile, linking through the existing screen/ grammar.
+    for path in ("charactermancer", "monster", "dmscreen", "actions", "spells", "ask"):
+        assert f"dnd:///screen/{path}" in html
+    # Browse Books links each rulebook to its contents (theme.BOOK_ORDER).
+    assert "dnd:///toc/PHB" in html
+    # The logo art and the display font ship embedded, so the screen is offline.
+    assert "data:image/png;base64," in html          # the matted AD&D logo
+    assert "@font-face" in html and "Death Star" in html
 
 
 def test_charactermancer_step_references():

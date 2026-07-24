@@ -1,286 +1,160 @@
 """splash_html.py — Welcome / landing screen for the D&D 2E app.
 
-The book chips come from theme.BOOKS. They used to be a list here that repeated the
-codes, names and colours from app.py — and the names had drifted, so this screen
-called it "Skills & Powers" while the sidebar, the search results and the rulebook
-DB itself all said "Skills and Powers".
+The home screen is styled around the campaign's AD&D 2nd Edition logo. The matted
+logo art and the Death Star display font are embedded as inline `data:` URIs (from
+the generated `splash_assets` module) so the screen ships offline — the app makes
+no network requests. See `scripts/build_splash_assets.py` for how those are baked.
+
+The tool tiles and the book strip reuse the existing `dnd://` link grammar
+(`screen/…` for a built-in screen, `toc/…` for a book's contents — see
+`navigation`). Book codes and names come from `theme.BOOKS`, so this screen and the
+sidebar can't disagree about a book's name.
+
+Palette is pulled from the logo: royal blue is the core, white the glow and type,
+red the accent. Colour also carries meaning — the two build tools (Character
+Builder, Monsters) are red, the reference tools blue.
 """
 import theme
 from view_common import esc
+from splash_assets import FONT_DATA_URI, LOGO_DATA_URI
 
-FEATURES = [
-    ("screen/charactermancer",  "🧙",  "Character Builder",
-     "Build a 2e character step by step — abilities, race, class, proficiencies, equipment, and spells — with house rules and PHB references.",
-     "#c9a84c", "#22200a"),
-    ("screen/dmscreen", "⚔",  "DM Screen",
-     "50+ quick-reference tables — THAC0, saves, ability scores, spells, and more.",
-     "#e05555", "#220a0a"),
-    ("screen/actions",  "⚡", "Actions Reference",
-     "Every combat action explained: offense, defense, movement, and forced movement.",
-     "#5b9bd5", "#0a1222"),
-    ("screen/spells",   "📖", "Spell Compendium",
-     "Every wizard & priest spell — searchable and filterable by class, level, and school.",
-     "#b06fd6", "#170a22"),
+#: The six rail tools, in grid order: the two red "build" tools fill the top row,
+#: the blue reference tools sit below. Each href is a `screen/…` link the same as
+#: the rail buttons trigger (navigation.link_to_destination strips the prefix).
+TOOLS = [
+    ("screen/charactermancer", "Character Builder", "#ff4a4f"),
+    ("screen/monster",         "Monsters",          "#ff4a4f"),
+    ("screen/dmscreen",        "DM Screen",         "#3a86ff"),
+    ("screen/actions",         "Actions",           "#3a86ff"),
+    ("screen/spells",          "Spells",            "#3a86ff"),
+    ("screen/ask",             "Jarvis",            "#3a86ff"),
 ]
+
+#: Blue spectrum for the Browse Books ticks — one per rulebook, in theme.BOOK_ORDER.
+#: The unified palette means the strip is blue rather than each book's own colour;
+#: the book's name rides along as the link tooltip, and the true per-book colours
+#: still identify it everywhere else in the UI.
+_BOOK_TICKS = ["#123f8a", "#1b56a8", "#2465c4", "#2f6fd6", "#3f83e6",
+               "#4f92ee", "#62a1f2", "#79b3f6", "#93c4f9", "#aed3fb"]
+
+_STYLES = """
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #d6dbec;
+  display: flex; align-items: center; justify-content: center;
+  padding: 28px;
+  --blue: #2f6fd6; --red: #e0393f;
+  background-color: #080a0f;
+  background-image:
+    radial-gradient(ellipse 58% 44% at 50% 22%, rgba(47,111,214,.20), transparent 64%),
+    radial-gradient(ellipse 54% 40% at 50% 98%, rgba(224,57,63,.09), transparent 72%),
+    radial-gradient(1.5px 1.5px at 12% 16%, rgba(255,255,255,.42), transparent 60%),
+    radial-gradient(1.5px 1.5px at 84% 22%, rgba(255,255,255,.34), transparent 60%),
+    radial-gradient(1.5px 1.5px at 66% 12%, rgba(255,255,255,.30), transparent 60%),
+    radial-gradient(1.5px 1.5px at 30% 9%,  rgba(255,255,255,.24), transparent 60%),
+    radial-gradient(1.5px 1.5px at 91% 66%, rgba(255,255,255,.22), transparent 60%),
+    radial-gradient(1.5px 1.5px at 8%  72%, rgba(255,255,255,.20), transparent 60%),
+    radial-gradient(1.5px 1.5px at 50% 84%, rgba(255,255,255,.18), transparent 60%),
+    radial-gradient(ellipse 132% 104% at 50% 50%, transparent 52%, rgba(0,0,0,.72) 100%);
+}
+a { text-decoration: none; color: inherit; }
+a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius: 4px; }
+
+.frame {
+  position: relative; width: 100%; max-width: 1000px;
+  padding: 36px 48px 30px;
+  border: 2px solid var(--blue);
+  box-shadow: inset 0 0 0 1px #060810, inset 0 0 0 3px rgba(120,175,255,.42),
+              inset 0 0 60px rgba(47,111,214,.12);
+  display: flex; flex-direction: column;
+}
+.brk { position: absolute; width: 20px; height: 20px; border: 2px solid var(--red);
+       filter: drop-shadow(0 0 4px rgba(224,57,63,.6)); }
+.brk.tl { top: -2px; left: -2px;  border-width: 2px 0 0 2px; }
+.brk.tr { top: -2px; right: -2px; border-width: 2px 2px 0 0; }
+.brk.bl { bottom: -2px; left: -2px;  border-width: 0 0 2px 2px; }
+.brk.br { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+
+.hero { text-align: center; padding: 12px 0 8px; }
+.logo-wrap { position: relative; width: min(560px, 84%); margin: 0 auto; }
+.logo-wrap::before {
+  content: ""; position: absolute; inset: -18% -8%;
+  background: radial-gradient(ellipse at center, rgba(47,111,214,.28), transparent 70%);
+  filter: blur(10px);
+}
+.logo-wrap img { position: relative; display: block; width: 100%; height: auto;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,.6)); }
+
+.subtitle {
+  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-size: 15px; letter-spacing: .24em; margin: 22px 0 0; color: #eaf3ff;
+  text-shadow: 0 0 3px rgba(120,175,255,.95), 0 0 11px rgba(58,134,255,.85),
+               0 0 24px rgba(47,111,214,.55);
+}
+.rule { display: flex; align-items: center; justify-content: center;
+  margin: 15px auto 2px; width: min(440px, 78%); }
+.rule > * + * { margin-left: 14px; }  /* QtWebEngine drops flex gap */
+.rule .ln { flex: 1; height: 2px; background: linear-gradient(90deg, transparent, var(--blue)); }
+.rule .ln.r { background: linear-gradient(270deg, transparent, var(--blue)); }
+.rule .gem { color: var(--red); font-size: 10px; text-shadow: 0 0 8px rgba(224,57,63,.75); }
+
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 0; }
+.neon {
+  display: flex; align-items: center; justify-content: center; padding: 16px 18px;
+  border: 2px solid var(--c); border-radius: 9px; background: rgba(4,7,14,.42);
+  box-shadow: inset 0 0 12px -6px var(--c), 0 0 12px -3px var(--c);
+  transition: box-shadow .15s, background .15s, transform .12s;
+}
+.neon .nm {
+  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-size: 22px; letter-spacing: .03em; color: #fff; text-align: center;
+  text-shadow: 0 0 9px var(--c), 0 0 2px var(--c);
+}
+.neon:hover { transform: translateY(-2px); background: rgba(4,7,14,.2);
+  box-shadow: inset 0 0 18px -6px var(--c), 0 0 26px -4px var(--c), 0 0 46px -12px var(--c); }
+
+.browse {
+  margin-top: 12px; padding: 12px 18px 13px; border: 2px solid var(--blue);
+  border-radius: 9px; text-align: center; background: rgba(4,7,14,.42);
+  box-shadow: inset 0 0 12px -6px var(--blue), 0 0 12px -3px var(--blue);
+}
+.browse .nm { font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-size: 18px; letter-spacing: .03em; color: #fff; text-shadow: 0 0 9px var(--blue); }
+.browse .ticks { display: flex; justify-content: center; margin-top: 9px; flex-wrap: wrap; }
+.browse .ticks a { display: block; width: 42px; height: 8px; margin: 3px; border-radius: 2px;
+  background: var(--c); box-shadow: 0 0 6px -1px var(--c); transition: transform .12s, filter .12s; }  /* margin, not gap: QtWebEngine drops flex gap */
+.browse .ticks a:hover { transform: scaleY(1.6); filter: brightness(1.25); }
+
+.colophon { text-align: center; padding-top: 18px; font-family: Georgia, serif;
+  font-style: italic; font-size: 12px; color: #5c6480; }
+
+@media (max-width: 720px) { .tools { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+"""
 
 
 def generate() -> str:
-    book_chips = ""
-    for code in theme.BOOK_ORDER:
-        b = theme.BOOKS[code]
-        book_chips += (
-            f'<a class="book-chip" href="dnd:///toc/{b.code}" '
-            f'style="border-color:{b.tree};color:{b.tree}" title="{esc(b.name)}">'
-            f'{esc(b.code)}</a>'
+    tools = ""
+    for path, label, color in TOOLS:
+        tools += (
+            f'<a class="neon" style="--c:{color}" href="dnd:///{path}">'
+            f'<span class="nm">{esc(label)}</span></a>'
         )
 
-    feature_cards = ""
-    for url, icon, title, desc, color, bg in FEATURES:
-        feature_cards += f"""
-<a class="feat-card" href="dnd:///{url}"
-   style="--fc:{color};--fb:{bg}">
-  <div class="feat-icon">{icon}</div>
-  <div class="feat-title">{esc(title)}</div>
-  <div class="feat-desc">{esc(desc)}</div>
-  <div class="feat-arrow">Open →</div>
-</a>"""
+    ticks = ""
+    for code, color in zip(theme.BOOK_ORDER, _BOOK_TICKS):
+        b = theme.BOOKS[code]
+        ticks += (
+            f'<a href="dnd:///toc/{b.code}" title="{esc(b.name)}" style="--c:{color}"></a>'
+        )
 
-    css = """
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-      body {
-        background: #0f1018;
-        font-family: "Segoe UI", system-ui, sans-serif;
-        color: #c8cad8;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-image:
-          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201,168,76,.07) 0%, transparent 70%),
-          radial-gradient(ellipse 60% 40% at 50% 110%, rgba(91,155,213,.04) 0%, transparent 70%);
-      }
-
-      /* ── Outer frame ── */
-      .frame {
-        width: min(820px, 96vw);
-        padding: 48px 52px 40px;
-        position: relative;
-        border: 1px solid #2a2d3e;
-        background: #13151f;
-        box-shadow:
-          0 0 0 1px #1c1e2c,
-          0 0 60px rgba(0,0,0,.6),
-          inset 0 1px 0 rgba(201,168,76,.06);
-      }
-
-      /* corner decorations */
-      .frame::before, .frame::after,
-      .frame .c2::before, .frame .c2::after {
-        content: "";
-        position: absolute;
-        width: 18px; height: 18px;
-        border-color: #4a3c10;
-        border-style: solid;
-      }
-      .frame::before  { top: 8px; left: 8px;   border-width: 2px 0 0 2px; }
-      .frame::after   { top: 8px; right: 8px;  border-width: 2px 2px 0 0; }
-      .frame .c2::before { bottom: 8px; left: 8px;  border-width: 0 0 2px 2px; }
-      .frame .c2::after  { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
-
-      /* ── Hero ── */
-      .hero {
-        text-align: center;
-        padding-bottom: 32px;
-        border-bottom: 1px solid #1e2030;
-        position: relative;
-      }
-
-      .pre-title {
-        font-size: 10.5px;
-        letter-spacing: .25em;
-        text-transform: uppercase;
-        color: #4a5070;
-        margin-bottom: 22px;
-      }
-
-      .sword-row {
-        font-size: 18px;
-        color: #3a3010;
-        margin-bottom: 18px;
-        letter-spacing: .2em;
-        user-select: none;
-      }
-
-      .main-title {
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: 13px;
-        letter-spacing: .3em;
-        text-transform: uppercase;
-        color: #5a6080;
-        margin-bottom: 6px;
-      }
-
-      .edition {
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: 46px;
-        font-weight: bold;
-        letter-spacing: .04em;
-        color: #c9a84c;
-        line-height: 1;
-        margin-bottom: 6px;
-        animation: glow 4s ease-in-out infinite;
-      }
-
-      .sub-title {
-        font-size: 11px;
-        letter-spacing: .35em;
-        text-transform: uppercase;
-        color: #4a5070;
-        margin-bottom: 28px;
-      }
-
-      .divider > * + * { margin-left: 12px; }  /* QtWebEngine drops flex gap */
-      .divider {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #3a3010;
-        font-size: 12px;
-      }
-      .divider-line {
-        flex: 1;
-        max-width: 160px;
-        height: 1px;
-        background: linear-gradient(to right, transparent, #3a3010);
-      }
-      .divider-line.r { background: linear-gradient(to left, transparent, #3a3010); }
-      .divider-gem { color: #7a6020; font-size: 10px; }
-
-      @keyframes glow {
-        0%, 100% { text-shadow: 0 0 24px rgba(201,168,76,.25), 0 0 48px rgba(201,168,76,.08); }
-        50%       { text-shadow: 0 0 36px rgba(201,168,76,.45), 0 0 72px rgba(201,168,76,.15); }
-      }
-
-      /* ── Books section ── */
-      .section-label {
-        font-size: 9.5px;
-        letter-spacing: .2em;
-        text-transform: uppercase;
-        color: #3a3f58;
-        margin: 28px 0 12px;
-      }
-
-      .book-chips > * { margin: 0 7px 7px 0; }  /* QtWebEngine drops flex gap */
-      .book-chips {
-        display: flex;
-        flex-wrap: wrap;
-      }
-
-      .book-chip {
-        display: inline-block;
-        padding: 5px 13px;
-        border: 1px solid;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: .1em;
-        text-decoration: none;
-        background: rgba(255,255,255,.02);
-        transition: background .15s, box-shadow .15s;
-      }
-      .book-chip:hover {
-        background: rgba(255,255,255,.06);
-        box-shadow: 0 0 8px rgba(255,255,255,.04);
-      }
-
-      /* ── Feature cards ── */
-      .feat-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-top: 14px;
-      }
-
-      .feat-card > * + * { margin-top: 8px; }  /* QtWebEngine drops flex gap */
-      .feat-card {
-        display: flex;
-        flex-direction: column;
-        padding: 20px 18px 18px;
-        border: 1px solid #1e2130;
-        border-radius: 8px;
-        background: var(--fb);
-        text-decoration: none;
-        color: inherit;
-        transition: border-color .15s, transform .12s, box-shadow .15s;
-        position: relative;
-        overflow: hidden;
-      }
-      .feat-card::before {
-        content: "";
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 2px;
-        background: var(--fc);
-        opacity: .5;
-        transition: opacity .15s;
-      }
-      .feat-card:hover {
-        border-color: var(--fc);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 24px rgba(0,0,0,.35);
-      }
-      .feat-card:hover::before { opacity: 1; }
-
-      .feat-icon {
-        font-size: 22px;
-        color: var(--fc);
-        line-height: 1;
-      }
-      .feat-title {
-        font-size: 13px;
-        font-weight: 700;
-        color: #e0e2f0;
-        letter-spacing: .03em;
-      }
-      .feat-desc {
-        font-size: 11px;
-        color: #5a6080;
-        line-height: 1.6;
-        flex: 1;
-      }
-      .feat-arrow {
-        font-size: 10.5px;
-        color: var(--fc);
-        opacity: .6;
-        letter-spacing: .06em;
-        margin-top: 4px;
-        transition: opacity .15s;
-      }
-      .feat-card:hover .feat-arrow { opacity: 1; }
-
-      /* ── Footer quote ── */
-      .quote {
-        margin-top: 32px;
-        padding-top: 24px;
-        border-top: 1px solid #1e2030;
-        text-align: center;
-        color: #2e3248;
-        font-family: Georgia, serif;
-        font-style: italic;
-        font-size: 12px;
-        line-height: 1.7;
-        letter-spacing: .02em;
-      }
-      .quote cite {
-        display: block;
-        margin-top: 6px;
-        font-size: 10px;
-        letter-spacing: .15em;
-        font-style: normal;
-        text-transform: uppercase;
-      }
-    """
+    # CSS built by concatenation, not an f-string, so the stylesheet's own braces
+    # need no escaping; only the font's data: URI is spliced in.
+    css = ('@font-face { font-family: "Death Star"; src: url("' + FONT_DATA_URI
+           + '") format("opentype"); font-weight: 400; font-style: normal; }\n' + _STYLES)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -290,37 +164,23 @@ def generate() -> str:
 <style>{css}</style>
 </head>
 <body>
-<div class="frame">
-  <div class="c2"></div>
+  <div class="frame">
+    <span class="brk tl"></span><span class="brk tr"></span><span class="brk bl"></span><span class="brk br"></span>
 
-  <div class="hero">
-    <div class="pre-title">Welcome to the</div>
-    <div class="sword-row">✦ &nbsp; ◆ &nbsp; ✦</div>
-    <div class="main-title">Advanced Dungeons &amp; Dragons</div>
-    <div class="edition">2nd Edition</div>
-    <div class="sub-title">Rules Reference &nbsp;&amp;&nbsp; Campaign Tools</div>
-    <div class="divider">
-      <div class="divider-line"></div>
-      <span class="divider-gem">◆</span>
-      <div class="divider-line r"></div>
+    <div class="hero">
+      <div class="logo-wrap"><img src="{LOGO_DATA_URI}" alt="Advanced Dungeons &amp; Dragons 2nd Edition"></div>
+      <p class="subtitle">Rules Reference &amp; Campaign Tools</p>
+      <div class="rule"><span class="ln"></span><span class="gem">◆</span><span class="ln r"></span></div>
     </div>
-  </div>
 
-  <div class="section-label">Books &amp; Sourcebooks</div>
-  <div class="book-chips">
-    {book_chips}
-  </div>
+    <div class="tools">{tools}</div>
 
-  <div class="section-label" style="margin-top:28px">Quick Reference</div>
-  <div class="feat-grid">
-    {feature_cards}
-  </div>
+    <div class="browse">
+      <span class="nm">Browse Books</span>
+      <span class="ticks">{ticks}</span>
+    </div>
 
-  <div class="quote">
-    "The secret we should never let the game masters know is that they don't
-    need any rules."
-    <cite>— Gary Gygax</cite>
+    <div class="colophon">Offline · house rules applied</div>
   </div>
-</div>
 </body>
 </html>"""

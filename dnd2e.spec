@@ -33,6 +33,7 @@ a = Analysis(
         'actionsscreen_html',
         'spellsscreen_html',
         'splash_html',
+        'splash_assets',
         'screen_common',
         'askscreen_html',
         'rules_agent',
