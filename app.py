@@ -353,22 +353,33 @@ QWidget#findBar QPushButton:pressed { background: #c9a84c; color: #1a1c26; }
 # ── FTS search worker ─────────────────────────────────────────────────────────
 
 class SearchWorker(QThread):
-    results_ready = pyqtSignal(list)
-    failed        = pyqtSignal(str)   # a real error, distinct from a genuine zero-match
+    """Runs one full-text search off the UI thread.
 
-    def __init__(self, db_path: str, query: str):
+    Both signals carry the ``token`` of the search they answer, because a search
+    **cannot be cancelled**. ``QThread.quit()`` asks a thread's *event loop* to
+    exit, and ``run()`` below is a blocking query with no event loop — so a
+    superseded search runs to completion and emits anyway. The token is how
+    MainWindow tells that late reply apart from the one it is still waiting for;
+    without it a slow broad search could land after a fast narrow one and leave the
+    list showing results for a query the reader had already replaced.
+    """
+    results_ready = pyqtSignal(int, list)   # (token, rows)
+    failed        = pyqtSignal(int, str)    # (token, message) — a real error, not a zero-match
+
+    def __init__(self, db_path: str, query: str, token: int = 0):
         super().__init__()
         self.db_path = db_path
         self.query   = query
+        self.token   = token
 
     def run(self):
         try:
             conn = db.connect(self.db_path)
             rows = db.search_pages(conn, self.query)
             conn.close()
-            self.results_ready.emit(rows)
+            self.results_ready.emit(self.token, rows)
         except Exception as e:
-            self.failed.emit(str(e))
+            self.failed.emit(self.token, str(e))
 
 
 # ── dnd:// link interception ──────────────────────────────────────────────────
@@ -537,14 +548,35 @@ class ContentView(QWidget):
             self._view.clear()
 
 
+def _thread_finished(worker: QThread):
+    """``QThread.finished()`` — the *thread ended* signal — even when a subclass has
+    shadowed the name.
+
+    ``AskWorker`` declares ``finished = pyqtSignal(str)`` for its answer, which hides
+    the inherited signal. Connecting cleanup to the shadowing one runs it when the
+    answer is emitted, from inside ``run()``, while the thread is still executing.
+    Anything that manages a worker's *lifetime* wants this signal, not that one.
+    """
+    return QThread.finished.__get__(worker, QThread)
+
+
 # ── Per-tab state ─────────────────────────────────────────────────────────────
 
 class TabContext:
-    """Holds all state that belongs to one content tab."""
+    """Holds all state that belongs to one content tab.
+
+    The context is reached *through its view* (MainWindow._ctx), never by index.
+    A QTabWidget with setMovable(True) reorders its own tabs when the reader drags
+    one, and a parallel list indexed by currentIndex() does not move with it — so
+    back/forward would rewrite a different tab than the one on screen and closing
+    one would discard another's history. Hanging the context on the widget makes
+    that desynchronisation unrepresentable rather than merely handled.
+    """
     def __init__(self, view: ContentView):
         self.view                          = view
         self.nav                           = History()
         self.current_page_url: str | None  = None
+        view._tab_context = self            # the only link the lookup needs
 
 
 class BrowseTree(QTreeWidget):
@@ -606,10 +638,14 @@ class MainWindow(QMainWindow):
         self._init_user_db()
         self._settings = QSettings(str(_user_data_dir() / "settings.ini"), QSettings.IniFormat)
         self._search_worker: SearchWorker | None = None
+        self._search_token = 0              # newest search; older replies are dropped
+        self._live_workers: set = set()     # running QThreads, held so Qt can't delete one mid-run
         self._url_to_tree_item: dict = {}
         self._book_chapters:    dict = {}
         self._book_page_order:  dict = {}   # book_code -> ordered list of page_urls
-        self._tabs: list[TabContext] = []   # populated by _build_ui → _new_tab
+        # Per-tab state lives on each tab's view (TabContext), reached via _ctx() /
+        # _contexts(). There is deliberately no parallel list here: tabs are movable,
+        # and any list indexed by currentIndex() goes stale the moment one is dragged.
         self._zoom: float = float(self._settings.value("zoom", 1.0))
         self._ask_worker = None
         self._ask = Conversation()          # current Jarvis conversation + in-flight context
@@ -644,23 +680,71 @@ class MainWindow(QMainWindow):
         db.ensure_bookmarks_schema(self.user_db)
         db.migrate_legacy_bookmarks(self.user_db, self.db)
 
+    # ── background workers ───────────────────────────────────────────────────
+
+    def _keep_alive(self, worker: QThread):
+        """Hold a reference to a running QThread until the thread itself ends.
+
+        Dropping the last Python reference to a running QThread is fatal: sip owns
+        the object (no Qt parent), so rebinding the attribute that held it deletes
+        the C++ QThread out from under the thread still executing ``run()`` and the
+        process aborts (0xC0000409 on Windows). Both `self._search_worker = …` and
+        `self._ask_worker = …` did exactly that when a second search or question
+        started before the first finished — which for a local LLM is seconds wide.
+
+        Note ``_thread_finished``: this must key off the *thread* ending, not off a
+        worker's own "I have an answer" signal. AskWorker declares
+        ``finished = pyqtSignal(str)``, which shadows ``QThread.finished()`` — that
+        one fires from inside ``run()``, while the thread is still very much alive.
+        """
+        self._live_workers.add(worker)
+        done = _thread_finished(worker)
+        done.connect(lambda w=worker: self._live_workers.discard(w))
+        done.connect(worker.deleteLater)
+
     # ── Per-tab properties (redirect to the active TabContext) ────────────────
+    #
+    # Resolved through the *widget*, not through an index into a parallel list.
+    # Tabs are movable, and dragging one reorders QTabWidget's tabs without touching
+    # any list we keep — so `self._tabs[currentIndex()]` silently returned a
+    # different tab's context, and every one of these properties handed back the
+    # wrong document. See TabContext.
+
+    def _ctx(self, index: int = None) -> "TabContext | None":
+        """The context of the tab at `index`, or of the active tab. None before the
+        first tab exists (these properties are reachable during _build_ui)."""
+        widget = (self._content_tabs.currentWidget() if index is None
+                  else self._content_tabs.widget(index))
+        return getattr(widget, "_tab_context", None)
+
+    def _contexts(self) -> list:
+        """Every tab's context, **in the order the tabs are shown**.
+
+        Session save writes this order and session restore replays it, so taking it
+        from the tab bar rather than from insertion order is what makes a dragged
+        tab layout survive a restart.
+        """
+        return [c for i in range(self._content_tabs.count())
+                if (c := self._ctx(i)) is not None]
 
     @property
     def content(self) -> ContentView:
-        return self._tabs[self._content_tabs.currentIndex()].view
+        return self._ctx().view
 
     @property
     def _nav(self) -> History:
-        return self._tabs[self._content_tabs.currentIndex()].nav
+        return self._ctx().nav
 
     @property
     def current_page_url(self):
-        return self._tabs[self._content_tabs.currentIndex()].current_page_url
+        ctx = self._ctx()
+        return ctx.current_page_url if ctx else None
 
     @current_page_url.setter
     def current_page_url(self, val):
-        self._tabs[self._content_tabs.currentIndex()].current_page_url = val
+        ctx = self._ctx()
+        if ctx:
+            ctx.current_page_url = val
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -1010,7 +1094,7 @@ class MainWindow(QMainWindow):
     # ── Zoom ────────────────────────────────────────────────────────────────
 
     def _apply_zoom_all(self):
-        for ctx in self._tabs:
+        for ctx in self._contexts():
             ctx.view.apply_zoom(self._zoom)
 
     def _set_zoom(self, z: float):
@@ -1721,29 +1805,48 @@ class MainWindow(QMainWindow):
             self._render_ask()          # fall back to the setup instructions
             return
 
+        # The loading page keeps the ask box enabled, so asking again while an
+        # answer streams is a supported gesture. Stop the previous worker first —
+        # cancel() is cooperative and it will still emit, which is what `gen` below
+        # is for; this just stops it wasting the model.
+        self._ask_stop()
+
         thread = self._ask.pairs
         model = self._ask_model(models)
         view  = self.content._view      # answer renders onto the tab that asked
-        self._ask.begin(question, model, models, view)
+        gen = self._ask.begin(question, model, models, view)
         view.setHtml(askscreen_html.generate(
             "loading", model=model, models=models, question=question, thread=thread))
         self._set_tab_title("Jarvis")
         self.status.showMessage(f'  Asking {model}:  "{question[:50]}"')
 
         worker = AskWorker(str(DB_PATH), model, question, history=thread)
-        worker.status.connect(self._ask_status)
-        worker.delta.connect(self._ask_delta)
-        worker.finished.connect(self._ask_finished)
-        worker.failed.connect(self._ask_failed)
+        # Every reply carries the generation it belongs to, bound here rather than
+        # read off the worker, so the handlers stay callable (and testable) without
+        # a live QThread to ask.
+        worker.status.connect(lambda msg, g=gen: self._ask_status(g, msg))
+        worker.delta.connect(lambda chunk, g=gen: self._ask_delta(g, chunk))
+        worker.finished.connect(lambda md, g=gen: self._ask_finished(g, md))
+        worker.failed.connect(lambda err, g=gen: self._ask_failed(g, err))
         worker.finished.connect(self._ask_worker_done)
         worker.failed.connect(self._ask_worker_done)
-        worker.finished.connect(worker.deleteLater)
-        worker.failed.connect(worker.deleteLater)
+        self._keep_alive(worker)        # deleteLater on thread end, not on answer
         self._ask_worker = worker
         worker.start()
 
-    def _ask_status(self, msg: str):
-        view = self._ask.view
+    def _ask_view(self, generation: int):
+        """The view a worker's reply should render into, or None if it shouldn't.
+
+        None means either no page is listening or this reply belongs to a question
+        the reader has already replaced — a cancelled AskWorker still emits its
+        partial answer, so every handler below has to ask.
+        """
+        if not self._ask.is_current(generation):
+            return None
+        return self._ask.view
+
+    def _ask_status(self, generation: int, msg: str):
+        view = self._ask_view(generation)
         if view is None:
             return
         js = ("var s=document.getElementById('ask-status');"
@@ -1751,8 +1854,8 @@ class MainWindow(QMainWindow):
               + json.dumps(msg) + "+'</span>';}")
         view.page().runJavaScript(js)
 
-    def _ask_delta(self, chunk: str):
-        view = self._ask.view
+    def _ask_delta(self, generation: int, chunk: str):
+        view = self._ask_view(generation)
         if view is None:
             return
         js = ("var s=document.getElementById('ask-stream');"
@@ -1761,10 +1864,10 @@ class MainWindow(QMainWindow):
               "if(st){st.innerHTML='<span class=\"spinner\"></span><span>Writing…</span>';}")
         view.page().runJavaScript(js)
 
-    def _ask_finished(self, answer_md: str):
-        view = self._ask.view
+    def _ask_finished(self, generation: int, answer_md: str):
+        view = self._ask_view(generation)
         if view is None:
-            return
+            return          # a superseded answer must not be recorded against the new question
         self._ask.record_answer(answer_md)
         view.setHtml(askscreen_html.generate(
             "answer", model=self._ask.model,
@@ -1772,8 +1875,8 @@ class MainWindow(QMainWindow):
         ))
         self.status.showMessage("  Jarvis  ·  answer ready")
 
-    def _ask_failed(self, error: str):
-        view = self._ask.view
+    def _ask_failed(self, generation: int, error: str):
+        view = self._ask_view(generation)
         if view is None:
             return
         view.setHtml(askscreen_html.generate(
@@ -1883,8 +1986,7 @@ class MainWindow(QMainWindow):
         view.page_requested.connect(self._on_content_navigate)
         view.page_requested_newtab.connect(self._on_content_navigate_newtab)
         view.apply_zoom(self._zoom)
-        ctx = TabContext(view)
-        self._tabs.append(ctx)
+        TabContext(view)                   # attaches itself to the view
         idx = self._content_tabs.addTab(view, "Home")
         self._content_tabs.setCurrentIndex(idx)
         if show_splash:
@@ -1901,23 +2003,28 @@ class MainWindow(QMainWindow):
         self._content_tabs.setCurrentIndex(prev)
 
     def _close_tab(self, idx: int):
-        """Close the tab at idx; always keeps at least one tab open."""
+        """Close the tab at idx; always keeps at least one tab open.
+
+        The context goes with the widget — there is no second structure to keep in
+        step, which is the point of hanging it on the view.
+        """
         if self._content_tabs.count() <= 1:
             return
-        ctx = self._tabs.pop(idx)
+        view = self._content_tabs.widget(idx)
         self._content_tabs.removeTab(idx)
-        ctx.view.deleteLater()
+        if view is not None:
+            view.deleteLater()
         self._update_nav_buttons()
         self._update_bookmark_btn()
 
     def _on_tab_changed(self, idx: int):
         """Sync UI state when the active tab changes — on a switch, and when
         closing a tab hands focus to another."""
-        if not (0 <= idx < len(self._tabs)):
+        ctx = self._ctx(idx)
+        if ctx is None:
             return
         self._update_nav_buttons()
         self._update_bookmark_btn()
-        ctx = self._tabs[idx]
         # Reconcile the browse pane with the newly-active tab via pane_action: a
         # full-width screen reclaims the width, while a book page leaves the pane
         # as the reader left it (a tab switch/close is not a link click, so it
@@ -1948,13 +2055,18 @@ class MainWindow(QMainWindow):
         loading.setForeground(QColor("#505870"))
         self.results_list.addItem(loading)
 
-        if self._search_worker and self._search_worker.isRunning():
-            self._search_worker.quit()
-
-        self._search_worker = SearchWorker(str(DB_PATH), query)
-        self._search_worker.results_ready.connect(self._show_results)
-        self._search_worker.failed.connect(self._show_search_error)
-        self._search_worker.start()
+        # An in-flight search is *superseded*, not cancelled: quit() only asks an
+        # event loop to exit and SearchWorker.run() has none, so the old query
+        # finishes regardless. It keeps running to completion (held by
+        # _keep_alive, since dropping the reference would abort the process) and
+        # its answer is discarded on arrival by the token check in _show_results.
+        self._search_token += 1
+        worker = SearchWorker(str(DB_PATH), query, self._search_token)
+        worker.results_ready.connect(self._show_results)
+        worker.failed.connect(self._show_search_error)
+        self._keep_alive(worker)
+        self._search_worker = worker
+        worker.start()
 
     def _add_row(self, widget, row: browse_lists.Row):
         """Put one browse_lists.Row into a QListWidget."""
@@ -1970,7 +2082,18 @@ class MainWindow(QMainWindow):
         item.setForeground(QColor(color))
         widget.addItem(item)
 
-    def _show_results(self, rows):
+    def _stale_search(self, token: int) -> bool:
+        """Whether a reply belongs to a search the reader has already replaced.
+
+        Type "dragon", then "fireball" before the first returns, and both searches
+        finish — the broad one usually last. Without this the list would settle on
+        results for a query that is no longer in the box.
+        """
+        return token != self._search_token
+
+    def _show_results(self, token, rows):
+        if self._stale_search(token):
+            return
         self.results_list.clear()
         if not rows:
             self._add_placeholder(self.results_list, "  No results found.",
@@ -1984,9 +2107,15 @@ class MainWindow(QMainWindow):
         self.tabs.setTabText(1, browse_lists.results_tab_label(len(rows)))
         self.status.showMessage(f"  Found {len(rows)} results")
 
-    def _show_search_error(self, message: str):
+    def _show_search_error(self, token, message: str):
         """A search that actually failed (bad DB, FTS syntax) — surfaced distinctly
-        from a genuine zero-match so the user isn't told 'no results' for an error."""
+        from a genuine zero-match so the user isn't told 'no results' for an error.
+
+        A superseded search's failure is not the reader's problem: they have already
+        moved on, and reporting it would replace a good result list with an error.
+        """
+        if self._stale_search(token):
+            return
         self.results_list.clear()
         self._add_placeholder(self.results_list, "  Search failed — try a simpler query.",
                               browse_lists.ERROR_FG)
@@ -2078,7 +2207,7 @@ class MainWindow(QMainWindow):
     def _save_session(self):
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("zoom", self._zoom)
-        entries = [e for ctx in self._tabs if (e := self._current_entry(ctx))]
+        entries = [e for ctx in self._contexts() if (e := self._current_entry(ctx))]
         self._settings.setValue("openTabs", entries)
         self._settings.setValue("activeTab", self._content_tabs.currentIndex())
         if self._calc is not None:

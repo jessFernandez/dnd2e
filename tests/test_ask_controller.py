@@ -70,3 +70,40 @@ def test_conversation_reset_clears_thread():
     c.begin("q", "m", None, None); c.record_answer("a")
     c.reset()
     assert c.pairs == []
+
+
+# ── generations: telling a superseded worker's reply apart ───────────────────
+#
+# A question asked while another is still streaming replaces the whole in-flight
+# context. Cancelling the old worker doesn't make that safe -- AskWorker.cancel()
+# is cooperative and run() emits its partial answer anyway -- so each question is
+# stamped, and the Qt layer drops replies that aren't the current stamp.
+
+def test_begin_returns_a_new_generation_each_time():
+    c = Conversation()
+    first = c.begin("q1", "m", None, None)
+    second = c.begin("q2", "m", None, None)
+    assert first != second
+    assert c.is_current(second) and not c.is_current(first)
+
+
+def test_a_fresh_conversation_is_current_for_nothing_yet_issued():
+    c = Conversation()
+    assert not c.is_current(c.generation + 1)
+
+
+def test_reset_abandons_the_in_flight_question():
+    """Leaving and re-entering the Jarvis page starts a new conversation; an answer
+    still coming for the old page must not be treated as current."""
+    c = Conversation()
+    gen = c.begin("q", "m", None, None)
+    c.reset()
+    assert not c.is_current(gen)
+
+
+def test_record_answer_still_pairs_the_question_it_was_asked_with():
+    c = Conversation()
+    gen = c.begin("q1", "m", None, None)
+    assert c.is_current(gen)
+    c.record_answer("a1")
+    assert c.pairs == [("q1", "a1")]

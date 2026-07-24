@@ -41,17 +41,35 @@ class Conversation:
         self.model: str = DEFAULT_MODEL
         self.models = None          # models offered when this question was asked
         self.view = None            # the QWebEngineView the answer streams into
+        self.generation = 0         # bumped per question; older workers are ignored
 
     def reset(self):
         """Start a fresh conversation (a new visit to the Jarvis page)."""
         self.pairs = []
+        self.generation += 1        # abandon anything still streaming into the old page
 
-    def begin(self, question: str, model: str, models, view):
-        """Record the context for a question about to be handed to a worker."""
+    def begin(self, question: str, model: str, models, view) -> int:
+        """Record the context for a question about to be handed to a worker, and
+        return the generation that worker's replies must carry.
+
+        Asking a second question while the first is still streaming replaces this
+        context wholesale. Cancelling the old worker is not enough to make that
+        safe: ``AskWorker.cancel()`` is cooperative, and ``run()`` emits ``finished``
+        with the partial answer plus "_(stopped)_" regardless. Without a generation
+        the old worker's answer would arrive afterwards, be recorded against the
+        *new* question (``record_answer`` reads whatever ``self.question`` now
+        holds), and overwrite the page the new answer is streaming into.
+        """
+        self.generation += 1
         self.question = question
         self.model = model
         self.models = models
         self.view = view
+        return self.generation
+
+    def is_current(self, generation: int) -> bool:
+        """Whether a worker's reply is still the one being waited for."""
+        return generation == self.generation
 
     def record_answer(self, answer_md: str):
         """Append the finished ``(question, answer)`` pair to the visible thread."""

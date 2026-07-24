@@ -127,12 +127,19 @@ class _FakeList:
         return len(self.items)
 
 
+#: The token the stand-in window is currently waiting on. Search replies carry the
+#: token of the search they answer; anything else is a superseded query's late
+#: answer and must be dropped (see MainWindow._stale_search).
+CURRENT = 7
+
+
 def _window(results=None, bookmarks=None):
     return SimpleNamespace(
         results_list=results or _FakeList(),
         bookmarks_list=bookmarks or _FakeList(),
         tabs=SimpleNamespace(setTabText=lambda *a: None),
         status=SimpleNamespace(showMessage=lambda *a: None),
+        _search_token=CURRENT,
         _add_row=None, _add_placeholder=None,
     )
 
@@ -140,6 +147,7 @@ def _window(results=None, bookmarks=None):
 def _bind(win):
     win._add_row = app.MainWindow._add_row.__get__(win)
     win._add_placeholder = app.MainWindow._add_placeholder.__get__(win)
+    win._stale_search = app.MainWindow._stale_search.__get__(win)
     return win
 
 
@@ -147,7 +155,7 @@ def test_show_results_adds_a_row_per_result():
     win = _bind(_window())
     rows = [("PHB/a.htm", "Armor (PHB)", "Player's Handbook", "PHB", "plate **mail**"),
             ("MM/b.htm",  "Ogre (MM)",   "Monstrous Manual",  "MM",  "")]
-    app.MainWindow._show_results(win, rows)
+    app.MainWindow._show_results(win, CURRENT, rows)
 
     assert win.results_list.count() == 2
     first = win.results_list.items[0]
@@ -158,7 +166,7 @@ def test_show_results_adds_a_row_per_result():
 
 def test_show_results_with_nothing_shows_one_placeholder():
     win = _bind(_window())
-    app.MainWindow._show_results(win, [])
+    app.MainWindow._show_results(win, CURRENT, [])
     assert win.results_list.count() == 1
     assert "No results found" in win.results_list.items[0].text()
 
@@ -166,6 +174,61 @@ def test_show_results_with_nothing_shows_one_placeholder():
 def test_search_error_is_distinct_from_an_empty_result():
     """A failed search must not read as 'no matches' — different text, different colour."""
     win = _bind(_window())
-    app.MainWindow._show_search_error(win, "malformed MATCH")
+    app.MainWindow._show_search_error(win, CURRENT, "malformed MATCH")
     assert win.results_list.count() == 1
     assert "Search failed" in win.results_list.items[0].text()
+
+
+# ── a superseded search's late answer is discarded ───────────────────────────
+#
+# A search cannot be cancelled: quit() only asks an event loop to exit and
+# SearchWorker.run() has none, so an abandoned query finishes and emits anyway.
+# Type "dragon" then "fireball" before the first returns and both land — the broad
+# one usually last, which without this guard left the list showing dragons under a
+# fireball query.
+
+def test_a_superseded_search_does_not_replace_the_current_results():
+    win = _bind(_window())
+    app.MainWindow._show_results(win, CURRENT, [
+        ("MM/f.htm", "Fireball (PHB)", "Player's Handbook", "PHB", "")])
+    assert win.results_list.count() == 1
+
+    stale = [("MM/d.htm", "Dragon (MM)", "Monstrous Manual", "MM", "")] * 4
+    app.MainWindow._show_results(win, CURRENT - 1, stale)
+
+    assert win.results_list.count() == 1                       # untouched
+    assert "Fireball" in win.results_list.items[0].text()
+
+
+def test_a_superseded_empty_search_does_not_blank_the_current_results():
+    """The nastiest shape of the race: the late reply has *no* rows, so the guard
+    has to run before the 'No results found' placeholder, not after."""
+    win = _bind(_window())
+    app.MainWindow._show_results(win, CURRENT, [
+        ("MM/f.htm", "Fireball (PHB)", "Player's Handbook", "PHB", "")])
+
+    app.MainWindow._show_results(win, CURRENT - 1, [])
+
+    assert win.results_list.count() == 1
+    assert "Fireball" in win.results_list.items[0].text()
+
+
+def test_a_superseded_search_failure_is_not_reported():
+    """The reader has moved on; surfacing the old query's error would replace a good
+    result list with 'Search failed'."""
+    win = _bind(_window())
+    app.MainWindow._show_results(win, CURRENT, [
+        ("MM/f.htm", "Fireball (PHB)", "Player's Handbook", "PHB", "")])
+
+    app.MainWindow._show_search_error(win, CURRENT - 1, "malformed MATCH")
+
+    assert win.results_list.count() == 1
+    assert "Search failed" not in win.results_list.items[0].text()
+
+
+def test_stale_search_recognises_only_the_newest_token():
+    win = _window()
+    stale = app.MainWindow._stale_search.__get__(win)
+    assert not stale(CURRENT)
+    assert stale(CURRENT - 1)
+    assert stale(CURRENT + 1)      # a token we never issued is not current either
