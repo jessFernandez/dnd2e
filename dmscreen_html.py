@@ -195,11 +195,18 @@ def _initiative_situations():
 
 
 def _warrior_attacks():
+    """Table 58, from cr.attacks_per_round. The bands are found by walking the
+    levels rather than restated, so a change to the rule moves this card with it."""
+    labels = {(1, 1): "1 / round", (3, 2): "3/2 rounds", (2, 1): "2 / round"}
+    rows, start, prev = [], 1, cr.attacks_per_round("Fighter", 1)
+    for lvl in range(2, 22):
+        cur = cr.attacks_per_round("Fighter", lvl)
+        if cur != prev:
+            rows.append([f"{start}–{lvl - 1}", labels[prev]])
+            start, prev = lvl, cur
+    rows.append([f"{start}+", labels[prev]])
     return _card("Warrior Melee Attacks", "combat", _t(
-        ["Warrior Level", "Attacks/Round"],
-        [["1–6", "1 / round"],
-         ["7–12", "3/2 rounds"],
-         ["13+", "2 / round"]],
+        ["Warrior Level", "Attacks/Round"], rows,
     ))
 
 
@@ -216,17 +223,30 @@ def _specialist_attacks():
 
 
 def _thac0_by_level():
-    data = {
-        "Warrior": [20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1],
-        "Priest":  [20,20,19,18,18,17,16,16,15,14,14,13,12,12,11,10,10,9,8,8],
-        "Rogue":   [20,20,19,19,18,18,17,17,16,16,15,15,14,14,13,13,12,12,11,11],
-        "Wizard":  [20,20,20,19,19,19,18,18,18,17,17,17,16,16,16,15,15,15,14,14],
-    }
+    """THAC0 for each class group, 1st–20th, computed from char_rules.
+
+    This card used to carry the four columns as a literal, and it had drifted: the
+    Priest column smoothed the steps (priests improve 2 points every *3* levels, so
+    the column is flat within each band) and was wrong at levels 3, 6, 9, 12, 15 and
+    18, while the Rogue column showed the standard progression rather than the
+    campaign's — rogues advance at the priest rate here, a difference of up to 3
+    points by 20th. A DM reading this card and a player reading the builder got
+    different numbers for the same character.
+
+    It now reads cr.thac0, which is the same function the builder and the Roll20
+    export use, so the three cannot disagree. tests/test_dmscreen_rules.py walks
+    every level of every column against it.
+    """
+    reps = [("Warrior", "Fighter"), ("Priest", "Cleric"),
+            ("Rogue", "Thief"), ("Wizard", "Mage")]
+    rows = [[str(lvl)] + [str(cr.thac0(cls, lvl)) for _group, cls in reps]
+            for lvl in range(1, 21)]
+    note = ('<p class="note">House rule: rogues gain attack bonuses at the priest '
+            'rate (⅔ per level), so the Rogue column is not the printed one.</p>'
+            if cr.HOUSE_RULES.rogue_attack_as_priest else "")
     return _card("THAC0 by Level", "combat", _t(
-        ["Lvl", "Warrior", "Priest", "Rogue", "Wizard"],
-        [[str(i+1)] + [str(data[cls][i]) for cls in data] for i in range(20)],
-        right_cols=(1,2,3,4),
-    ), span=2)
+        ["Lvl"] + [g for g, _cls in reps], rows, right_cols=(1, 2, 3, 4),
+    ) + note, span=2)
 
 
 def _monster_thac0():
@@ -243,24 +263,30 @@ def _monster_thac0():
     ))
 
 
+#: Column headers of Table 61 and the cleric level that stands for each. The last
+#: three columns are bands, so one level represents each; test_dmscreen_rules
+#: asserts the banding really is flat (level 11 == 10, 13 == 12, 20 == 14).
+_TURN_COLUMNS = ([(str(lvl), lvl) for lvl in range(1, 10)]
+                 + [("10–11", 10), ("12–13", 12), ("14+", 14)])
+
+
 def _turning_undead():
-    headers = ["Undead Type / HD", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10–11", "12–13", "14+"]
-    rows = [
-        ["Skeleton or 1 HD", "10","7","4","T","T","D","D","D*","D*","D*","D*","D*"],
-        ["Zombie",           "13","10","7","4","T","T","D","D","D*","D*","D*","D*"],
-        ["Ghoul or 2 HD",    "16","13","10","7","4","T","T","D","D","D*","D*","D*"],
-        ["Shadow or 3–4 HD", "19","16","13","10","7","4","T","T","D","D","D*","D*"],
-        ["Wight or 5 HD",    "20","19","16","13","10","7","4","T","T","D","D","D*"],
-        ["Ghast",            "–","20","19","16","13","10","7","4","T","T","D","D"],
-        ["Wraith or 6 HD",   "–","–","20","19","16","13","10","7","4","T","T","D"],
-        ["Mummy or 7 HD",    "–","–","–","20","19","16","13","10","7","4","T","T"],
-        ["Spectre or 8 HD",  "–","–","–","–","20","19","16","13","10","7","4","T"],
-        ["Vampire or 9 HD",  "–","–","–","–","–","20","19","16","13","10","7","4"],
-        ["Ghost or 10 HD",   "–","–","–","–","–","–","20","19","16","13","10","7"],
-        ["Lich or 11+ HD",   "–","–","–","–","–","–","–","20","19","16","13","10"],
-        ["Special",          "–","–","–","–","–","–","–","–","20","19","16","13"],
-    ]
-    note = '<p class="note">T = Turned automatically · D = Destroyed · D* = Destroyed + 2d6 turned · Cleric level shown as column header</p>'
+    """Table 61, computed from cr.turn_undead — the same function the builder's
+    review step uses to show a cleric what they can turn."""
+    headers = ["Undead Type / HD"] + [label for label, _lvl in _TURN_COLUMNS]
+    by_level = {lvl: cr.turn_undead("Cleric", lvl) for _label, lvl in _TURN_COLUMNS}
+    rows = []
+    for undead in cr.TURN_UNDEAD_TYPES:
+        cells = []
+        for _label, lvl in _TURN_COLUMNS:
+            value = by_level[lvl].get(undead)
+            cells.append("–" if value is None else str(value))
+        rows.append([undead.replace("-", "–")] + cells)     # en dash, as printed
+    # "An additional 2d4 creatures of this type are turned" — PHB Table 61's own
+    # footnote (PHB/DD01734, repeated at DMG/DD00468). This note said 2d6.
+    note = ('<p class="note">T = Turned automatically · D = Destroyed · '
+            'D* = Destroyed + an additional 2d4 turned · '
+            'Cleric level shown as column header</p>')
     return _card("Turning Undead", "combat", _t(headers, rows) + note, span=3)
 
 
@@ -383,36 +409,16 @@ def _poison():
 
 
 def _char_saves():
-    rows = [
-        ["Priest",  "1–3",   "10","14","13","16","15"],
-        ["Priest",  "4–6",   "9","13","12","15","14"],
-        ["Priest",  "7–9",   "7","11","10","13","12"],
-        ["Priest",  "10–12", "6","10","9","12","11"],
-        ["Priest",  "13–15", "5","9","8","11","10"],
-        ["Priest",  "16–18", "4","8","7","10","9"],
-        ["Priest",  "19+",   "2","6","5","8","7"],
-        ["Rogue",   "1–4",   "13","14","12","16","15"],
-        ["Rogue",   "5–8",   "12","12","11","15","13"],
-        ["Rogue",   "9–12",  "11","10","10","14","11"],
-        ["Rogue",   "13–16", "10","8","9","13","9"],
-        ["Rogue",   "17–20", "9","6","8","12","7"],
-        ["Rogue",   "21+",   "8","4","7","11","5"],
-        ["Warrior", "0",     "16","18","17","20","19"],
-        ["Warrior", "1–2",   "14","16","15","17","17"],
-        ["Warrior", "3–4",   "13","15","14","16","16"],
-        ["Warrior", "5–6",   "11","13","12","13","14"],
-        ["Warrior", "7–8",   "10","12","11","12","13"],
-        ["Warrior", "9–10",  "8","10","9","9","11"],
-        ["Warrior", "11–12", "7","9","8","8","10"],
-        ["Warrior", "13–14", "5","7","6","5","8"],
-        ["Warrior", "15–16", "4","6","5","4","7"],
-        ["Warrior", "17+",   "3","5","4","4","6"],
-        ["Wizard",  "1–5",   "14","11","13","15","12"],
-        ["Wizard",  "6–10",  "13","9","11","13","10"],
-        ["Wizard",  "11–15", "11","7","9","11","8"],
-        ["Wizard",  "16–20", "10","5","7","9","6"],
-        ["Wizard",  "21+",   "8","3","5","7","4"],
-    ]
+    """Table 60, read out of char_rules rather than transcribed again.
+
+    cr.saving_throw_bands returns the printed bands, so this renders the same shape
+    it always did — the 29 rows just aren't a second copy of the numbers any more.
+    """
+    rows = []
+    for group in ("Priest", "Rogue", "Warrior", "Wizard"):
+        for label, saves in cr.saving_throw_bands(group):
+            rows.append([group, label.replace("-", "–")]      # en dash, as printed
+                        + [str(saves[cat]) for cat in cr.SAVE_CATEGORIES])
     note = '<p class="note">PPD = Paralysis/Poison/Death · RSW = Rod/Staff/Wand · PP = Petrification/Polymorph · BW = Breath Weapon · Spell</p>'
     return _card("Character Saving Throws", "hazards",
                  _t(["Class","Level","PPD","RSW","PP","BW","Spell"], rows, right_cols=(2,3,4,5,6)) + note, span=2)
