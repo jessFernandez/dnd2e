@@ -515,7 +515,7 @@ def generate_variant_picker(group, source_page, variant_names) -> str:
 def _document(title, body, extra_script="") -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>{esc(title)}</title>
-<style>{_CSS}</style></head>
+<style>{theme.css_vars()}{_CSS}</style></head>
 <body>
 {body}
 <script>
@@ -526,14 +526,14 @@ def _document(title, body, extra_script="") -> str:
 
 _CSS = f"""
   * {{ box-sizing: border-box; }}
-  body {{ margin: 0; background: #1a1c26; color: #c8cad8;
+  body {{ margin: 0; background: var(--bg); color: var(--text);
          font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 13px; }}
   .sheet {{ max-width: 1000px; margin: 0 auto; padding: 22px 24px 40px; }}
 
   header {{ border-bottom: 1px solid #2a2e3e; padding-bottom: 14px; margin-bottom: 18px; }}
   .title-row {{ display: flex; align-items: center; }}
   .title-row > * + * {{ margin-left: 12px; }}   /* QtWebEngine drops flex gap */
-  input.name {{ background: transparent; border: none; border-bottom: 1px dashed #3a3f58;
+  input.name {{ background: transparent; border: none; border-bottom: 1px dashed var(--border-strong);
     color: #f0ead2; font-family: Georgia, "Times New Roman", serif; font-size: 27px;
     font-weight: 700; padding: 2px 2px 4px; flex: 1; min-width: 0; }}
   input.name:focus {{ outline: none; border-bottom-color: {ACCENT}; }}
@@ -550,7 +550,7 @@ _CSS = f"""
   .tierbar > * + * {{ margin-left: 10px; }}   /* QtWebEngine drops flex gap */
   .tierlab {{ font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: {ACCENT}; }}
   .tiersel {{ background: #16181f; border: 1px solid {ACCENT}55; border-radius: 8px;
-    color: #e6e9f6; padding: 7px 10px; font-size: 12.5px; font-family: inherit; }}
+    color: var(--text-bright); padding: 7px 10px; font-size: 12.5px; font-family: inherit; }}
   .tiersel:focus {{ outline: none; border-color: {ACCENT}; }}
   .tiernote {{ font-size: 11px; color: {ACCENT}; }}
 
@@ -571,7 +571,7 @@ _CSS = f"""
     padding: 11px 8px; text-align: center; min-height: 78px; }}
   .tile-l {{ font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase;
     color: #6a708c; margin-bottom: 6px; }}
-  .tile-v {{ font-size: 16px; font-weight: 800; color: #e6e9f6;
+  .tile-v {{ font-size: 16px; font-weight: 800; color: var(--text-bright);
     font-variant-numeric: tabular-nums; line-height: 1.2; word-break: break-word; }}
 
   .grid {{ display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 20px; align-items: start; }}
@@ -583,7 +583,7 @@ _CSS = f"""
     gap: 8px; padding: 3px 0; }}
   .stat label {{ font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: #8189a8; }}
   input.sv {{ background: #16181f; border: 1px solid #2f3346; border-radius: 6px;
-    color: #e6e9f6; padding: 5px 8px; font-size: 12px; width: 100%; }}
+    color: var(--text-bright); padding: 5px 8px; font-size: 12px; width: 100%; }}
   input.sv:focus {{ outline: none; border-color: {ACCENT}88; }}
   .derived {{ font-size: 10px; color: {ACCENT}; background: {ACCENT}16; border: 1px solid {ACCENT}33;
     border-radius: 5px; padding: 2px 7px; white-space: nowrap; font-variant-numeric: tabular-nums; }}
@@ -600,10 +600,10 @@ _CSS = f"""
   /* ability / saving-throw chips indexing the Combat prose (Phase C) */
   .chips {{ display: flex; flex-wrap: wrap; margin: 0 0 10px -6px; }}   /* grid-less; child margins for Qt */
   .chip {{ display: inline-block; margin: 0 0 6px 6px; padding: 3px 9px; border-radius: 11px;
-    font-size: 11px; font-weight: 600; background: #2a2e3e; border: 1px solid #3a3f58; color: #c8cad8; }}
+    font-size: 11px; font-weight: 600; background: #2a2e3e; border: 1px solid var(--border-strong); color: var(--text); }}
   .chip.save {{ background: {ACCENT}18; border-color: {ACCENT}44; color: {ACCENT}; }}
   /* spell-like ability links into the compendium (Phase D) */
-  a.chip.spell {{ text-decoration: none; background: #23263a; border-color: #3a3f58; color: #cdd3ec; }}
+  a.chip.spell {{ text-decoration: none; background: var(--bg-raised); border-color: var(--border-strong); color: #cdd3ec; }}
   a.chip.spell:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
   textarea.pr {{ width: 100%; min-height: 44px; overflow: hidden; resize: none;
     background: #16181f; border: 1px solid #2f3346; border-radius: 7px; color: #d3d7e6;
@@ -634,10 +634,10 @@ _CSS = f"""
   .actions {{ display: flex; flex-wrap: wrap; margin-top: 22px;
     border-top: 1px solid #2a2e3e; padding-top: 18px; }}
   .actions > * {{ margin: 0 10px 8px 0; }}   /* QtWebEngine drops flex gap */
-  .btn {{ text-decoration: none; background: {ACCENT}; color: #1a1c26; font-weight: 800;
+  .btn {{ text-decoration: none; background: {ACCENT}; color: var(--bg); font-weight: 800;
     border-radius: 8px; padding: 9px 18px; font-size: 12.5px; }}
-  .nav-btn {{ text-decoration: none; background: #262a40; border: 1px solid #3a3f58;
-    color: #e6e9f6; font-weight: 700; border-radius: 8px; padding: 9px 16px; font-size: 12.5px; }}
+  .nav-btn {{ text-decoration: none; background: var(--bg-high); border: 1px solid var(--border-strong);
+    color: var(--text-bright); font-weight: 700; border-radius: 8px; padding: 9px 16px; font-size: 12.5px; }}
   .nav-btn:hover {{ border-color: {ACCENT}66; }}
 
   /* import / saved-monster picker */
@@ -645,19 +645,19 @@ _CSS = f"""
     font-weight: 700; color: #f0ead2; }}
   .picker-sec {{ margin-bottom: 22px; }}
   .search {{ width: 100%; background: #16181f; border: 1px solid #2f3346; border-radius: 8px;
-    color: #e6e9f6; padding: 9px 12px; font-size: 13px; margin-bottom: 12px; }}
+    color: var(--text-bright); padding: 9px 12px; font-size: 13px; margin-bottom: 12px; }}
   .search:focus {{ outline: none; border-color: {ACCENT}88; }}
   .pick-list {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }}
-  .pick-item {{ display: block; text-decoration: none; background: #23263a; border: 1px solid #2f3346;
-    border-radius: 8px; padding: 9px 13px; color: #e6e9f6; font-size: 12.5px; }}
-  .pick-item:hover {{ border-color: {ACCENT}66; background: #262a40; }}
+  .pick-item {{ display: block; text-decoration: none; background: var(--bg-raised); border: 1px solid #2f3346;
+    border-radius: 8px; padding: 9px 13px; color: var(--text-bright); font-size: 12.5px; }}
+  .pick-item:hover {{ border-color: {ACCENT}66; background: var(--bg-high); }}
   .pick-item .count {{ float: right; font-size: 10.5px; font-weight: 700; color: #8189a8;
     background: #16181f; border: 1px solid #2f3346; border-radius: 10px; padding: 0 8px; }}
   .pick-item.general {{ color: {ACCENT}; border-color: {ACCENT}44; background: {ACCENT}12; }}
   .subcat {{ margin-top: 16px; }}
   .subcat-h {{ font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
     color: #8189a8; margin: 0 0 8px; border-left: 2px solid {ACCENT}66; padding-left: 8px; }}
-  .srow {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
+  .srow {{ display: flex; align-items: center; background: var(--bg-raised); border: 1px solid #2f3346;
     border-radius: 8px; }}
   .srow .load {{ flex: 1; background: transparent; border: none; }}
   .srow:hover {{ border-color: {ACCENT}66; }}

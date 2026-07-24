@@ -8,11 +8,12 @@ masonry-packed and colour-coded by school.
 """
 import slugs
 from view_common import esc
+import theme
 
 
 # School accent colours (readable on the dark background, both casters share them).
 SCHOOL_COLORS = {
-    "Abjuration":  "#5b9bd5",
+    "Abjuration":  "var(--info)",
     "Alteration":  "#3fb6a0",
     "Conjuration": "#d99a3f",
     "Divination":  "#9b8cce",
@@ -51,7 +52,7 @@ def _stat(label: str, value: str) -> str:
 
 def _card(s: dict, anchor: str = "") -> str:
     school = s.get("school") or ""
-    color = SCHOOL_COLORS.get(school, "#8b93b8")
+    color = SCHOOL_COLORS.get(school, "var(--text-muted)")
     caster = (s.get("caster") or "").capitalize()
     comps = "".join(f"<i>{esc(c.strip())}</i>" for c in (s.get("components") or "").split(",") if c.strip())
     spheres, specs = (s.get("spheres") or ""), (s.get("specializations") or "")
@@ -125,7 +126,7 @@ def generate(spells) -> str:
     level_pills = "".join(f'<button class="pill lvl" data-k="{i}">{i}</button>' for i in range(1, 10))
 
     return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Spells</title><style>{_CSS}</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>Spells</title><style>{theme.css_vars()}{_CSS}</style></head>
 <body>
 <div class="top">
   <div class="row1">
@@ -158,7 +159,7 @@ def generate(spells) -> str:
 
 _CSS = """
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #14151d; color: #c8cad8; font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; }
+body { background: #14151d; color: var(--text); font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; }
 a { color: inherit; }
 
 /* Vertical row spacing uses margins, not flex `gap`, which this webengine drops. */
@@ -166,31 +167,31 @@ a { color: inherit; }
        padding: 11px 16px; display: flex; flex-direction: column; }
 .row1 > * + * { margin-left: 14px; }
 .row1 { display: flex; align-items: center; margin-bottom: 14px; }
-.brand { font-size: 15px; font-weight: 800; color: #c9a84c; letter-spacing: .02em; white-space: nowrap; }
-.brand .tot { font-size: 11px; font-weight: 600; color: #5a6080; margin-left: 8px; letter-spacing: .04em; }
-#q { flex: 1; min-width: 160px; background: #21243a; border: 1px solid #383c52; border-radius: 7px;
-     color: #e6e9f6; padding: 8px 13px; font-size: 13px; outline: none; }
-#q:focus { border-color: #c9a84c; }
-.count { font-size: 11px; color: #8891b5; font-weight: 700; white-space: nowrap; min-width: 66px; text-align: right; }
+.brand { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: .02em; white-space: nowrap; }
+.brand .tot { font-size: 11px; font-weight: 600; color: var(--text-faint); margin-left: 8px; letter-spacing: .04em; }
+#q { flex: 1; min-width: 160px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 7px;
+     color: var(--text-bright); padding: 8px 13px; font-size: 13px; outline: none; }
+#q:focus { border-color: var(--accent); }
+.count { font-size: 11px; color: var(--text-label); font-weight: 700; white-space: nowrap; min-width: 66px; text-align: right; }
 
 .row2 > * { margin: 0 16px 16px 0; }
 .row2 { display: flex; align-items: center; flex-wrap: wrap; margin-bottom: 9px; }
 .row2:last-child { margin-bottom: 0; }
-.seg { display: inline-flex; background: #21243a; border: 1px solid #383c52; border-radius: 8px; overflow: hidden; }
+.seg { display: inline-flex; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { background: transparent; border: 0; color: #aeb4d0; padding: 6px 15px; font-size: 12px;
               font-weight: 700; cursor: pointer; letter-spacing: .03em; }
-.seg button.on { background: #c9a84c; color: #17130a; }
+.seg button.on { background: var(--accent); color: #17130a; }
 .grp > * { margin: 0 5px 5px 0; }
 .grp { display: flex; align-items: center; flex-wrap: wrap; }
 .grp .lbl { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: #565c7d; margin-right: 3px; }
 #catwrap { padding-top: 0; }
 .cat[hidden] { display: none !important; }   /* beat .grp's display:flex */
-.pill { background: #21243a; border: 1px solid #363a52; border-radius: 20px; color: #b8bcd4;
+.pill { background: var(--bg-panel); border: 1px solid #363a52; border-radius: 20px; color: #b8bcd4;
         padding: 4px 11px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex;
         align-items: center; transition: background .1s, border-color .1s; }
 .pill .dot { margin-right: 6px; }  /* QtWebEngine drops flex gap */
 .pill:hover { background: #2b2f47; }
-.pill.on { background: #2f3350; border-color: #c9a84c; color: #f0e4c0; }
+.pill.on { background: #2f3350; border-color: var(--accent); color: #f0e4c0; }
 .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
 /* Level pills are single digits — keep them tight. Spacing via margin, not flex
    `gap` (this webengine renders gap far larger than specified). */
@@ -203,14 +204,14 @@ a { color: inherit; }
    fits is clamped with a "more" toggle that expands just that card. */
 #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
         gap: 14px; align-items: start; }
-#empty { display: none; text-align: center; color: #5a6080; padding: 60px 0; font-size: 14px; }
+#empty { display: none; text-align: center; color: var(--text-faint); padding: 60px 0; font-size: 14px; }
 
 .card { height: 402px; background: #1e2133;
         border: 1px solid #2b2f47; border-left: 3px solid var(--sc); border-radius: 10px;
         overflow: hidden; display: flex; flex-direction: column;
         scroll-margin-top: 92px; }   /* clear the sticky header when jumped to via #anchor */
 .card.open { height: auto; }
-.card.target { border-color: #c9a84c; box-shadow: 0 0 0 2px #c9a84c66; }
+.card.target { border-color: var(--accent); box-shadow: 0 0 0 2px #c9a84c66; }
 /* NB: QtWebEngine (Chromium 87) drops flexbox `gap` here, so the badge/text
    spacing is set with an explicit margin instead. */
 .chead { display: flex; align-items: center; padding: 11px 13px 10px; }
@@ -226,8 +227,8 @@ a { color: inherit; }
           padding: 1px 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .04em; margin-left: 3px; }
 .comp i:first-child { margin-left: 0; }
 
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #2a2e45;
-         border-top: 1px solid #2a2e45; border-bottom: 1px solid #2a2e45; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border-soft);
+         border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
 .st > * + * { margin-top: 1px; }
 .st { background: #191c2c; padding: 6px 13px; display: flex; flex-direction: column; }
 .st span { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #616784; }
@@ -241,7 +242,7 @@ a { color: inherit; }
 .desc::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
                background: linear-gradient(transparent, #1e2133); pointer-events: none; }
 .card.open .desc::after, .card.short .desc::after { display: none; }
-.more { align-self: flex-start; margin: 0 13px 8px; background: none; border: 0; color: #c9a84c;
+.more { align-self: flex-start; margin: 0 13px 8px; background: none; border: 0; color: var(--accent);
         font-size: 11px; font-weight: 700; cursor: pointer; padding: 3px 0; }
 .more::after { content: " ▾"; }
 .card.short .more { display: none; }

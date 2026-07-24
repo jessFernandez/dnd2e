@@ -16,24 +16,27 @@ that appear in three or more view modules; a colour used by one screen is that
 screen's business and stays there (of ~237 distinct colours in the view layer, 178
 appear in exactly one file).
 
-## Why the CSS still has hex literals in it
+## How the screens get these colours
 
-This module is the *reference*, not yet the single source, and that's deliberate.
-Most of the view layer's CSS sits in plain (non-f) triple-quoted strings, where
-interpolating `{TEXT}` would render the brace literally instead of substituting —
-a silent visual break, and one the tests wouldn't catch, since they assert on
-structure and content rather than colour. Converting those blocks to f-strings means
-escaping every brace in a stylesheet, which is a large edit with no way to verify
-the result short of looking at the running app.
+Through `css_vars()`, which emits a `:root { --text: …; }` block for a screen to
+prepend to its `<style>`; the stylesheets then say `var(--text)`. That indirection
+is not decoration — it is what made the migration possible at all. Most of the view
+layer's CSS sits in plain (non-f) triple-quoted strings, where interpolating
+`{TEXT}` would render the brace literally instead of substituting, so converting
+those blocks to f-strings would have meant escaping every brace in every stylesheet.
+`var(--x)` passes through a plain string untouched, so each declaration could be
+swapped in place with no reformatting. QtWebEngine is Chromium-based and has
+supported custom properties for years; the splash screen shipped using them first,
+which is what showed the route was safe.
 
-The safe route, when someone wants it, is CSS custom properties: emit a
-`:root { --text: …; }` block from here and have the stylesheets say `var(--text)`.
-`var(--x)` survives a plain string untouched, so that migration can be done a screen
-at a time. QtWebEngine is Chromium-based and has supported custom properties since
-long before the version this ships against. Recorded in docs/audit-2-plan.md finding 5.
+Only the colours used by three or more view modules live in `CSS_VARS`. A colour one
+screen uses is that screen's business and stays a literal in its own stylesheet —
+which is why hex has not disappeared from the view layer and shouldn't.
 
-Until then: **when you add a colour that another screen already uses, take it from
-here.** Everything below is already deduplicated; the CSS blocks are the backlog.
+**When you add a colour another screen already uses, take it from here** — and if it
+reaches a third screen, give it a name in `CSS_VARS` rather than a third literal.
+The migration was verified colour-neutral by rendering every screen before and
+after and comparing with the custom properties resolved back to their values.
 """
 from dataclasses import dataclass
 
@@ -76,6 +79,12 @@ BORDER_STRONG = "#3a3f58"
 #: The app's gold. The builder's accent, the search focus ring, the DM-screen rules.
 #: Also read by app.py to tint the sidebar's builder entry.
 ACCENT = "#c9a84c"
+
+#: Secondary text on a raised surface — table headers, card sub-labels. Between
+#: TEXT_MUTED and TEXT_STRONG; shared by the Actions, Spells and card-grid screens.
+TEXT_LABEL = "#8891b5"
+#: The inset well a card's body sits in, one step darker than BG_PANEL.
+BG_INSET = "#1c1f32"
 
 # ── status / category colours ────────────────────────────────────────────────
 #
@@ -130,6 +139,54 @@ BOOK_ORDER = ("PHB", "DMG", "MM", "SP", "HLC", "TM", "SM", "CT", "AEG", "ECO")
 DEFAULT_ITEM_COLOR = "#1a1d24"
 DEFAULT_TREE_COLOR = "#c9ccd6"
 DEFAULT_ACCENT_COLOR = ACCENT
+
+
+# ── the palette as CSS custom properties ─────────────────────────────────────
+
+#: CSS custom-property name -> the constant above it stands for. Only the colours
+#: that appear in three or more view modules are here; a colour one screen uses is
+#: that screen's business and stays a literal in its own stylesheet.
+CSS_VARS = {
+    "text-bright": TEXT_BRIGHT,
+    "text-strong": TEXT_STRONG,
+    "text": TEXT,
+    "text-label": TEXT_LABEL,
+    "text-muted": TEXT_MUTED,
+    "text-dim": TEXT_DIM,
+    "text-faint": TEXT_FAINT,
+    "bg-deepest": BG_DEEPEST,
+    "bg": BG,
+    "bg-inset": BG_INSET,
+    "bg-panel": BG_PANEL,
+    "bg-raised": BG_RAISED,
+    "bg-high": BG_HIGH,
+    "border-soft": BORDER_SOFT,
+    "border": BORDER,
+    "border-strong": BORDER_STRONG,
+    "accent": ACCENT,
+    "danger": DANGER,
+    "warning": WARNING,
+    "success": SUCCESS,
+    "info": INFO,
+    "special": SPECIAL,
+}
+
+
+def css_vars() -> str:
+    """A ``:root { --text: …; }`` block declaring the shared palette.
+
+    This is what turns the module from a *reference* into the single source the
+    docstring above wanted. The obstacle was never QtWebEngine — it is Chromium and
+    has supported custom properties for years — but that most of the view layer's
+    CSS lives in plain (non-f) triple-quoted strings, where interpolating ``{TEXT}``
+    would render the brace literally. ``var(--text)`` passes through such a string
+    untouched, so a stylesheet can be migrated a declaration at a time with no
+    escaping and no reformatting.
+
+    Prepend it to a screen's ``<style>`` and use ``var(--name)`` in the CSS below.
+    """
+    body = " ".join(f"--{name}: {value};" for name, value in CSS_VARS.items())
+    return ":root { " + body + " }\n"
 
 
 def book(code: str):

@@ -136,3 +136,81 @@ def test_a_spell_link_lands_on_the_anchor_the_compendium_emits():
     assert dest == "spells#" + slugs.spell_anchor(name)
     # and the destination classifies to the compendium at that fragment
     assert navigation.route_destination(dest) == navigation.Spells(slugs.spell_anchor(name))
+
+
+# ── the palette as CSS custom properties ─────────────────────────────────────
+#
+# theme.py was a *reference* the view layer was asked to copy from by hand, which is
+# why 247 hex literals accumulated and ACCENT was typed out 37 times. The obstacle
+# was never QtWebEngine -- it is Chromium and has supported custom properties for
+# years -- but that most view CSS lives in plain (non-f) triple-quoted strings,
+# where interpolating `{TEXT}` renders the brace literally. `var(--text)` passes
+# through such a string untouched, which is what made the migration possible.
+
+def test_css_vars_declares_every_named_colour():
+    block = theme.css_vars()
+    assert block.startswith(":root {")
+    for name, value in theme.CSS_VARS.items():
+        assert f"--{name}: {value};" in block
+
+
+def test_css_vars_values_are_the_constants_not_copies():
+    """Each entry must *be* the module constant, so retheming one place moves the
+    screens too. A hand-typed duplicate here would defeat the whole exercise."""
+    named = {v for k, v in vars(theme).items()
+             if k.isupper() and isinstance(v, str) and v.startswith("#")}
+    for name, value in theme.CSS_VARS.items():
+        assert value in named, f"--{name} is not one of theme.py's own constants"
+
+
+def test_every_var_a_view_uses_is_declared_somewhere():
+    """A `var(--typo)` renders as *nothing* — no error, no warning, just an element
+    with that property unset. Every custom property a view reads must therefore be
+    declared: either by theme.CSS_VARS (the shared palette) or by the module itself.
+
+    Screen-local properties are legitimate and common — the splash sets `--c` per
+    tool tile and `--blue`/`--red` on the body, the spells screen sets `--sc` per
+    card — so the rule is "declared somewhere", not "in the palette". Checking that
+    a module assigns what it reads keeps this honest without an exception list that
+    would quietly absorb a genuine typo.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(theme.__file__).parent
+    palette = set(theme.CSS_VARS)
+    undeclared = {}
+    for path in list(root.glob("*_html.py")) + [root / "screen_common.py"]:
+        source = path.read_text(encoding="utf-8")
+        local = set(re.findall(r"--([a-z0-9-]+)\s*:", source))     # set by this module
+        for name in set(re.findall(r"var\(\s*--([a-z0-9-]+)\s*\)", source)):
+            if name not in palette and name not in local:
+                undeclared.setdefault(path.name, set()).add(name)
+    assert undeclared == {}, (
+        f"var() names nothing declares: {undeclared} — these render as unset")
+
+
+def test_a_screen_that_uses_vars_also_emits_the_root_block():
+    """Using var() without the declarations is the one way this migration can fail
+    silently: the page renders with every themed colour missing."""
+    import charactermancer_html
+    import monster_html
+    import spellsscreen_html
+    import askscreen_html
+    import actionsscreen_html
+    import dmscreen_html
+    import proficiencies_html
+    from charactermancer import Charactermancer
+
+    pages = {
+        "charactermancer": charactermancer_html.generate(Charactermancer(), []),
+        "monster": monster_html.generate(__import__("monster").Monster(name="X")),
+        "spells": spellsscreen_html.generate([]),
+        "ask": askscreen_html.generate("ready", model="m", models=["m"]),
+        "actions": actionsscreen_html.generate(),
+        "dmscreen": dmscreen_html.generate(),
+        "proficiencies": proficiencies_html.generate(),
+    }
+    for name, html in pages.items():
+        if "var(--" in html:
+            assert ":root {" in html, f"{name} uses var() but declares no :root block"

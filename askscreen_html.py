@@ -1,5 +1,6 @@
 """askscreen_html.py — "Ask the Rules" page (local Ollama-powered rules Q&A)."""
 import re
+import theme
 from view_common import esc
 
 
@@ -62,35 +63,35 @@ def render_markdown(md: str) -> str:
 
 _CSS = """
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #1a1c26; color: #c8cad8;
+  body { background: var(--bg); color: var(--text);
          font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
   .wrap { max-width: 820px; margin: 0 auto; padding: 34px 28px 70px; }
   .hero { text-align: center; margin-bottom: 22px; }
-  .hero h1 { font-size: 26px; color: #c9a84c; letter-spacing: .02em; font-family: Georgia, serif; }
-  .hero p { color: #5a6080; font-size: 12.5px; margin-top: 6px; letter-spacing: .02em; }
+  .hero h1 { font-size: 26px; color: var(--accent); letter-spacing: .02em; font-family: Georgia, serif; }
+  .hero p { color: var(--text-faint); font-size: 12.5px; margin-top: 6px; letter-spacing: .02em; }
 
   .askbar > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
   .askbar { display: flex; margin-bottom: 10px; }
-  #q { flex: 1; background: #23263a; border: 1px solid #383c52; border-radius: 9px;
-       color: #e6e9f6; padding: 12px 15px; font-size: 15px; outline: none; }
-  #q:focus { border-color: #c9a84c; }
-  .btn { background: #c9a84c; color: #1a1c26; border: none; border-radius: 9px;
+  #q { flex: 1; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 9px;
+       color: var(--text-bright); padding: 12px 15px; font-size: 15px; outline: none; }
+  #q:focus { border-color: var(--accent); }
+  .btn { background: var(--accent); color: var(--bg); border: none; border-radius: 9px;
          padding: 0 20px; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .02em; }
   .btn:hover { background: #d8b968; }
 
   .meta > * { margin: 0 10px 0 0; }  /* QtWebEngine drops flex gap */
   .meta { display: flex; align-items: center; flex-wrap: wrap;
-          color: #5a6080; font-size: 11.5px; margin-bottom: 24px; }
-  .meta select { background: #23263a; color: #c8cad8; border: 1px solid #383c52;
+          color: var(--text-faint); font-size: 11.5px; margin-bottom: 24px; }
+  .meta select { background: var(--bg-raised); color: var(--text); border: 1px solid var(--border);
                  border-radius: 6px; padding: 4px 8px; font-size: 11.5px; outline: none; }
-  .meta a { color: #6b7290; } .meta a:hover { color: #c9a84c; }
+  .meta a { color: var(--text-dim); } .meta a:hover { color: var(--accent); }
   .pill { background: #17301f; color: #6cc48a; border: 1px solid #244a33;
           border-radius: 20px; padding: 1px 9px; font-weight: 600; }
 
-  .card { background: #21243a; border: 1px solid #2a2e45; border-radius: 12px;
+  .card { background: var(--bg-panel); border: 1px solid var(--border-soft); border-radius: 12px;
           padding: 20px 22px; margin-top: 18px; }
-  .q-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7290; margin-bottom: 6px; }
-  .q-text { font-size: 16px; color: #e6e9f6; font-weight: 600; line-height: 1.45; }
+  .q-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+  .q-text { font-size: 16px; color: var(--text-bright); font-weight: 600; line-height: 1.45; }
 
   .stream { white-space: pre-wrap; color: #aeb4c8; font-size: 14px; line-height: 1.7; margin-top: 14px; }
   .status-row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
@@ -99,7 +100,7 @@ _CSS = """
   .stopbtn { color: #e6a0a8; border: 1px solid #5c2a30; border-radius: 6px; padding: 3px 12px;
              font-size: 11.5px; font-weight: 600; text-decoration: none; }
   .stopbtn:hover { background: #2a1518; border-color: #e6a0a8; }
-  .spinner { width: 15px; height: 15px; border: 2px solid #3a3f58; border-top-color: #c9a84c;
+  .spinner { width: 15px; height: 15px; border: 2px solid var(--border-strong); border-top-color: var(--accent);
              border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -109,22 +110,22 @@ _CSS = """
   .answer p { margin: 0 0 12px; }
   .answer ul, .answer ol { margin: 0 0 12px 22px; } .answer li { margin-bottom: 5px; }
   .answer a { color: #e0b85a; text-decoration: none; border-bottom: 1px solid #5a4a1c; }
-  .answer a:hover { color: #f0d488; border-bottom-color: #c9a84c; }
-  .answer code { background: #171926; border: 1px solid #2a2e45; border-radius: 4px;
+  .answer a:hover { color: #f0d488; border-bottom-color: var(--accent); }
+  .answer code { background: #171926; border: 1px solid var(--border-soft); border-radius: 4px;
                  padding: 1px 5px; font-family: Consolas, monospace; font-size: 12.5px; color: #d4b46a; }
-  .answer blockquote { border-left: 3px solid #c9a84c; padding: 4px 14px; margin: 0 0 12px;
+  .answer blockquote { border-left: 3px solid var(--accent); padding: 4px 14px; margin: 0 0 12px;
                        color: #aab0c8; background: #1c1f30; border-radius: 4px; }
   .disclaimer { color: #4a5070; font-size: 11px; margin-top: 22px; font-style: italic; text-align: center; }
 
-  .setup { max-width: 580px; margin: 34px auto 0; background: #21243a;
-           border: 1px solid #2a2e45; border-radius: 12px; padding: 26px 26px 24px; }
-  .setup h2 { color: #e6e9f6; font-size: 16px; margin-bottom: 10px; }
+  .setup { max-width: 580px; margin: 34px auto 0; background: var(--bg-panel);
+           border: 1px solid var(--border-soft); border-radius: 12px; padding: 26px 26px 24px; }
+  .setup h2 { color: var(--text-bright); font-size: 16px; margin-bottom: 10px; }
   .setup p { color: #8890b0; font-size: 12.5px; line-height: 1.6; margin-bottom: 14px; }
   .setup ol { margin: 0 0 14px 20px; color: #b8bccf; font-size: 12.5px; line-height: 1.8; }
-  .setup code, .cmd { background: #171926; border: 1px solid #2a2e45; border-radius: 5px;
+  .setup code, .cmd { background: #171926; border: 1px solid var(--border-soft); border-radius: 5px;
                       padding: 2px 7px; font-family: Consolas, monospace; font-size: 12.5px; color: #d4b46a; }
-  .setup a { color: #c9a84c; }
-  .setup a.btn { color: #1a1c26; }
+  .setup a { color: var(--accent); }
+  .setup a.btn { color: var(--bg); }
   .setup .row > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
   .setup .row { display: flex; align-items: center; margin-top: 6px; }
   .err { background: #2a1518; border: 1px solid #5c2a30; color: #e6a0a8; border-radius: 9px;
@@ -203,7 +204,7 @@ def _error_card(q: str, error: str) -> str:
 def _page(body: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Jarvis — AD&D 2e</title><style>{_CSS}</style></head>
+<title>Jarvis — AD&D 2e</title><style>{theme.css_vars()}{_CSS}</style></head>
 <body><div class="wrap">
   <div class="hero"><h1>✦ Jarvis</h1>
     <p>At your service. I've read every 2e rulebook — and your house rules — so you don't have to flip a single page.</p>
@@ -232,7 +233,7 @@ def generate(state: str, *, model: str = "llama3.1", models=None,
                 <li>Come back and click <b>Refresh</b>.</li>
               </ol>
               <div class="row"><a class="btn" href="dnd:///ask-refresh" style="text-decoration:none;padding:9px 18px;">Refresh</a>
-                <span style="color:#5a6080;font-size:12px;">Ollama not detected yet.</span></div>
+                <span style="color:var(--text-faint);font-size:12px;">Ollama not detected yet.</span></div>
             </div>"""
         else:
             body = """
