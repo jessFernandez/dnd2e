@@ -81,9 +81,14 @@ jobs:
       # nonweapon_proficiencies.csv and forgetting to regenerate, leaving the
       # source and the shipped module quietly disagreeing.
       #
-      # Only these two generators run here. build_spells.py and build_toc_tree.py
-      # fetch from regalgoblins.com, so they cannot run in CI and are not gated.
-      # Both of these read committed files and use only the stdlib.
+      # build_splash_assets.py joins them on the same terms: stdlib only, reads
+      # two committed files (assets/adnd2e-logo.png, assets/DeathStar.otf), and
+      # byte-for-byte deterministic. Its failure mode is the same one -- replace
+      # the logo art, forget to regenerate, and the shipped splash keeps showing
+      # the old picture with nothing to catch it.
+      #
+      # build_spells.py and build_toc_tree.py stay ungated: they fetch from
+      # regalgoblins.com, so they cannot run in CI at all.
       #
       # ubuntu only, deliberately: Python's text mode writes CRLF on Windows, so
       # running this on both legs would test git's autocrlf, not the generators.
@@ -92,7 +97,8 @@ jobs:
         run: |
           python scripts/build_items.py
           python scripts/build_nwp_book.py
-          git diff --exit-code -- equipment.py nonweapon_book.py
+          python scripts/build_splash_assets.py
+          git diff --exit-code -- equipment.py nonweapon_book.py splash_assets.py
 
       # Windows is the platform this ships on: app.py's _user_data_dir() reads
       # APPDATA first, so the primary branch of that path only ever executes here.
