@@ -2056,6 +2056,18 @@ class MainWindow(QMainWindow):
         self._update_nav_buttons()
         self._update_bookmark_btn()
 
+    #: Destinations whose content is window-level state rather than a fixed
+    #: document, so a tab showing one can be *out of date* when you return to it.
+    #: The builder and the monster sheet both render from a single object
+    #: (self._cm / self._mon) that another tab may have moved on.
+    #:
+    #: "ask" is deliberately absent. Its render is not a read — _render_ask stops any
+    #: in-flight generation and calls Conversation.reset(), because arriving at the
+    #: Jarvis page is how you start a fresh conversation. Re-running it on a tab
+    #: switch would throw the reader's Q&A thread away and cancel an answer still
+    #: streaming, which is a good deal worse than the stale page it would fix.
+    LIVE_DESTINATIONS = frozenset({"charactermancer", "monster", "monster-sheet"})
+
     def _on_tab_changed(self, idx: int):
         """Sync UI state when the active tab changes — on a switch, and when
         closing a tab hands focus to another."""
@@ -2073,6 +2085,30 @@ class MainWindow(QMainWindow):
             self._hide_sidebar()
         if ctx.current_page_url:
             self._sync_tree_selection(ctx.current_page_url)
+        self._refresh_live_tab(ctx, dest)
+
+    def _refresh_live_tab(self, ctx, dest: str):
+        """Re-render a tab whose content is live window state, on returning to it.
+
+        The builder, the monster sheet and Jarvis are *addressable per tab* — each is
+        a destination, Back works, a second tab can navigate to one — but there is a
+        single build, a single monster and a single conversation behind them. Acting
+        in one tab therefore moved state the other tab's DOM was already drawn from,
+        and nothing redrew it: you could leave a builder tab at "Class", advance the
+        build to "Spells" in another, come back, and be looking at a page that no
+        longer described the character. Editing from that stale page acted on the
+        real build, not the one on screen.
+
+        Re-rendering on arrival keeps the promise the tab model makes. It does not
+        make the state per-tab — two builder tabs are deliberately two windows onto
+        one character, which is what a single-user tool wants; they are simply never
+        allowed to disagree about it now.
+
+        No history entry: arriving at a tab is not navigation, and _render_destination
+        is the side effect alone (_navigate is what pushes).
+        """
+        if dest in self.LIVE_DESTINATIONS:
+            self._render_destination(dest)
 
     def _set_tab_title(self, title: str):
         """Update the active tab's label, truncating if needed."""
