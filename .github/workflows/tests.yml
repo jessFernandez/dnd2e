@@ -82,7 +82,7 @@ jobs:
       # source and the shipped module quietly disagreeing.
       #
       # build_splash_assets.py joins them on the same terms: stdlib only, reads
-      # two committed files (assets/adnd2e-logo.png, assets/DeathStar.otf), and
+      # two committed files (assets/adnd2e-logo.png, assets/Caudex-Bold.ttf), and
       # byte-for-byte deterministic. Its failure mode is the same one -- replace
       # the logo art, forget to regenerate, and the shipped splash keeps showing
       # the old picture with nothing to catch it.

@@ -1,7 +1,7 @@
 """splash_html.py — Welcome / landing screen for the D&D 2E app.
 
 The home screen is styled around the campaign's AD&D 2nd Edition logo. The matted
-logo art and the Death Star display font are embedded as inline `data:` URIs (from
+logo art and the Caudex Bold display face are embedded as inline `data:` URIs (from
 the generated `splash_assets` module) so the screen ships offline — the app makes
 no network requests. See `scripts/build_splash_assets.py` for how those are baked.
 
@@ -98,7 +98,7 @@ a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius
   filter: drop-shadow(0 6px 16px rgba(0,0,0,.6)); }
 
 .subtitle {
-  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 15px; letter-spacing: .24em; margin: 22px 0 0; color: #eaf3ff;
   text-shadow: 0 0 3px rgba(120,175,255,.95), 0 0 11px rgba(58,134,255,.85),
                0 0 24px rgba(47,111,214,.55);
@@ -129,7 +129,7 @@ a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius
               0 0 46px -12px var(--c);
 }
 .neon .nm {
-  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 22px; letter-spacing: .03em; color: #fff; text-align: center;
   text-shadow: 0 0 9px var(--c), 0 0 2px var(--c);
 }
@@ -141,7 +141,7 @@ a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius
   border-radius: 9px; text-align: center; background: rgba(4,7,14,.42);
   box-shadow: inset 0 0 12px -6px var(--blue), 0 0 12px -3px var(--blue);
 }
-.browse .nm { font-family: "Death Star", "Arial Black", Impact, sans-serif;
+.browse .nm { font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 18px; letter-spacing: .03em; color: #fff; text-shadow: 0 0 9px var(--blue); }
 .browse .ticks { display: flex; justify-content: center; margin-top: 9px; flex-wrap: wrap; }
 .browse .ticks a { display: block; width: 42px; height: 8px; margin: 3px; border-radius: 2px;
@@ -177,12 +177,16 @@ def generate() -> str:
     # `font-display: swap` is load-bearing, not a nicety. Without it Chromium applies
     # the default `auto`, whose *block period* leaves any text in this family
     # invisible until the font is ready — and the family covers the subtitle, all six
-    # tile names and "Browse Books", i.e. every word on the screen. Decoding 40 KB of
-    # base64 OTF therefore showed a frame and a logo above a blank space for the best
-    # part of a second. With `swap` the text paints immediately in Arial Black (the
-    # declared fallback) and re-renders in Death Star the moment it arrives.
-    css = ('@font-face { font-family: "Death Star"; src: url("' + FONT_DATA_URI
-           + '") format("opentype"); font-weight: 400; font-style: normal;'
+    # tile names and "Browse Books", i.e. every word on the screen.
+    #
+    # It matters more with Caudex than it did before: this is a full 432 KB TTF, 576 KB
+    # once base64'd, and it measurably costs 60–100 ms per load (637 KB page vs 61 KB
+    # with the face stripped). `swap` makes that cost invisible — text paints
+    # immediately in Georgia, the declared fallback, and re-renders in Caudex when it
+    # arrives. Subsetting to the ~30 glyphs actually used would remove most of the
+    # weight, but note the OFL Reserved Font Name: a subset may not be called Caudex.
+    css = ('@font-face { font-family: "Caudex"; src: url("' + FONT_DATA_URI
+           + '") format("truetype"); font-weight: 700; font-style: normal;'
            ' font-display: swap; }\n' + _STYLES)
 
     return f"""<!DOCTYPE html>
