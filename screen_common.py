@@ -8,40 +8,41 @@ their category metadata, their cards, and any small style tweaks (``css_extra``)
 """
 
 import re
+import theme
 
 # Chrome shared by every card-grid screen.  Screen-specific rules (card-body
 # padding, table-cell spacing, rule lists, section labels …) are appended after
 # this via ``css_extra`` and therefore win where they overlap.
 COMMON_CSS = """
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #1a1c26; font-family: "Segoe UI", system-ui, sans-serif;
-             font-size: 12px; color: #c8cad8; }
+      body { background: var(--bg); font-family: "Segoe UI", system-ui, sans-serif;
+             font-size: 12px; color: var(--text); }
       .top-bar > * + * { margin-top: 8px; }  /* QtWebEngine drops flex gap */
-      .top-bar { position: sticky; top: 0; z-index: 100; background: #13151f;
+      .top-bar { position: sticky; top: 0; z-index: 100; background: var(--bg-deepest);
                  border-bottom: 1px solid #2a2d3e; padding: 10px 14px;
                  display: flex; flex-direction: column; }
       .search-row > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
       .search-row { display: flex; align-items: center; }
-      #search { flex: 1; background: #23263a; border: 1px solid #383c52;
-                border-radius: 6px; color: #e0e2f0; padding: 7px 12px;
+      #search { flex: 1; background: var(--bg-raised); border: 1px solid var(--border);
+                border-radius: 6px; color: var(--text-strong); padding: 7px 12px;
                 font-size: 13px; outline: none; }
-      #search:focus { border-color: #c9a84c; }
-      #clear-btn { background: #23263a; border: 1px solid #383c52; border-radius: 6px;
+      #search:focus { border-color: var(--accent); }
+      #clear-btn { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 6px;
                    color: #9ca3c0; padding: 6px 12px; cursor: pointer; font-size: 12px; }
       #clear-btn:hover { background: #2d3048; }
       .cat-row > * { margin: 0 6px 6px 0; }  /* QtWebEngine drops flex gap */
       .cat-row { display: flex; flex-wrap: wrap; }
-      .cat-btn, #all-btn { background: #23263a; border: 1px solid #383c52;
-                           border-radius: 5px; color: #c8cad8; padding: 4px 10px;
+      .cat-btn, #all-btn { background: var(--bg-raised); border: 1px solid var(--border);
+                           border-radius: 5px; color: var(--text); padding: 4px 10px;
                            cursor: pointer; font-size: 11px; font-weight: 600;
                            letter-spacing: .04em; transition: background .1s; }
       .cat-btn:hover, .cat-btn.active,
       #all-btn:hover, #all-btn.active { background: #2d3048; }
-      .fold-btn { background: transparent; border: 1px solid #2a2e45; color: #7c85a8;
+      .fold-btn { background: transparent; border: 1px solid var(--border-soft); color: #7c85a8;
                   border-radius: 5px; padding: 4px 10px; cursor: pointer; font-size: 11px;
                   font-weight: 600; letter-spacing: .04em; }
       #collapse-all { margin-left: auto; }  /* push the fold controls to the right edge */
-      .fold-btn:hover { background: #23263a; color: #c8cad8; }
+      .fold-btn:hover { background: var(--bg-raised); color: var(--text); }
 
       /* ── Category sections (collapsible) ── */
       .screen { padding: 14px 0 28px; }
@@ -53,9 +54,9 @@ COMMON_CSS = """
                             background: var(--c); flex-shrink: 0; margin-right: 9px; }  /* QtWebEngine drops flex gap */
       .cat-header:hover .cat-name { color: #fff; }
       .cat-name { font-size: 12.5px; font-weight: 800; letter-spacing: .09em;
-                  text-transform: uppercase; color: #e6e9f6; }
-      .cat-count { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #8891b5;
-                   background: #1c1f32; border: 1px solid #2a2e45; border-radius: 9px;
+                  text-transform: uppercase; color: var(--text-bright); }
+      .cat-count { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--text-label);
+                   background: var(--bg-inset); border: 1px solid var(--border-soft); border-radius: 9px;
                    padding: 1px 8px; }
       .cat-chevron { margin-left: 10px; color: #6878a8; font-size: 11px; flex-shrink: 0;
                      transition: transform .15s ease; }
@@ -66,25 +67,25 @@ COMMON_CSS = """
       /* ── Card grid: JS masonry positions cards absolutely inside .grid ── */
       .grid { position: relative; }
       .card { position: absolute; top: 0; left: 0; width: 100%;
-              background: #21243a; border-radius: 7px; overflow: hidden;
-              border: 1px solid #2a2e45; }
+              background: var(--bg-panel); border-radius: 7px; overflow: hidden;
+              border: 1px solid var(--border-soft); }
       .card-head > * + * { margin-left: 8px; }  /* QtWebEngine drops flex gap */
       .card-head { display: flex; align-items: center; padding: 8px 10px;
-                   background: #1c1f32; }
+                   background: var(--bg-inset); }
       .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
       .card-title { font-size: 11px; font-weight: 700; letter-spacing: .07em;
-                    text-transform: uppercase; color: #e0e2f0; }
+                    text-transform: uppercase; color: var(--text-strong); }
       .card-body { padding: 10px; }
       .tscroll { overflow-x: auto; }
       table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
       th { background: #17192a; color: #a0a8cc; font-size: 10px; font-weight: 700;
            letter-spacing: .06em; text-transform: uppercase; padding: 5px 7px;
-           white-space: nowrap; border-bottom: 1px solid #2a2e45; }
-      td { padding: 6px 8px; border-bottom: 1px solid #23263a; color: #c0c4d8;
+           white-space: nowrap; border-bottom: 1px solid var(--border-soft); }
+      td { padding: 6px 8px; border-bottom: 1px solid var(--bg-raised); color: #c0c4d8;
            vertical-align: top; }
-      tr:hover td { background: #262a40; }
+      tr:hover td { background: var(--bg-high); }
       td.r, th.r { text-align: right; }
-      .note { color: #5a6080; font-size: 10.5px; font-style: italic;
+      .note { color: var(--text-faint); font-size: 10.5px; font-style: italic;
               margin-top: 8px; line-height: 1.5; }
 """
 
@@ -224,7 +225,7 @@ def render_sections(cards, cat_order, cat_labels, cat_colors) -> str:
         items = groups.get(cat)
         if not items:
             continue
-        color = cat_colors.get(cat, "#8b93b8")
+        color = cat_colors.get(cat, "var(--text-muted)")
         label = cat_labels.get(cat, cat.title())
         out.append(
             f'<section class="cat-section" data-cat="{cat}">'
@@ -247,7 +248,7 @@ def page(title: str, css_extra: str, cat_buttons: str, body_html: str,
 <head>
 <meta charset="utf-8">
 <title>{title}</title>
-<style>{COMMON_CSS}{css_extra}</style>
+<style>{theme.css_vars()}{COMMON_CSS}{css_extra}</style>
 </head>
 <body>
 <div class="top-bar">

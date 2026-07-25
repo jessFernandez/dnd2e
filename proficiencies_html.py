@@ -97,9 +97,9 @@ def generate() -> str:
         sections += f'<section><h2 id="letter-{L}">{L}</h2>{cards}</section>'
 
     return f"""<!doctype html>
-<html><head><meta charset="utf-8"><style>
+<html><head><meta charset="utf-8"><style>{theme.css_vars()}
   * {{ box-sizing: border-box; }}
-  body {{ margin: 0; background: #14151d; color: #c8cad8;
+  body {{ margin: 0; background: #14151d; color: var(--text);
          font-family: "Segoe UI", system-ui, sans-serif; line-height: 1.55;
          padding: 32px 40px 80px; }}
   header {{ border-bottom: 1px solid #2a2e40; padding-bottom: 18px; margin-bottom: 8px; }}
@@ -118,7 +118,7 @@ def generate() -> str:
        padding: 24px 0 6px; margin: 0 0 12px; scroll-margin-top: 60px; }}
   .prof {{ background: #1b1e2b; border: 1px solid #2a2e40; border-radius: 10px;
           padding: 14px 18px; margin: 0 0 12px; scroll-margin-top: 62px; }}
-  .prof h3 {{ margin: 0 0 8px; font-size: 16px; color: #e6e9f6; }}
+  .prof h3 {{ margin: 0 0 8px; font-size: 16px; color: var(--text-bright); }}
   .badges {{ display: flex; flex-wrap: wrap; margin-bottom: 4px; }}
   .badge {{ font-size: 11px; color: #b9c0d8; background: #23273a; border: 1px solid #313650;
            border-radius: 20px; padding: 2px 10px; margin: 0 6px 6px 0; }}

@@ -19,6 +19,7 @@ import char_rules as cr
 from charactermancer import STEPS, STEP_TITLES
 from charactermancer_common import ABBR, ACCENT, budget_bar
 from view_common import esc
+import theme
 from charactermancer_profs_html import _nonweapon_body, _weapons_body
 
 
@@ -1212,7 +1213,7 @@ def generate(cm, saved=None) -> str:
 <head>
 <meta charset="utf-8">
 <title>Charactermancer</title>
-<style>{_CSS}</style>
+<style>{theme.css_vars()}{_CSS}</style>
 </head>
 <body>
 {generate_wrap(cm, saved)}
@@ -1226,14 +1227,14 @@ def generate(cm, saved=None) -> str:
 
 _CSS = f"""
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: #1a1c26; color: #c8cad8;
+  body {{ background: var(--bg); color: var(--text);
          font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 13px; }}
   .wrap {{ max-width: 940px; margin: 0 auto; padding: 30px 34px 40px; }}
   .head {{ margin-bottom: 22px; }}
   .tag {{ display: inline-block; background: {ACCENT}18; color: {ACCENT}; font-size: 10.5px;
          font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
          padding: 3px 10px; border-radius: 4px; margin-bottom: 10px; }}
-  h1 {{ font-size: 2em; font-weight: 800; color: #e6e9f6; }}
+  h1 {{ font-size: 2em; font-weight: 800; color: var(--text-bright); }}
 
   /* progress rail (grid, not flex-gap) */
   .rail {{ display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px;
@@ -1246,33 +1247,33 @@ _CSS = f"""
                text-align: center; color: #8891b0; }}
   a.rail-step:hover {{ border-color: {ACCENT}66; }}
   .rail-step.done {{ color: #9fb08a; }}
-  .rail-step.cur {{ background: {ACCENT}1c; border-color: {ACCENT}; color: #e6e9f6; }}
+  .rail-step.cur {{ background: {ACCENT}1c; border-color: {ACCENT}; color: var(--text-bright); }}
   .rn {{ display: inline-block; min-width: 18px; height: 18px; line-height: 18px; border-radius: 50%;
-        background: #2f3444; color: #c8cad8; font-size: 10px; font-weight: 800; margin-bottom: 5px; }}
-  .rail-step.cur .rn {{ background: {ACCENT}; color: #1a1c26; }}
+        background: #2f3444; color: var(--text); font-size: 10px; font-weight: 800; margin-bottom: 5px; }}
+  .rail-step.cur .rn {{ background: {ACCENT}; color: var(--bg); }}
   .rail-step.done .rn {{ background: #6f8a54; color: #12140d; }}
   .rl {{ font-size: 11px; font-weight: 600; letter-spacing: .02em; line-height: 1.25; }}
 
   .step {{ background: #1e202c; border: 1px solid #2a2e3e; border-radius: 12px;
           padding: 22px 24px; margin-bottom: 20px; }}
-  .step-h {{ font-size: 1.15em; font-weight: 700; color: #e6e9f6; margin-bottom: 16px;
+  .step-h {{ font-size: 1.15em; font-weight: 700; color: var(--text-bright); margin-bottom: 16px;
             padding-bottom: 12px; border-bottom: 1px solid #2a2e3e; }}
 
   /* abilities */
   .modes {{ display: inline-grid; grid-auto-flow: column; gap: 6px; margin-bottom: 16px; }}
   .mode {{ text-decoration: none; padding: 6px 14px; border-radius: 7px; font-weight: 600;
-          font-size: 12px; background: #23263a; border: 1px solid #383c52; color: #c8cad8; }}
-  .mode.on {{ background: {ACCENT}22; border-color: {ACCENT}; color: #e6e9f6; }}
+          font-size: 12px; background: var(--bg-raised); border: 1px solid var(--border); color: var(--text); }}
+  .mode.on {{ background: {ACCENT}22; border-color: {ACCENT}; color: var(--text-bright); }}
   .roll-area {{ margin-bottom: 18px; }}
-  .btn {{ display: inline-block; text-decoration: none; background: {ACCENT}; color: #1a1c26;
+  .btn {{ display: inline-block; text-decoration: none; background: {ACCENT}; color: var(--bg);
          font-weight: 700; font-size: 12.5px; padding: 9px 18px; border-radius: 8px; }}
   .btn:hover {{ filter: brightness(1.08); }}
   .pool {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px;
           margin: 14px 0 4px; }}
   .die {{ width: 34px; height: 34px; line-height: 34px; text-align: center; border-radius: 7px;
-         background: #262a40; border: 1px solid #3a3f58; color: #e6e9f6; font-weight: 800;
+         background: var(--bg-high); border: 1px solid var(--border-strong); color: var(--text-bright); font-weight: 800;
          font-size: 14px; }}
-  .hint {{ color: #6b7290; font-size: 11.5px; font-style: italic; margin-top: 6px; line-height: 1.5; }}
+  .hint {{ color: var(--text-dim); font-size: 11.5px; font-style: italic; margin-top: 6px; line-height: 1.5; }}
 
   /* Shell-level step + pinned side rail (overview + references). The body owns
      only the main column; the rail is shared across every step but Review. */
@@ -1283,10 +1284,10 @@ _CSS = f"""
   .side-rail {{ position: sticky; top: 16px; display: grid; gap: 14px; }}
   .ab-grid {{ display: grid; gap: 8px; }}
   .ab-row {{ display: grid; grid-template-columns: 96px 74px 1fr; align-items: center; gap: 12px;
-            background: #23263a; border: 1px solid #2f3346; border-radius: 8px; padding: 8px 12px; }}
-  .ab-name {{ font-weight: 700; color: #e0e2f0; font-size: 12.5px; }}
-  .ab-sum {{ color: #8b93b8; font-size: 11px; }}
-  select {{ background: #1a1c26; color: #e6e9f6; border: 1px solid #3a3f58; border-radius: 6px;
+            background: var(--bg-raised); border: 1px solid #2f3346; border-radius: 8px; padding: 8px 12px; }}
+  .ab-name {{ font-weight: 700; color: var(--text-strong); font-size: 12.5px; }}
+  .ab-sum {{ color: var(--text-muted); font-size: 11px; }}
+  select {{ background: var(--bg); color: var(--text-bright); border: 1px solid var(--border-strong); border-radius: 6px;
            padding: 5px 6px; font-size: 13px; outline: none; }}
   select:focus {{ border-color: {ACCENT}; }}
 
@@ -1296,19 +1297,19 @@ _CSS = f"""
   .side-sub {{ font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
               color: #7b83a6; margin: 12px 0 6px; }}
   .chips {{ display: flex; flex-wrap: wrap; }}
-  .chip {{ background: #262a40; border: 1px solid #363b54; border-radius: 20px; padding: 2px 10px;
+  .chip {{ background: var(--bg-high); border: 1px solid #363b54; border-radius: 20px; padding: 2px 10px;
           font-size: 11px; color: #cdd2e6; margin: 0 5px 5px 0; }}
   .warn {{ background: #3a2326; border: 1px solid #6b3b40; color: #e7b0b4; border-radius: 6px;
           padding: 6px 10px; font-size: 11px; margin-bottom: 10px; }}
 
   /* pick cards (race / class) */
   .pick-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 11px; }}
-  .pick-card {{ display: block; text-decoration: none; background: #23263a; border: 1px solid #2f3346;
-               border-radius: 10px; padding: 13px 14px; color: #c8cad8; }}
-  a.pick-card:hover {{ border-color: {ACCENT}66; background: #262a40; }}
+  .pick-card {{ display: block; text-decoration: none; background: var(--bg-raised); border: 1px solid #2f3346;
+               border-radius: 10px; padding: 13px 14px; color: var(--text); }}
+  a.pick-card:hover {{ border-color: {ACCENT}66; background: var(--bg-high); }}
   .pick-card.sel {{ border-color: {ACCENT}; background: {ACCENT}16; }}
   .pick-card.dis {{ opacity: .45; }}
-  .pc-name {{ font-weight: 800; font-size: 14px; color: #e6e9f6; margin-bottom: 5px; }}
+  .pc-name {{ font-weight: 800; font-size: 14px; color: var(--text-bright); margin-bottom: 5px; }}
   .pc-grp {{ font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
             color: {ACCENT}; background: {ACCENT}1c; border-radius: 4px; padding: 1px 6px;
             margin-left: 4px; vertical-align: middle; }}
@@ -1322,27 +1323,27 @@ _CSS = f"""
   /* summary panel */
   .sm-abgrid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-bottom: 12px; }}
   .sm-ab {{ display: flex; justify-content: space-between; font-size: 12px;
-           border-bottom: 1px solid #23263a; padding: 2px 0; }}
-  .sm-ab span:first-child {{ color: #8b93b8; }}
-  .sm-ab span:last-child {{ color: #e6e9f6; font-weight: 700; }}
+           border-bottom: 1px solid var(--bg-raised); padding: 2px 0; }}
+  .sm-ab span:first-child {{ color: var(--text-muted); }}
+  .sm-ab span:last-child {{ color: var(--text-bright); font-weight: 700; }}
   .adj {{ color: {ACCENT}; font-weight: 600; font-size: 10px; }}
   .sm-picks {{ margin-bottom: 4px; }}
   .sm-pick {{ display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; }}
-  .sm-pick span:first-child {{ color: #8b93b8; }}
-  .sm-pick span:last-child {{ color: #e0e2f0; font-weight: 600; }}
+  .sm-pick span:first-child {{ color: var(--text-muted); }}
+  .sm-pick span:last-child {{ color: var(--text-strong); font-weight: 600; }}
   .dstats {{ display: grid; gap: 3px; margin-bottom: 6px; }}
   .ds {{ display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }}
-  .ds span:first-child {{ color: #8b93b8; }}
-  .ds span:last-child {{ color: #e6e9f6; font-weight: 700; }}
+  .ds span:first-child {{ color: var(--text-muted); }}
+  .ds span:last-child {{ color: var(--text-bright); font-weight: 700; }}
   .ac-conds {{ margin: 4px 0 2px; padding-left: 4px; border-left: 2px solid #2f3350; }}
   .ac-cond {{ font-size: 11px; color: #9aa2c4; padding: 1px 0; line-height: 1.45; }}
   .ac-cond-b {{ color: {ACCENT}; font-weight: 700; }}
   .saves {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px; }}
-  .sv {{ text-align: center; background: #23263a; border: 1px solid #2f3346; border-radius: 6px;
+  .sv {{ text-align: center; background: var(--bg-raised); border: 1px solid #2f3346; border-radius: 6px;
         padding: 4px 2px; }}
   .sv span {{ display: block; }}
   .sv span:first-child {{ font-size: 8.5px; color: #7b83a6; text-transform: uppercase; letter-spacing: .04em; }}
-  .sv span:last-child {{ font-size: 13px; font-weight: 800; color: #e6e9f6; }}
+  .sv span:last-child {{ font-size: 13px; font-weight: 800; color: var(--text-bright); }}
   .badge {{ display: inline-block; background: #2c3a24; border: 1px solid #4a6b34; color: #a7d488;
            font-size: 10px; font-weight: 700; border-radius: 5px; padding: 2px 8px; }}
 
@@ -1353,7 +1354,7 @@ _CSS = f"""
              padding: 11px 14px; margin-top: 16px; font-size: 12.5px; color: #d8dcec;
              line-height: 1.5; }}
   .callout.warn2 {{ background: #33291a; border-color: #6b531f; }}
-  .callout b {{ color: #e6e9f6; }}
+  .callout b {{ color: var(--text-bright); }}
   .btn.small {{ padding: 5px 12px; font-size: 11.5px; margin-left: 6px; }}
   .reroll {{ color: {ACCENT}; text-decoration: none; font-size: 11px; margin-left: 6px; }}
   .reroll:hover {{ text-decoration: underline; }}
@@ -1361,20 +1362,20 @@ _CSS = f"""
   /* details form */
   .field {{ margin-bottom: 18px; max-width: 420px; }}
   .field label {{ display: block; font-size: 11px; font-weight: 700; letter-spacing: .05em;
-                 text-transform: uppercase; color: #8b93b8; margin-bottom: 6px; }}
+                 text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }}
   .req {{ color: {ACCENT}; }}
-  .tf {{ width: 100%; background: #1a1c26; color: #e6e9f6; border: 1px solid #3a3f58;
+  .tf {{ width: 100%; background: var(--bg); color: var(--text-bright); border: 1px solid var(--border-strong);
         border-radius: 7px; padding: 9px 12px; font-size: 14px; outline: none; }}
   .tf:focus {{ border-color: {ACCENT}; }}
   .hand-row {{ display: flex; align-items: center; }}
   .hand-row .btn {{ margin-right: 12px; }}
-  .hand-res {{ color: #e6e9f6; font-weight: 700; }}
+  .hand-res {{ color: var(--text-bright); font-weight: 700; }}
 
   /* review sheet */
   .sheet {{ background: #191b25; border: 1px solid #2a2e3e; border-radius: 12px;
            padding: 20px 22px; margin-bottom: 16px; }}
   .sheet-head {{ border-bottom: 1px solid #2a2e3e; padding-bottom: 12px; margin-bottom: 14px; }}
-  .sheet-name {{ font-size: 1.5em; font-weight: 800; color: #e6e9f6; }}
+  .sheet-name {{ font-size: 1.5em; font-weight: 800; color: var(--text-bright); }}
   .sheet-sub {{ font-size: 12.5px; color: {ACCENT}; font-weight: 600; margin-top: 2px; }}
   .unspent {{ background: #241f16; border: 1px solid #6b5426; border-radius: 8px;
              padding: 10px 12px; margin-bottom: 16px; }}
@@ -1385,10 +1386,10 @@ _CSS = f"""
   .unspent-n {{ color: {ACCENT}; font-weight: 800; min-width: 18px; margin-right: 6px; }}
   .unspent-go {{ margin-left: auto; color: #8a90a8; font-size: 11px; }}
   .rv-abgrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }}
-  .rv-ab {{ background: #23263a; border: 1px solid #2f3346; border-radius: 8px; padding: 8px 10px; }}
+  .rv-ab {{ background: var(--bg-raised); border: 1px solid #2f3346; border-radius: 8px; padding: 8px 10px; }}
   .rv-abn {{ font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-            color: #8b93b8; }}
-  .rv-abv {{ font-size: 18px; font-weight: 800; color: #e6e9f6; margin-left: 6px; }}
+            color: var(--text-muted); }}
+  .rv-abv {{ font-size: 18px; font-weight: 800; color: var(--text-bright); margin-left: 6px; }}
   .rv-abs {{ display: block; font-size: 10.5px; color: #838aad; margin-top: 2px; }}
   .rv-cols {{ display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }}
   @media (max-width: 640px) {{ .rv-cols {{ grid-template-columns: 1fr; }} .rv-abgrid {{ grid-template-columns: repeat(2, 1fr); }} }}
@@ -1403,24 +1404,24 @@ _CSS = f"""
   .saved-box {{ background: #191b25; border: 1px solid #2a2e3e; border-radius: 10px;
                padding: 12px 14px; }}
   .saved-box.compact {{ margin-top: 18px; }}
-  .sc-row {{ display: flex; align-items: center; border-top: 1px solid #23263a; }}
+  .sc-row {{ display: flex; align-items: center; border-top: 1px solid var(--bg-raised); }}
   .sc-row:first-of-type {{ border-top: none; }}
   .sc-load {{ flex: 1; text-decoration: none; color: #dfe2f0; font-weight: 600; font-size: 13px;
              padding: 8px 4px; }}
   .sc-load:hover {{ color: {ACCENT}; }}
   .sc-meta {{ color: #7b83a6; font-weight: 400; font-size: 11px; margin-left: 8px; }}
-  .sc-del {{ text-decoration: none; color: #6b7290; font-size: 13px; padding: 6px 8px; border-radius: 5px; }}
+  .sc-del {{ text-decoration: none; color: var(--text-dim); font-size: 13px; padding: 6px 8px; border-radius: 5px; }}
   .sc-del:hover {{ color: #d98a8a; background: #2a1e22; }}
 
   /* proficiencies step */
   .prof-wrap {{ display: grid; gap: 22px; }}
   .prof-sec {{ }}
-  .prof-h {{ font-size: 1.05em; font-weight: 700; color: #e6e9f6; margin-bottom: 12px; }}
+  .prof-h {{ font-size: 1.05em; font-weight: 700; color: var(--text-bright); margin-bottom: 12px; }}
   .budget {{ margin-bottom: 8px; }}
   .budget-top {{ display: flex; justify-content: space-between; align-items: baseline;
-                font-size: 12px; color: #c8cad8; margin-bottom: 5px; }}
+                font-size: 12px; color: var(--text); margin-bottom: 5px; }}
   .budget-num {{ color: {ACCENT}; font-weight: 800; }}
-  .bar {{ height: 7px; background: #23263a; border-radius: 4px; overflow: hidden; }}
+  .bar {{ height: 7px; background: var(--bg-raised); border-radius: 4px; overflow: hidden; }}
   .bar-fill {{ height: 100%; background: {ACCENT}; border-radius: 4px; transition: width .15s; }}
   .budget-sub {{ font-size: 10.5px; color: #7b83a6; margin-top: 4px; }}
   .budget.over .budget-num {{ color: #e06c75; }}
@@ -1428,19 +1429,19 @@ _CSS = f"""
   .budget-over {{ font-size: 11px; color: #e06c75; margin-top: 5px; }}
   .chosen {{ display: flex; flex-wrap: wrap; margin: 10px 0; }}
   .chip-x {{ display: inline-flex; align-items: center; text-decoration: none; background: {ACCENT}18;
-            border: 1px solid {ACCENT}55; color: #e6e9f6; border-radius: 20px; padding: 3px 10px;
+            border: 1px solid {ACCENT}55; color: var(--text-bright); border-radius: 20px; padding: 3px 10px;
             font-size: 11.5px; font-weight: 600; margin: 0 6px 6px 0; }}
   .chip-x:hover {{ background: #3a2326; border-color: #6b3b40; }}
-  .cx-cost {{ background: #1a1c26; color: #9aa0c0; border-radius: 8px; padding: 0 6px; font-size: 9.5px;
+  .cx-cost {{ background: var(--bg); color: #9aa0c0; border-radius: 8px; padding: 0 6px; font-size: 9.5px;
              margin: 0 6px; }}
   .opt-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px;
               margin-top: 6px; }}
   /* NOTE: no flex `gap` here — the bundled QtWebEngine Chromium ignores it. Space
      the children with margin-left instead (grid `gap` is fine, flex `gap` is not). */
   .opt {{ display: flex; align-items: center; text-decoration: none;
-         background: #23263a; border: 1px solid #2f3346; border-radius: 7px; padding: 6px 10px;
-         color: #c8cad8; font-size: 11.5px; }}
-  a.opt:hover {{ border-color: {ACCENT}66; background: #262a40; }}
+         background: var(--bg-raised); border: 1px solid #2f3346; border-radius: 7px; padding: 6px 10px;
+         color: var(--text); font-size: 11.5px; }}
+  a.opt:hover {{ border-color: {ACCENT}66; background: var(--bg-high); }}
   .opt.dis {{ opacity: .4; pointer-events: none; }}
   /* name grows so the ability/cost numbers align to the right edge of each chip */
   .opt-name {{ flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -1454,21 +1455,21 @@ _CSS = f"""
   .eq-cat-h {{ display: flex; align-items: center; text-decoration: none;
               background: #1b1e2b; border: 1px solid #2f3346; border-radius: 8px;
               padding: 8px 11px; color: #d8dcf0; font-size: 12.5px; font-weight: 600; }}
-  .eq-cat-h:hover {{ background: #23263a; border-color: #3a3f58; }}
+  .eq-cat-h:hover {{ background: var(--bg-raised); border-color: var(--border-strong); }}
   .eq-cat-ar {{ color: {ACCENT}; font-size: 10px; margin-right: 8px; }}
   .eq-cat-n {{ color: #7b83a6; font-size: 11px; font-weight: 700; margin-left: 8px; }}
   .eq-cat-owned {{ color: {ACCENT}; font-size: 11px; font-weight: 700; margin-left: auto; }}
   .chosen-list {{ display: grid; gap: 6px; margin: 10px 0; }}
-  .prof-row {{ display: flex; align-items: center; background: #23263a; border: 1px solid #2f3346;
+  .prof-row {{ display: flex; align-items: center; background: var(--bg-raised); border: 1px solid #2f3346;
               border-radius: 8px; padding: 6px 10px; }}
-  .pr-rm {{ text-decoration: none; color: #6b7290; font-size: 12px; margin-right: 10px; }}
+  .pr-rm {{ text-decoration: none; color: var(--text-dim); font-size: 12px; margin-right: 10px; }}
   .pr-rm:hover {{ color: #d98a8a; }}
   .pr-main {{ flex: 1; }}
-  .pr-name {{ font-weight: 700; color: #e0e2f0; font-size: 12.5px; margin-right: 8px; }}
-  .pr-detail {{ color: #8b93b8; font-size: 11px; }}
+  .pr-name {{ font-weight: 700; color: var(--text-strong); font-size: 12.5px; margin-right: 8px; }}
+  .pr-detail {{ color: var(--text-muted); font-size: 11px; }}
   .pr-slots {{ display: flex; align-items: center; }}
   .slot-btn {{ text-decoration: none; width: 20px; height: 20px; line-height: 18px; text-align: center;
-              border: 1px solid #3a3f58; border-radius: 5px; color: #e6e9f6; font-weight: 700;
+              border: 1px solid var(--border-strong); border-radius: 5px; color: var(--text-bright); font-weight: 700;
               font-size: 13px; }}
   a.slot-btn:hover {{ border-color: {ACCENT}; background: {ACCENT}18; }}
   .slot-btn.off {{ opacity: .3; }}
@@ -1494,34 +1495,34 @@ _CSS = f"""
   .eq-stat:last-child {{ margin-right: 0; }}
   .eq-k {{ display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
           color: #7b83a6; }}
-  .eq-v {{ display: block; font-weight: 800; color: #e6e9f6; font-size: 16px; margin-top: 2px; }}
+  .eq-v {{ display: block; font-weight: 800; color: var(--text-bright); font-size: 16px; margin-top: 2px; }}
   .wear {{ flex: 0 0 auto; text-decoration: none; font-size: 10px; color: #8fb7d6;
           border: 1px solid #33455a; border-radius: 6px; padding: 2px 8px; margin-left: 8px; }}
   .wear.on {{ color: {ACCENT}; border-color: {ACCENT}66; background: {ACCENT}18; }}
 
   .placeholder {{ text-align: center; padding: 36px 10px; }}
   .ph-ico {{ font-size: 34px; margin-bottom: 10px; }}
-  .ph-title {{ font-size: 1.1em; font-weight: 700; color: #e6e9f6; margin-bottom: 8px; }}
-  .placeholder p {{ color: #8b93b8; max-width: 440px; margin: 0 auto; line-height: 1.6; }}
+  .ph-title {{ font-size: 1.1em; font-weight: 700; color: var(--text-bright); margin-bottom: 8px; }}
+  .placeholder p {{ color: var(--text-muted); max-width: 440px; margin: 0 auto; line-height: 1.6; }}
 
   /* footer nav (flex with margins, no gap) */
   .foot {{ display: flex; align-items: center; }}
   .foot-mid {{ flex: 1; text-align: center; }}
-  .foot-hint {{ color: #6b7290; font-size: 11.5px; font-style: italic; }}
+  .foot-hint {{ color: var(--text-dim); font-size: 11.5px; font-style: italic; }}
   .nav-btn {{ text-decoration: none; padding: 9px 20px; border-radius: 8px; font-weight: 700;
-             font-size: 12.5px; background: #23263a; border: 1px solid #383c52; color: #c8cad8; }}
+             font-size: 12.5px; background: var(--bg-raised); border: 1px solid var(--border); color: var(--text); }}
   .nav-btn:hover {{ border-color: {ACCENT}66; }}
-  .nav-btn.primary {{ background: {ACCENT}; border-color: {ACCENT}; color: #1a1c26; }}
+  .nav-btn.primary {{ background: {ACCENT}; border-color: {ACCENT}; color: var(--bg); }}
   .nav-btn.off {{ opacity: .38; pointer-events: none; }}
 
   /* PHB reference links (folded in from the old walkthrough) — now a boxed panel
      that lives in the pinned side rail alongside the character overview. */
   .phb-refs {{ background: #191b25; border: 1px solid #2a2e3e; border-radius: 10px;
               padding: 12px 14px; }}
-  .phb-refs-label {{ display: block; color: #5a6080; font-size: 10px; font-weight: 700;
+  .phb-refs-label {{ display: block; color: var(--text-faint); font-size: 10px; font-weight: 700;
                      letter-spacing: .09em; text-transform: uppercase; margin-bottom: 8px; }}
   .phb-ref {{ display: inline-flex; align-items: center; margin: 0 7px 7px 0;
-              background: #1c1f32; border: 1px solid {ACCENT}55; border-radius: 6px;
+              background: var(--bg-inset); border: 1px solid {ACCENT}55; border-radius: 6px;
               padding: 5px 10px 5px 6px; color: #c2aa68; text-decoration: none;
               font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; }}
   .phb-ref:hover {{ background: {ACCENT}18; border-color: {ACCENT}; color: {ACCENT}; }}
@@ -1530,7 +1531,7 @@ _CSS = f"""
                          line-height: 1; letter-spacing: .06em; }}
   /* in-app references (Codex of Worldly Craft, Spell Compendium) — blue, not gold */
   .phb-ref.app {{ border-color: #35506b; color: #9fc0dc; }}
-  .phb-ref.app:hover {{ background: #5b9bd518; border-color: #5b9bd5; color: #cfe4f6; }}
+  .phb-ref.app:hover {{ background: #5b9bd518; border-color: var(--info); color: #cfe4f6; }}
   .phb-ref.app .phb-badge {{ background: #2f4a63; color: #cfe4f6; }}
   /* Combat & Tactics — crimson, so a C&T rule never reads as core PHB */
   .phb-ref.ct {{ border-color: #6b3540; color: #dc9fa8; }}

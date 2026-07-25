@@ -5,11 +5,11 @@ import char_rules as cr
 from screen_common import page, render_sections
 
 CAT_COLORS = {
-    "combat":      "#e05555",
-    "encounter":   "#e07b2a",
-    "hazards":     "#a76bcc",
-    "exploration": "#4db870",
-    "abilities":   "#5b9bd5",
+    "combat":      "var(--danger)",
+    "encounter":   "var(--warning)",
+    "hazards":     "var(--special)",
+    "exploration": "var(--success)",
+    "abilities":   "var(--info)",
     "classes":     "#3dbfa8",
 }
 

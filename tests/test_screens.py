@@ -45,7 +45,10 @@ def test_splash():
     assert "dnd:///toc/PHB" in html
     # The logo art and the display font ship embedded, so the screen is offline.
     assert "data:image/png;base64," in html          # the matted AD&D logo
-    assert "@font-face" in html and "Death Star" in html
+    assert "@font-face" in html and "Caudex" in html
+    # font-display keeps the block period from hiding every word on the screen
+    # while 576 KB of base64 font decodes — see the @font-face comment.
+    assert "font-display: swap" in html
 
 
 def test_charactermancer_step_references():

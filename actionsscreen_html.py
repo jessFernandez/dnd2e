@@ -10,13 +10,14 @@ masonry card grid, so it does not use screen_common. All spacing is margin-based
 because QtWebEngine (the app's bundled Chromium) silently ignores flexbox `gap`.
 """
 from view_common import esc
+import theme
 
 CAT_COLORS = {
-    "offense":  "#e05555",
-    "defense":  "#5b9bd5",
-    "forced":   "#e07b2a",
-    "movement": "#4db870",
-    "other":    "#a76bcc",
+    "offense":  "var(--danger)",
+    "defense":  "var(--info)",
+    "forced":   "var(--warning)",
+    "movement": "var(--success)",
+    "other":    "var(--special)",
 }
 
 CAT_LABELS = {
@@ -198,25 +199,25 @@ def _cat_buttons():
 
 _CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #1a1c26; font-family: "Segoe UI", system-ui, sans-serif;
-         font-size: 12px; color: #c8cad8; }
+  body { background: var(--bg); font-family: "Segoe UI", system-ui, sans-serif;
+         font-size: 12px; color: var(--text); }
 
   /* ── Sticky search + category filter ── */
-  .top-bar { position: sticky; top: 0; z-index: 100; background: #13151f;
+  .top-bar { position: sticky; top: 0; z-index: 100; background: var(--bg-deepest);
              border-bottom: 1px solid #2a2d3e; padding: 10px 14px; }
   .search-row { display: flex; align-items: center; margin-bottom: 8px; }
-  #search { flex: 1; background: #23263a; border: 1px solid #383c52; border-radius: 6px;
-            color: #e0e2f0; padding: 8px 12px; font-size: 13px; outline: none; }
-  #search:focus { border-color: #c9a84c; }
-  #clear-btn { margin-left: 8px; background: #23263a; border: 1px solid #383c52;
+  #search { flex: 1; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text-strong); padding: 8px 12px; font-size: 13px; outline: none; }
+  #search:focus { border-color: var(--accent); }
+  #clear-btn { margin-left: 8px; background: var(--bg-raised); border: 1px solid var(--border);
                border-radius: 6px; color: #9ca3c0; padding: 7px 12px; cursor: pointer; font-size: 12px; }
   #clear-btn:hover { background: #2d3048; }
   .cat-row { display: flex; flex-wrap: wrap; }
-  .cat-btn, #all-btn { background: #23263a; border: 1px solid #383c52; border-radius: 5px;
-                       color: #c8cad8; padding: 4px 10px; cursor: pointer; font-size: 11px;
+  .cat-btn, #all-btn { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 5px;
+                       color: var(--text); padding: 4px 10px; cursor: pointer; font-size: 11px;
                        font-weight: 600; letter-spacing: .04em; transition: background .1s;
                        margin: 0 6px 0 0; }
-  #all-btn { border-bottom: 3px solid #8891b5; }
+  #all-btn { border-bottom: 3px solid var(--text-label); }
   .cat-btn:hover, .cat-btn.active,
   #all-btn:hover, #all-btn.active { background: #2d3048; }
 
@@ -228,25 +229,25 @@ _CSS = """
   .cat-header::before { content: ""; width: 9px; height: 9px; border-radius: 2px;
                         background: var(--c); flex-shrink: 0; margin-right: 9px; }
   .cat-name { font-size: 12.5px; font-weight: 800; letter-spacing: .09em;
-              text-transform: uppercase; color: #e6e9f6; }
-  .cat-count { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #8891b5;
-               background: #1c1f32; border: 1px solid #2a2e45; border-radius: 9px; padding: 1px 8px; }
+              text-transform: uppercase; color: var(--text-bright); }
+  .cat-count { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--text-label);
+               background: var(--bg-inset); border: 1px solid var(--border-soft); border-radius: 9px; padding: 1px 8px; }
 
   /* ── Collapsible action rows ── */
-  .act { background: #21243a; border: 1px solid #2a2e45; border-left: 3px solid var(--c);
+  .act { background: var(--bg-panel); border: 1px solid var(--border-soft); border-left: 3px solid var(--c);
          border-radius: 7px; margin-bottom: 7px; overflow: hidden; }
   .act[open] { background: #23263c; }
   summary { display: flex; align-items: baseline; padding: 9px 12px; cursor: pointer;
             list-style: none; user-select: none; }
   summary::-webkit-details-marker { display: none; }
-  summary:hover { background: #262a40; }
+  summary:hover { background: var(--bg-high); }
   .chev { color: var(--c); font-size: 10px; flex-shrink: 0; margin-right: 10px;
           transform: translateY(-1px); transition: transform .15s ease; }
   .act[open] .chev { transform: translateY(-1px) rotate(90deg); }
-  .act-name { font-size: 13px; font-weight: 700; color: #e6e9f6; flex-shrink: 0; }
-  .act-gist { margin-left: 12px; color: #8891b5; font-size: 11.5px; font-style: italic;
+  .act-name { font-size: 13px; font-weight: 700; color: var(--text-bright); flex-shrink: 0; }
+  .act-gist { margin-left: 12px; color: var(--text-label); font-size: 11.5px; font-style: italic;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .act[open] .act-gist { color: #6b7290; }
+  .act[open] .act-gist { color: var(--text-dim); }
 
   .act-body { padding: 2px 14px 12px 34px; }
   .rules { list-style: none; }
@@ -260,14 +261,14 @@ _CSS = """
   table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   th { background: #17192a; color: #a0a8cc; font-size: 10px; font-weight: 700; letter-spacing: .06em;
        text-transform: uppercase; padding: 5px 8px; text-align: left; white-space: nowrap;
-       border-bottom: 1px solid #2a2e45; }
-  td { padding: 6px 8px; border-bottom: 1px solid #23263a; color: #c0c4d8; vertical-align: top; line-height: 1.5; }
-  tr:hover td { background: #262a40; }
-  td.mv-speed { font-weight: 700; color: #e0e2f0; white-space: nowrap; }
+       border-bottom: 1px solid var(--border-soft); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--bg-raised); color: #c0c4d8; vertical-align: top; line-height: 1.5; }
+  tr:hover td { background: var(--bg-high); }
+  td.mv-speed { font-weight: 700; color: var(--text-strong); white-space: nowrap; }
   td.mv-dist { white-space: nowrap; color: #b6d8c2; }
-  .note { color: #5a6080; font-size: 10.5px; font-style: italic; margin-top: 8px; line-height: 1.5; }
+  .note { color: var(--text-faint); font-size: 10.5px; font-style: italic; margin-top: 8px; line-height: 1.5; }
 
-  .empty { color: #5a6080; font-style: italic; text-align: center; padding: 40px 0; display: none; }
+  .empty { color: var(--text-faint); font-style: italic; text-align: center; padding: 40px 0; display: none; }
 """
 
 _SCRIPT = """
@@ -320,7 +321,7 @@ def generate() -> str:
 <head>
 <meta charset="utf-8">
 <title>Actions Screen — AD&D 2nd Edition</title>
-<style>{_CSS}</style>
+<style>{theme.css_vars()}{_CSS}</style>
 </head>
 <body>
 <div class="top-bar">

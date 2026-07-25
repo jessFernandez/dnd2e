@@ -146,7 +146,7 @@ def _tab_ctx(dest, page_url=None):
 
 
 def _tab_win(ctx):
-    calls = {"hidden": 0, "synced": []}
+    calls = {"hidden": 0, "synced": [], "rendered": []}
     win = SimpleNamespace(
         # _on_tab_changed resolves the context through the tab's widget (_ctx),
         # not by indexing a parallel list — see TabContext.
@@ -155,7 +155,10 @@ def _tab_win(ctx):
         _update_bookmark_btn=lambda: None,
         _hide_sidebar=lambda: calls.__setitem__("hidden", calls["hidden"] + 1),
         _sync_tree_selection=lambda u: calls["synced"].append(u),
+        _render_destination=lambda d: calls["rendered"].append(d),
+        LIVE_DESTINATIONS=app.MainWindow.LIVE_DESTINATIONS,
     )
+    win._refresh_live_tab = app.MainWindow._refresh_live_tab.__get__(win)
     return win, calls
 
 
@@ -252,3 +255,52 @@ def test_cm_link_dispatches_the_raw_payload():
     win, calls = _dispatch_win()
     app.MainWindow._on_content_navigate(win, "cm/set-race/Elf")
     assert calls["cm"] == ["set-race/Elf"]
+
+
+# ── returning to a live tab redraws it ───────────────────────────────────────
+#
+# The builder, monster picker and monster sheet are addressable per tab but render
+# from a single window-level object. Acting in one tab moved state another tab's DOM
+# was already drawn from, and nothing redrew it: you could leave a builder tab on
+# "Class", advance the build elsewhere, come back, and edit from a page that no
+# longer described the character.
+
+@pytest.mark.parametrize("dest", ["charactermancer", "monster", "monster-sheet"])
+def test_returning_to_a_live_tab_rerenders_it(dest):
+    win, calls = _tab_win(_tab_ctx(dest))
+    app.MainWindow._on_tab_changed(win, 0)
+    assert calls["rendered"] == [dest]
+
+
+@pytest.mark.parametrize("dest", ["PHB/DD01671.htm", "toc:PHB", "dmscreen",
+                                  "actions", "spells", "splash", "proficiencies"])
+def test_a_fixed_document_is_not_rerendered(dest):
+    """Everything else is a document, not live state — redrawing it would throw away
+    the reader's scroll position for nothing."""
+    win, calls = _tab_win(_tab_ctx(dest))
+    app.MainWindow._on_tab_changed(win, 0)
+    assert calls["rendered"] == []
+
+
+def test_jarvis_is_never_rerendered_on_a_tab_switch():
+    """_render_ask stops any in-flight generation and resets the conversation --
+    arriving at the page is how you start a fresh one. Re-running it on a tab switch
+    would discard the reader's Q&A thread and cancel a streaming answer."""
+    assert "ask" not in app.MainWindow.LIVE_DESTINATIONS
+    win, calls = _tab_win(_tab_ctx("ask"))
+    app.MainWindow._on_tab_changed(win, 0)
+    assert calls["rendered"] == []
+
+
+def test_an_empty_tab_is_not_rerendered():
+    win, calls = _tab_win(_tab_ctx(None))
+    app.MainWindow._on_tab_changed(win, 0)
+    assert calls["rendered"] == []
+
+
+def test_live_destinations_are_all_real_destinations():
+    """A typo here would silently stop refreshing that screen. Every name must be one
+    route_destination actually recognises as its own screen, not a page_url."""
+    from navigation import Page, route_destination
+    for dest in app.MainWindow.LIVE_DESTINATIONS:
+        assert not isinstance(route_destination(dest), Page), dest

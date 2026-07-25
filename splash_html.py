@@ -1,7 +1,7 @@
 """splash_html.py — Welcome / landing screen for the D&D 2E app.
 
 The home screen is styled around the campaign's AD&D 2nd Edition logo. The matted
-logo art and the Death Star display font are embedded as inline `data:` URIs (from
+logo art and the Caudex Bold display face are embedded as inline `data:` URIs (from
 the generated `splash_assets` module) so the screen ships offline — the app makes
 no network requests. See `scripts/build_splash_assets.py` for how those are baked.
 
@@ -48,6 +48,12 @@ body {
   padding: 28px;
   --blue: #2f6fd6; --red: #e0393f;
   background-color: #080a0f;
+  /* The starfield and vignette stay on the body deliberately. Moving them to a
+     fixed `body::before` with `z-index: -1` looks like an easy win — one static
+     layer instead of eleven that re-rasterise with the body's box — but body's
+     own background-color is opaque and paints over a negative-z child, so the
+     whole starfield silently disappears. Measured before reverting: no paint-time
+     difference either way, so there was nothing to buy. */
   background-image:
     radial-gradient(ellipse 58% 44% at 50% 22%, rgba(47,111,214,.20), transparent 64%),
     radial-gradient(ellipse 54% 40% at 50% 98%, rgba(224,57,63,.09), transparent 72%),
@@ -80,16 +86,19 @@ a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius
 
 .hero { text-align: center; padding: 12px 0 8px; }
 .logo-wrap { position: relative; width: min(560px, 84%); margin: 0 auto; }
+/* The glow is a soft radial gradient, which is already blurry — running a real
+   10px blur pass over it cost an offscreen layer per paint and changed almost
+   nothing. Widening the gradient's falloff gives the same haze for free. */
 .logo-wrap::before {
   content: ""; position: absolute; inset: -18% -8%;
-  background: radial-gradient(ellipse at center, rgba(47,111,214,.28), transparent 70%);
-  filter: blur(10px);
+  background: radial-gradient(ellipse at center,
+              rgba(47,111,214,.28) 0%, rgba(47,111,214,.16) 38%, transparent 76%);
 }
 .logo-wrap img { position: relative; display: block; width: 100%; height: auto;
   filter: drop-shadow(0 6px 16px rgba(0,0,0,.6)); }
 
 .subtitle {
-  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 15px; letter-spacing: .24em; margin: 22px 0 0; color: #eaf3ff;
   text-shadow: 0 0 3px rgba(120,175,255,.95), 0 0 11px rgba(58,134,255,.85),
                0 0 24px rgba(47,111,214,.55);
@@ -103,25 +112,36 @@ a:focus-visible { outline: 2px solid #eaf3ff; outline-offset: 3px; border-radius
 
 .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 0; }
 .neon {
+  position: relative;
   display: flex; align-items: center; justify-content: center; padding: 16px 18px;
   border: 2px solid var(--c); border-radius: 9px; background: rgba(4,7,14,.42);
   box-shadow: inset 0 0 12px -6px var(--c), 0 0 12px -3px var(--c);
-  transition: box-shadow .15s, background .15s, transform .12s;
+  /* transform and opacity only: both composite on the GPU. box-shadow was in this
+     list, and Chromium cannot composite a shadow change — it repainted all six
+     tiles' multi-layer glows every frame of the hover, which is where the drag on
+     mouse-over came from. The brighter glow now lives on ::after and fades in. */
+  transition: background .15s, transform .12s;
+}
+.neon::after {
+  content: ""; position: absolute; inset: -2px; border-radius: 9px;
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+  box-shadow: inset 0 0 18px -6px var(--c), 0 0 26px -4px var(--c),
+              0 0 46px -12px var(--c);
 }
 .neon .nm {
-  font-family: "Death Star", "Arial Black", Impact, sans-serif;
+  font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 22px; letter-spacing: .03em; color: #fff; text-align: center;
   text-shadow: 0 0 9px var(--c), 0 0 2px var(--c);
 }
-.neon:hover { transform: translateY(-2px); background: rgba(4,7,14,.2);
-  box-shadow: inset 0 0 18px -6px var(--c), 0 0 26px -4px var(--c), 0 0 46px -12px var(--c); }
+.neon:hover { transform: translateY(-2px); background: rgba(4,7,14,.2); }
+.neon:hover::after { opacity: 1; }
 
 .browse {
   margin-top: 12px; padding: 12px 18px 13px; border: 2px solid var(--blue);
   border-radius: 9px; text-align: center; background: rgba(4,7,14,.42);
   box-shadow: inset 0 0 12px -6px var(--blue), 0 0 12px -3px var(--blue);
 }
-.browse .nm { font-family: "Death Star", "Arial Black", Impact, sans-serif;
+.browse .nm { font-family: "Caudex", Georgia, "Times New Roman", serif; font-weight: 700;
   font-size: 18px; letter-spacing: .03em; color: #fff; text-shadow: 0 0 9px var(--blue); }
 .browse .ticks { display: flex; justify-content: center; margin-top: 9px; flex-wrap: wrap; }
 .browse .ticks a { display: block; width: 42px; height: 8px; margin: 3px; border-radius: 2px;
@@ -153,8 +173,21 @@ def generate() -> str:
 
     # CSS built by concatenation, not an f-string, so the stylesheet's own braces
     # need no escaping; only the font's data: URI is spliced in.
-    css = ('@font-face { font-family: "Death Star"; src: url("' + FONT_DATA_URI
-           + '") format("opentype"); font-weight: 400; font-style: normal; }\n' + _STYLES)
+    #
+    # `font-display: swap` is load-bearing, not a nicety. Without it Chromium applies
+    # the default `auto`, whose *block period* leaves any text in this family
+    # invisible until the font is ready — and the family covers the subtitle, all six
+    # tile names and "Browse Books", i.e. every word on the screen.
+    #
+    # It matters more with Caudex than it did before: this is a full 432 KB TTF, 576 KB
+    # once base64'd, and it measurably costs 60–100 ms per load (637 KB page vs 61 KB
+    # with the face stripped). `swap` makes that cost invisible — text paints
+    # immediately in Georgia, the declared fallback, and re-renders in Caudex when it
+    # arrives. Subsetting to the ~30 glyphs actually used would remove most of the
+    # weight, but note the OFL Reserved Font Name: a subset may not be called Caudex.
+    css = ('@font-face { font-family: "Caudex"; src: url("' + FONT_DATA_URI
+           + '") format("truetype"); font-weight: 700; font-style: normal;'
+           ' font-display: swap; }\n' + _STYLES)
 
     return f"""<!DOCTYPE html>
 <html lang="en">

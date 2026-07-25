@@ -782,7 +782,9 @@ class Character:
         return sum(self.item_ac_bonus(n) for n in self.worn)
 
     def armor_class(self):
-        """Ascending AC from worn armor + Dexterity (None until Dex is set)."""
+        """AC from worn armor + Dexterity — ascending under house rules, descending
+        under RAW. Before Dexterity is rolled the Dex term is simply 0 (matching
+        ac_components below), so this always returns a number rather than None."""
         dex = self.final_abilities().get("Dexterity")
         return cr.armor_class(self.worn_ac_bonus(), dex, self.house_rules)
 
